@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 220 15% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 15%;
+    --primary: 220 70% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 15% 15%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 46%;
+    --accent: 220 14% 93%;
+    --accent-foreground: 220 15% 15%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 220 70% 50%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --exam-bg: 225 20% 97%;
+    --exam-header: 220 15% 20%;
+    --exam-banner: 0 75% 55%;
+    --exam-code-bg: 220 20% 96%;
+  }
+
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 220 70% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+/* Highlightable PDF text layer */
+.highlightable-pdf {
+  user-select: text;
+}
+
+/* Hybrid image blocks */
+.pdf-image-block img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Positioned layout (new format: absolute spans) */
+.pdf-positioned-content .pdf-page,
+.pdf-text-block {
+  container-type: inline-size;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  background: #fff;
+}
+.pdf-positioned-content .pdf-page-inner span {
+  user-select: text;
+  cursor: text;
+}
+
+/* Simple line-based layout (fallback/old format) */
+.pdf-extracted-content {
+  font-family: 'Times New Roman', serif;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #1e293b;
+}
+.pdf-extracted-content p.pdf-text-line {
+  margin: 0 0 0.2rem 0;
+}
+.pdf-extracted-content .pdf-code-line {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.8rem;
+  background: #f1f5f9;
+  padding: 0 0.25rem;
+  white-space: pre;
+  display: block;
+}
+.pdf-extracted-content .pdf-page-break {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  margin: 0.75rem 0;
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 0.5rem;
+}
+
+/* Highlight marks */
+mark[data-highlight] {
+  border-radius: 2px;
+  cursor: pointer;
+}
+mark[data-highlight]:hover {
+  opacity: 0.8;
+}
+span[data-underline]:hover {
+  opacity: 0.7;
+}
+
+/* Quill rich text rendering in exam view */
+.quill-render pre,
+.quill-render .ql-code-block-container {
+  background: #f1f5f9;
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.8rem;
+  overflow-x: auto;
+  white-space: pre;
+}
+.quill-render code {
+  background: #f1f5f9;
+  padding: 0.1em 0.3em;
+  border-radius: 0.25rem;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.85em;
+}
