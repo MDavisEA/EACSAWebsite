@@ -28,7 +28,21 @@ async function hasActiveTeacherSession() {
 async function callFunction(name, body) {
   const headers = await authHeader();
   const { data, error } = await supabase.functions.invoke(name, { body, headers });
-  if (error) throw error;
+  if (error) {
+    // supabase-js only gives a generic "non-2xx status code" message by
+    // default - the actual { error: "..." } body our functions return is
+    // parked on error.context (a Response), so unwrap it when present.
+    if (error.context?.json) {
+      let parsed;
+      try {
+        parsed = await error.context.json();
+      } catch {
+        // body wasn't JSON - fall through to the generic error below
+      }
+      if (parsed?.error) throw new Error(parsed.error);
+    }
+    throw error;
+  }
   if (data?.error) throw new Error(data.error);
   return data;
 }
@@ -133,6 +147,16 @@ const Assignment = {
 
 const Submission = {
   async create(fields) {
+    if (fields.coding_problem_id) {
+      const parentId = fields.coding_problem_id;
+      const data = await callFunction('submissions', {
+        action: 'startCoding',
+        coding_problem_id: parentId,
+        student_name: fields.student_name,
+      });
+      cacheToken(parentId, fields.student_name, data.result);
+      return data.result;
+    }
     const parentId = fields.assignment_id;
     const data = await callFunction('submissions', {
       action: 'startFresh',
@@ -147,8 +171,12 @@ const Submission = {
   async filter(criteria = {}, sort) {
     const keys = Object.keys(criteria).sort().join(',');
 
-    if (keys === 'assignment_id,student_name,submitted' && criteria.submitted === false) {
-      const cached = readCachedTokenByAssignment(criteria.assignment_id, criteria.student_name);
+    if (
+      (keys === 'assignment_id,student_name,submitted' || keys === 'coding_problem_id,student_name,submitted') &&
+      criteria.submitted === false
+    ) {
+      const parentId = criteria.assignment_id || criteria.coding_problem_id;
+      const cached = readCachedTokenByAssignment(parentId, criteria.student_name);
       if (!cached) return []; // no local record - caller will create fresh
       const data = await callFunction('submissions', {
         action: 'resume',
@@ -163,10 +191,14 @@ const Submission = {
       return data.results;
     }
 
-    if (keys === 'assignment_id,submitted' && criteria.submitted === true) {
+    if (
+      (keys === 'assignment_id,submitted' || keys === 'coding_problem_id,submitted') &&
+      criteria.submitted === true
+    ) {
       const data = await callFunction('submissions', {
         action: 'listForAssignment',
         assignment_id: criteria.assignment_id,
+        coding_problem_id: criteria.coding_problem_id,
         sort: parseSort(sort),
       });
       return data.results;

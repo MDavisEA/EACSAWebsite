@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { GraduationCap, BookOpen, Lock, Star } from "lucide-react";
+import { GraduationCap, BookOpen, Lock, Star, Code2 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 
 // The old version of this page checked a plaintext passcode ("apcsa2024")
@@ -46,27 +46,97 @@ export default function Landing() {
           </p>
         </div>
 
-        <div className="grid gap-4">
-          <button
-            onClick={() => navigate("/student")}
-            className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 text-left transition-all hover:shadow-lg hover:border-primary/30"
-          >
-            <div className="flex items-center gap-4">
-              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                <GraduationCap className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">I'm a Student</h2>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Enter an assignment code to start practicing
-                </p>
-              </div>
+        <div className="space-y-6">
+          {/* Section: AP FRQ Practice */}
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/30 p-4">
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <BookOpen className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">AP FRQ Practice</h2>
             </div>
-          </button>
+            <div className="grid gap-3">
+              <button
+                onClick={() => navigate("/student")}
+                className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 text-left transition-all hover:shadow-lg hover:border-primary/30"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                    <GraduationCap className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">I'm a Student</h2>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Enter an assignment code to start practicing
+                    </p>
+                  </div>
+                </div>
+              </button>
 
+              <button
+                onClick={() => navigate("/my-score")}
+                className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 text-left transition-all hover:shadow-lg hover:border-amber-300"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center group-hover:bg-amber-100 transition-colors">
+                    <Star className="w-6 h-6 text-amber-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Check My Score</h2>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Enter your access code to view your graded score
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Section: Auto-Graded Coding */}
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/30 p-4">
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <Code2 className="w-4 h-4 text-emerald-600" />
+              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Auto-Graded Coding</h2>
+            </div>
+            <div className="grid gap-3">
+              <button
+                onClick={() => navigate("/code")}
+                className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 text-left transition-all hover:shadow-lg hover:border-emerald-300"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
+                    <Code2 className="w-6 h-6 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Practice Coding</h2>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Solve a Java problem with instant autograded feedback
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => navigate("/my-score")}
+                className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 text-left transition-all hover:shadow-lg hover:border-amber-300"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center group-hover:bg-amber-100 transition-colors">
+                    <Star className="w-6 h-6 text-amber-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Check My Score</h2>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Enter your access code to view your graded score
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Teacher access - spans both sections */}
           <button
             onClick={() => setShowPasscode(true)}
-            className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 text-left transition-all hover:shadow-lg hover:border-primary/30"
+            className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 text-left transition-all hover:shadow-lg hover:border-primary/30 w-full"
           >
             <div className="flex items-center gap-4">
               <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center group-hover:bg-slate-200 transition-colors">
@@ -75,32 +145,15 @@ export default function Landing() {
               <div>
                 <h2 className="text-lg font-semibold text-foreground">I'm a Teacher</h2>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  Create and manage FRQ assignments
+                  Manage FRQ assignments and coding problems
                 </p>
               </div>
             </div>
           </button>
         </div>
 
-        <button
-          onClick={() => navigate("/my-score")}
-          className="w-full mt-3 group relative overflow-hidden rounded-xl border border-border bg-card p-6 text-left transition-all hover:shadow-lg hover:border-amber-300"
-        >
-          <div className="flex items-center gap-4">
-            <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center group-hover:bg-amber-100 transition-colors">
-              <Star className="w-6 h-6 text-amber-500" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Check My Score</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Enter your access code to view your graded score
-              </p>
-            </div>
-          </div>
-        </button>
-
         <p className="text-center text-xs text-muted-foreground mt-8">
-          AP® Computer Science A — Free Response Practice
+          AP® Computer Science A — Free Response &amp; Auto-Graded Coding Practice
         </p>
       </div>
 

@@ -3,13 +3,14 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, Star, MessageSquare, KeyRound } from "lucide-react";
+import { BookOpen, Star, MessageSquare, KeyRound, CheckCircle2, XCircle, EyeOff } from "lucide-react";
 
 export default function MyScore() {
   const initialCode = new URLSearchParams(window.location.search).get("code") || "";
   const [code, setCode] = useState(initialCode);
   const [result, setResult] = useState(null);
   const [assignment, setAssignment] = useState(null);
+  const [codingProblem, setCodingProblem] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -24,6 +25,7 @@ export default function MyScore() {
     setError("");
     setResult(null);
     setAssignment(null);
+    setCodingProblem(null);
 
     const matches = await base44.entities.Submission.filter({ access_code: trimmed, submitted: true });
     if (matches.length === 0) {
@@ -31,10 +33,15 @@ export default function MyScore() {
     } else {
       const sub = matches[0];
       setResult(sub);
-      // Fetch assignment for question titles/structure
-      const asgn = await base44.entities.Assignment.list();
-      const found = asgn.find((a) => a.id === sub.assignment_id);
-      if (found) setAssignment(found);
+      if (sub.coding_problem_id) {
+        const probs = await base44.entities.CodingProblem.filter({ id: sub.coding_problem_id });
+        if (probs.length > 0) setCodingProblem(probs[0]);
+      } else {
+        // Fetch assignment for question titles/structure
+        const asgn = await base44.entities.Assignment.list();
+        const found = asgn.find((a) => a.id === sub.assignment_id);
+        if (found) setAssignment(found);
+      }
     }
     setLoading(false);
   };
@@ -108,18 +115,67 @@ export default function MyScore() {
                 <p className="text-muted-foreground text-sm mb-1">Score for</p>
                 <h2 className="text-xl font-bold">{result.student_name}</h2>
                 {assignment && <p className="text-sm text-muted-foreground mt-1">{assignment.title}</p>}
+                {codingProblem && <p className="text-sm text-muted-foreground mt-1">{codingProblem.title}</p>}
               </div>
               <div className="flex items-center justify-center gap-3 py-2">
                 <Star className="w-8 h-8 text-amber-400 fill-amber-400" />
                 <span className="text-5xl font-bold text-slate-800">
-                  {result.score != null ? result.score : "—"}
+                  {(result.coding_problem_id ? result.autograde_score : result.score) != null
+                    ? (result.coding_problem_id ? result.autograde_score : result.score)
+                    : "—"}
                 </span>
-                <span className="text-xl text-muted-foreground self-end mb-1">pts</span>
+                <span className="text-xl text-muted-foreground self-end mb-1">
+                  {result.coding_problem_id && codingProblem ? `/ ${codingProblem.points_possible ?? 0} pts` : "pts"}
+                </span>
               </div>
             </div>
 
-            {/* Per-question breakdown */}
-            {buildSections(result, assignment).map((section) => (
+            {/* Coding submission: code + checks */}
+            {result.coding_problem_id ? (
+              <div className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Your Code</p>
+                  <pre className="bg-slate-50 border rounded-lg p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto">
+                    {result.code || "(no code)"}
+                  </pre>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Checks</p>
+                  {result.compile_error ? (
+                    <div className="border border-destructive/30 bg-red-50 rounded-lg p-4">
+                      <p className="text-sm font-medium text-destructive mb-1">Compile Error</p>
+                      <pre className="text-xs text-destructive whitespace-pre-wrap font-mono">{result.compile_error}</pre>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {(result.test_results || []).map((r) => (
+                        <div key={r.test_id} className="flex items-start gap-2 text-sm border rounded-lg px-3 py-2 bg-slate-50/50">
+                          {r.hidden ? (
+                            <EyeOff className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                          ) : r.passed ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                          )}
+                          <div>
+                            <p className={r.hidden ? "text-slate-400 italic" : "text-slate-700"}>{r.label}</p>
+                            <p className="text-xs text-muted-foreground">{r.detail}</p>
+                          </div>
+                          <span className="ml-auto text-xs text-muted-foreground flex-shrink-0">
+                            {r.points_earned}/{r.points_possible} pt
+                          </span>
+                        </div>
+                      ))}
+                      {(!result.test_results || result.test_results.length === 0) && (
+                        <p className="text-sm text-muted-foreground">No test results recorded.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+            /* Per-question breakdown */
+            buildSections(result, assignment).map((section) => (
               <div key={section.qId} className="bg-white rounded-xl border shadow-sm p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-slate-800">{section.title}</h3>
@@ -169,9 +225,9 @@ export default function MyScore() {
                   ))}
                 </div>
               </div>
-            ))}
+            )))}
 
-            <Button variant="outline" className="w-full" onClick={() => { setResult(null); setAssignment(null); setCode(""); }}>
+            <Button variant="outline" className="w-full" onClick={() => { setResult(null); setAssignment(null); setCodingProblem(null); setCode(""); }}>
               Look Up Another Score
             </Button>
           </div>

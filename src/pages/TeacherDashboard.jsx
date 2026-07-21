@@ -4,13 +4,17 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, BookOpen, LogOut, KeyRound } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import AssignmentForm from "@/components/teacher/AssignmentForm";
 import AssignmentCard from "@/components/teacher/AssignmentCard";
+import CodingProblemForm from "@/components/teacher/CodingProblemForm";
+import CodingProblemCard from "@/components/teacher/CodingProblemCard";
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("assignments");
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -18,6 +22,11 @@ export default function TeacherDashboard() {
   const [deleting, setDeleting] = useState(null);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillDone, setBackfillDone] = useState(null);
+
+  const [codingProblems, setCodingProblems] = useState([]);
+  const [showCodingForm, setShowCodingForm] = useState(false);
+  const [editingCoding, setEditingCoding] = useState(null);
+  const [deletingCoding, setDeletingCoding] = useState(null);
 
   const generateCode = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -48,11 +57,17 @@ export default function TeacherDashboard() {
       try {
         await base44.auth.me();
         loadAssignments();
+        loadCodingProblems();
       } catch {
         navigate("/");
       }
     })();
   }, []);
+
+  const loadCodingProblems = async () => {
+    const results = await base44.entities.CodingProblem.list();
+    setCodingProblems(results);
+  };
 
   const loadAssignments = async () => {
     const results = await base44.entities.Assignment.list("-created_date");
@@ -127,6 +142,40 @@ export default function TeacherDashboard() {
     navigate("/");
   };
 
+  const handleSaveCoding = async (data) => {
+    if (editingCoding) {
+      await base44.entities.CodingProblem.update(editingCoding.id, data);
+    } else {
+      await base44.entities.CodingProblem.create(data);
+    }
+    setShowCodingForm(false);
+    setEditingCoding(null);
+    loadCodingProblems();
+  };
+
+  const handleDeleteCoding = async () => {
+    if (deletingCoding) {
+      await base44.entities.CodingProblem.delete(deletingCoding.id);
+      setDeletingCoding(null);
+      loadCodingProblems();
+    }
+  };
+
+  const handleToggleCodingActive = async (problem) => {
+    await base44.entities.CodingProblem.update(problem.id, { is_active: !problem.is_active });
+    loadCodingProblems();
+  };
+
+  const handleDuplicateCoding = async (problem) => {
+    const { id, created_at, updated_at, ...data } = problem;
+    await base44.entities.CodingProblem.create({
+      ...data,
+      title: `${problem.title} (Copy)`,
+      is_active: false,
+    });
+    loadCodingProblems();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -144,13 +193,21 @@ export default function TeacherDashboard() {
             <h1 className="font-semibold text-lg">AP CSA Teacher Dashboard</h1>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleBackfillCodes} disabled={backfilling}>
-              <KeyRound className="w-4 h-4 mr-1" />
-              {backfilling ? "Generating..." : backfillDone != null ? `Done (${backfillDone} updated)` : "Generate Missing Codes"}
-            </Button>
-            <Button onClick={() => { setEditing(null); setShowForm(true); }}>
-              <Plus className="w-4 h-4 mr-1" /> New Assignment
-            </Button>
+            {activeTab === "assignments" && (
+              <Button variant="outline" size="sm" onClick={handleBackfillCodes} disabled={backfilling}>
+                <KeyRound className="w-4 h-4 mr-1" />
+                {backfilling ? "Generating..." : backfillDone != null ? `Done (${backfillDone} updated)` : "Generate Missing Codes"}
+              </Button>
+            )}
+            {activeTab === "assignments" ? (
+              <Button onClick={() => { setEditing(null); setShowForm(true); }}>
+                <Plus className="w-4 h-4 mr-1" /> New Assignment
+              </Button>
+            ) : (
+              <Button onClick={() => { setEditingCoding(null); setShowCodingForm(true); }}>
+                <Plus className="w-4 h-4 mr-1" /> New Coding Problem
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
@@ -159,48 +216,83 @@ export default function TeacherDashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        {assignments.length === 0 ? (
-          <div className="text-center py-20">
-            <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
-            <h2 className="text-lg font-semibold mb-2">No assignments yet</h2>
-            <p className="text-muted-foreground mb-6">Create your first FRQ assignment to get started.</p>
-            <Button onClick={() => setShowForm(true)}>
-              <Plus className="w-4 h-4 mr-1" /> Create Assignment
-            </Button>
-          </div>
-        ) : (
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="assignments">
-              {(provided) => (
-                <div className="space-y-4" {...provided.droppableProps} ref={provided.innerRef}>
-                  {assignments.map((a, index) => (
-                    <Draggable key={a.id} draggableId={a.id} index={index}>
-                      {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          className={snapshot.isDragging ? "opacity-80 shadow-xl" : ""}
-                        >
-                          <AssignmentCard
-                            assignment={a}
-                            dragHandleProps={provided.dragHandleProps}
-                            onEdit={() => { setEditing(a); setShowForm(true); }}
-                            onDelete={() => setDeleting(a)}
-                            onToggleActive={() => handleToggleActive(a)}
-                            onToggleFeatured={() => handleToggleFeatured(a)}
-                            onToggleShowAnswerKey={() => handleToggleShowAnswerKey(a)}
-                            onDuplicate={() => handleDuplicate(a)}
-                          />
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
-        )}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="mb-6">
+            <TabsTrigger value="assignments">FRQ Assignments</TabsTrigger>
+            <TabsTrigger value="coding">Coding Problems</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="assignments">
+            {assignments.length === 0 ? (
+              <div className="text-center py-20">
+                <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
+                <h2 className="text-lg font-semibold mb-2">No assignments yet</h2>
+                <p className="text-muted-foreground mb-6">Create your first FRQ assignment to get started.</p>
+                <Button onClick={() => setShowForm(true)}>
+                  <Plus className="w-4 h-4 mr-1" /> Create Assignment
+                </Button>
+              </div>
+            ) : (
+              <DragDropContext onDragEnd={handleDragEnd}>
+                <Droppable droppableId="assignments">
+                  {(provided) => (
+                    <div className="space-y-4" {...provided.droppableProps} ref={provided.innerRef}>
+                      {assignments.map((a, index) => (
+                        <Draggable key={a.id} draggableId={a.id} index={index}>
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              className={snapshot.isDragging ? "opacity-80 shadow-xl" : ""}
+                            >
+                              <AssignmentCard
+                                assignment={a}
+                                dragHandleProps={provided.dragHandleProps}
+                                onEdit={() => { setEditing(a); setShowForm(true); }}
+                                onDelete={() => setDeleting(a)}
+                                onToggleActive={() => handleToggleActive(a)}
+                                onToggleFeatured={() => handleToggleFeatured(a)}
+                                onToggleShowAnswerKey={() => handleToggleShowAnswerKey(a)}
+                                onDuplicate={() => handleDuplicate(a)}
+                              />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
+            )}
+          </TabsContent>
+
+          <TabsContent value="coding">
+            {codingProblems.length === 0 ? (
+              <div className="text-center py-20">
+                <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
+                <h2 className="text-lg font-semibold mb-2">No coding problems yet</h2>
+                <p className="text-muted-foreground mb-6">Create your first Java autograder problem to get started.</p>
+                <Button onClick={() => setShowCodingForm(true)}>
+                  <Plus className="w-4 h-4 mr-1" /> Create Coding Problem
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {codingProblems.map((p) => (
+                  <CodingProblemCard
+                    key={p.id}
+                    problem={p}
+                    onEdit={() => { setEditingCoding(p); setShowCodingForm(true); }}
+                    onDelete={() => setDeletingCoding(p)}
+                    onToggleActive={() => handleToggleCodingActive(p)}
+                    onDuplicate={() => handleDuplicateCoding(p)}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
 
       <Dialog open={showForm} onOpenChange={setShowForm}>
@@ -227,6 +319,34 @@ export default function TeacherDashboard() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={showCodingForm} onOpenChange={setShowCodingForm}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingCoding ? "Edit Coding Problem" : "New Coding Problem"}</DialogTitle>
+          </DialogHeader>
+          <CodingProblemForm
+            initial={editingCoding}
+            onSave={handleSaveCoding}
+            onCancel={() => { setShowCodingForm(false); setEditingCoding(null); }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingCoding} onOpenChange={() => setDeletingCoding(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Coding Problem?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{deletingCoding?.title}" and all related student submissions. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteCoding}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
