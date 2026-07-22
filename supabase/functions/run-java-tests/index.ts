@@ -24,6 +24,18 @@ interface CodingProblem {
   test_cases: TestCase[];
 }
 
+// Piston's Java package doesn't run javac on multiple files - it renames
+// the single uploaded file to <name>.java and runs `java <name>.java`
+// (JEP 330 single-file source-launch), which only sees one compilation
+// unit. So the driver and the student's class have to live in the same
+// file. Only one top-level type per file may be `public`, so the
+// student's class loses that modifier here (a package-private class is
+// still fully visible to Main in the same file).
+function stripPublicModifier(code: string, className: string): string {
+  const re = new RegExp(`public\\s+((?:final\\s+|abstract\\s+|strictfp\\s+)*)class(\\s+${className}\\b)`);
+  return code.replace(re, (_m, modifiers, rest) => `${modifiers}class${rest}`);
+}
+
 function buildDriver(problem: CodingProblem): string {
   const { class_name, harness_type, method_name, method_arg_types = [], trial_count = 30 } = problem;
 
@@ -153,19 +165,20 @@ Deno.serve(async (req) => {
     if (probErr || !problems) return json({ error: 'CodingProblem not found' }, 404);
     const problem = problems as CodingProblem;
 
-    const studentFilename = `${problem.class_name}.java`;
     const driverSource = buildDriver(problem);
+    const combinedSource = `${driverSource}\n\n${stripPublicModifier(code, problem.class_name)}`;
+
+    const pistonHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    const pistonApiKey = Deno.env.get('PISTON_API_KEY');
+    if (pistonApiKey) pistonHeaders['Authorization'] = pistonApiKey;
 
     const pistonResp = await fetch(PISTON_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: pistonHeaders,
       body: JSON.stringify({
         language: 'java',
         version: '*',
-        files: [
-          { name: 'Main.java', content: driverSource },
-          { name: studentFilename, content: code },
-        ],
+        files: [{ name: 'Main', content: combinedSource }],
       }),
     });
 
