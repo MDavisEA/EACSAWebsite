@@ -1,13 +1,15 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
+import CodeMirror from "@uiw/react-codemirror";
+import { java } from "@codemirror/lang-java";
+import { a11yLightEditorTheme } from "@/lib/codeEditorThemes";
 import TestCaseEditor, { newTestCase, generateKey } from "./TestCaseEditor";
 
 const QUILL_MODULES = {
@@ -181,13 +183,17 @@ export default function CodingProblemForm({ initial, onSave, onCancel }) {
 
       <div className="space-y-2">
         <Label>Starter Code (shown to students)</Label>
-        <Textarea
-          value={form.starter_code || ""}
-          onChange={(e) => updateField("starter_code", e.target.value)}
-          placeholder={`public class ${form.class_name || "Solution"} {\n\n}`}
-          rows={12}
-          className="font-mono text-sm"
-        />
+        <div className="border rounded-md overflow-hidden">
+          <CodeMirror
+            value={form.starter_code || ""}
+            onChange={(value) => updateField("starter_code", value)}
+            placeholder={`public class ${form.class_name || "Solution"} {\n\n}`}
+            extensions={[java(), ...a11yLightEditorTheme]}
+            theme="none"
+            minHeight="250px"
+            basicSetup={{ tabSize: 4 }}
+          />
+        </div>
       </div>
 
       <div className="border-t pt-6 space-y-4">

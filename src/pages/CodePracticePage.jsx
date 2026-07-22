@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import CodeMirror from "@uiw/react-codemirror";
+import { java } from "@codemirror/lang-java";
+import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Play, Send, CheckCircle2, XCircle, EyeOff, Loader2, Trophy } from "lucide-react";
@@ -120,8 +122,8 @@ export default function CodePracticePage() {
 
   if (loading || !problem) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-slate-200 border-t-primary rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-[#1e1e1e]">
+        <div className="w-8 h-8 border-4 border-slate-700 border-t-emerald-400 rounded-full animate-spin" />
       </div>
     );
   }
@@ -139,17 +141,17 @@ export default function CodePracticePage() {
   ];
 
   return (
-    <div className="h-screen flex flex-col bg-[hsl(225,20%,97%)] overflow-hidden">
-      <header className="bg-white border-b flex-shrink-0 px-6 h-14 flex items-center justify-between">
+    <div className="h-screen flex flex-col bg-[#1e1e1e] text-slate-100 overflow-hidden">
+      <header className="bg-[#252526] border-b border-slate-700 flex-shrink-0 px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
-          <h1 className="font-semibold truncate">{problem.title}</h1>
-          <Badge variant="outline" className="font-mono text-xs flex-shrink-0">
+          <h1 className="font-semibold truncate text-slate-100">{problem.title}</h1>
+          <Badge variant="outline" className="font-mono text-xs flex-shrink-0 border-slate-600 text-slate-300">
             {problem.class_name}
           </Badge>
         </div>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground flex-shrink-0">
+        <div className="flex items-center gap-3 text-sm text-slate-400 flex-shrink-0">
           <span>{studentName}</span>
-          <Badge variant="secondary" className="flex items-center gap-1">
+          <Badge className="flex items-center gap-1 bg-slate-700 text-slate-100 hover:bg-slate-700">
             <Trophy className="w-3 h-3" /> {problem.points_possible ?? 0} pts
           </Badge>
         </div>
@@ -157,38 +159,38 @@ export default function CodePracticePage() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left: problem + checklist */}
-        <div className="w-2/5 border-r border-slate-200 overflow-y-auto p-6 space-y-6 bg-white">
+        <div className="w-2/5 border-r border-slate-700 overflow-y-auto p-6 space-y-6 bg-[#252526]">
           <div
-            className="prose prose-sm max-w-none"
+            className="prose prose-sm prose-invert max-w-none"
             dangerouslySetInnerHTML={{ __html: problem.description_html || "" }}
           />
 
           <div>
-            <h3 className="text-sm font-semibold text-slate-600 mb-2">Checks</h3>
+            <h3 className="text-sm font-semibold text-slate-300 mb-2">Checks</h3>
             <div className="space-y-2">
               {checklist.map((c) => {
                 const r = resultsById[c.id];
                 return (
                   <div
                     key={c.id}
-                    className="flex items-center gap-2 text-sm border rounded-lg px-3 py-2 bg-slate-50/50"
+                    className="flex items-center gap-2 text-sm border border-slate-700 rounded-lg px-3 py-2 bg-[#2d2d2d]"
                   >
                     {c.hidden ? (
-                      <EyeOff className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <EyeOff className="w-4 h-4 text-slate-500 flex-shrink-0" />
                     ) : r ? (
                       r.passed ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                       ) : (
-                        <XCircle className="w-4 h-4 text-destructive flex-shrink-0" />
+                        <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
                       )
                     ) : (
-                      <div className="w-4 h-4 rounded-full border-2 border-slate-300 flex-shrink-0" />
+                      <div className="w-4 h-4 rounded-full border-2 border-slate-600 flex-shrink-0" />
                     )}
-                    <span className={c.hidden ? "text-slate-400 italic" : "text-slate-700"}>
+                    <span className={c.hidden ? "text-slate-500 italic" : "text-slate-200"}>
                       {c.label}
                     </span>
                     {!c.hidden && "points" in c && (
-                      <span className="ml-auto text-xs text-muted-foreground">{c.points} pt</span>
+                      <span className="ml-auto text-xs text-slate-500">{c.points} pt</span>
                     )}
                   </div>
                 );
@@ -199,42 +201,44 @@ export default function CodePracticePage() {
 
         {/* Right: code editor + results */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 p-4 overflow-hidden">
-            <Textarea
+          <div className="flex-1 overflow-hidden">
+            <CodeMirror
               value={code}
-              onChange={(e) => handleCodeChange(e.target.value)}
-              disabled={finalized}
-              spellCheck={false}
-              className="h-full w-full font-mono text-sm resize-none"
-              placeholder="Write your Java code here..."
+              onChange={handleCodeChange}
+              editable={!finalized}
+              theme="none"
+              extensions={[java(), ...a11yDarkEditorTheme]}
+              height="100%"
+              style={{ height: "100%" }}
+              basicSetup={{ tabSize: 4 }}
             />
           </div>
 
           {runError && (
-            <div className="border-t bg-red-50 px-4 py-3 flex-shrink-0">
-              <p className="text-sm text-destructive">{runError}</p>
+            <div className="border-t border-slate-700 bg-red-950/40 px-4 py-3 flex-shrink-0">
+              <p className="text-sm text-red-300">{runError}</p>
             </div>
           )}
 
           {results && (
-            <div className="border-t bg-white px-4 py-3 max-h-48 overflow-y-auto flex-shrink-0">
+            <div className="border-t border-slate-700 bg-[#252526] px-4 py-3 max-h-48 overflow-y-auto flex-shrink-0">
               {results.compile_error ? (
                 <div>
-                  <p className="text-sm font-medium text-destructive mb-1">Compile Error</p>
-                  <pre className="text-xs text-destructive whitespace-pre-wrap font-mono">{results.compile_error}</pre>
+                  <p className="text-sm font-medium text-red-400 mb-1">Compile Error</p>
+                  <pre className="text-xs text-red-300 whitespace-pre-wrap font-mono">{results.compile_error}</pre>
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <p className="text-sm font-medium">
+                  <p className="text-sm font-medium text-slate-200">
                     {results.tests_passed}/{results.tests_total} checks passed
                     {typeof results.autograde_score === "number" && ` — ${results.autograde_score} pts`}
                   </p>
                   {(results.test_results || []).filter((r) => !r.hidden).map((r) => (
-                    <div key={r.test_id} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                    <div key={r.test_id} className="text-xs text-slate-400 flex items-start gap-1.5">
                       {r.passed ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
                       ) : (
-                        <XCircle className="w-3.5 h-3.5 text-destructive flex-shrink-0 mt-0.5" />
+                        <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
                       )}
                       <span>{r.detail}</span>
                     </div>
@@ -244,8 +248,13 @@ export default function CodePracticePage() {
             </div>
           )}
 
-          <div className="border-t bg-white px-4 py-3 flex items-center justify-end gap-3 flex-shrink-0">
-            <Button variant="outline" onClick={handleRun} disabled={running || submitting || finalized}>
+          <div className="border-t border-slate-700 bg-[#252526] px-4 py-3 flex items-center justify-end gap-3 flex-shrink-0">
+            <Button
+              variant="outline"
+              onClick={handleRun}
+              disabled={running || submitting || finalized}
+              className="border-slate-600 text-slate-100 bg-transparent hover:bg-slate-700 hover:text-slate-100"
+            >
               {running ? (
                 <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Running...</>
               ) : (
@@ -264,16 +273,18 @@ export default function CodePracticePage() {
       </div>
 
       <AlertDialog open={showSubmitConfirm} onOpenChange={setShowSubmitConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-[#252526] border-slate-700 text-slate-100">
           <AlertDialogHeader>
-            <AlertDialogTitle>Submit Final?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-slate-100">Submit Final?</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
               This runs your code against all checks (including hidden ones) one last time and locks in your score.
               You won't be able to make further changes. Are you sure?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep Working</AlertDialogCancel>
+            <AlertDialogCancel className="bg-transparent border-slate-600 text-slate-100 hover:bg-slate-700 hover:text-slate-100">
+              Keep Working
+            </AlertDialogCancel>
             <AlertDialogAction onClick={handleSubmitFinal}>Submit</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
