@@ -14,9 +14,19 @@ const darkColors = {
   foreground: "#f8f8f2",
   gutterBackground: "#232323",
   gutterForeground: "#8a8a8a",
-  selection: "#49483e",
+  // A muted low-saturation tone here reads as "basically invisible" once
+  // blended with the semi-transparent active-line wash on top of it - a
+  // real editor needs the selection itself to carry enough contrast to
+  // survive that, hence a proven, more saturated blue (VS Code's default
+  // dark-theme selection color) instead of something closer to the base
+  // background.
+  selection: "#264f78",
   cursor: "#f8f8f2",
-  activeLine: "#333333",
+  // Semi-transparent, not opaque - CodeMirror renders the selection layer
+  // behind line content (z-index: -2), so an opaque active-line color
+  // would fully hide the selection highlight whenever they overlap,
+  // which is nearly always since the cursor sits on the active line.
+  activeLine: "rgba(255, 255, 255, 0.05)",
   comment: "#d4d0ab",
   keyword: "#6bbeff",
   string: "#66ddec",
@@ -32,9 +42,12 @@ const lightColors = {
   foreground: "#545454",
   gutterBackground: "#f5f5f5",
   gutterForeground: "#909090",
-  selection: "#d7e6f5",
+  // See the note on darkColors.selection - VS Code's default light-theme
+  // selection color, chosen for the same contrast-survives-blending reason.
+  selection: "#add6ff",
   cursor: "#545454",
-  activeLine: "#f0f4f8",
+  // See the note on darkColors.activeLine - must stay semi-transparent.
+  activeLine: "rgba(0, 0, 0, 0.035)",
   comment: "#802200",
   keyword: "#326bad",
   string: "#1f7c93",

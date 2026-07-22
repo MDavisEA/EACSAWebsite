@@ -9,6 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Play, Send, CheckCircle2, XCircle, EyeOff, Loader2, Trophy } from "lucide-react";
 
+// Defined once at module scope, not inline in JSX - a new array reference
+// on every render makes @uiw/react-codemirror tear down and rebuild the
+// editor's state, which drops the current selection/cursor mid-edit.
+const CODE_EXTENSIONS = [java(), ...a11yDarkEditorTheme];
+
 export default function CodePracticePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -207,7 +212,7 @@ export default function CodePracticePage() {
               onChange={handleCodeChange}
               editable={!finalized}
               theme="none"
-              extensions={[java(), ...a11yDarkEditorTheme]}
+              extensions={CODE_EXTENSIONS}
               height="100%"
               style={{ height: "100%" }}
               basicSetup={{ tabSize: 4 }}

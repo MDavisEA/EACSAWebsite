@@ -187,7 +187,23 @@ Deno.serve(async (req) => {
     }
 
     const runResult = await pistonResp.json();
-    const compileError: string | undefined = runResult?.compile?.stderr || undefined;
+    const stdout: string = runResult?.run?.stdout || '';
+    const lines = stdout.split('\n').map((l: string) => l.trim()).filter(Boolean);
+
+    // This Piston Java package has no separate compile phase - it runs
+    // `java Main.java` directly (single-file source-launch), which
+    // compiles and executes in one step. So runResult.compile never
+    // exists, and a syntax error just looks like a run that produced no
+    // trial/result markers. Without this check, an empty trials array
+    // vacuously "passes" every property_check test (see evaluateProperty).
+    const producedNoOutput = !lines.some(
+      (l) => l.startsWith('__TRIAL__:') || l.startsWith('__RESULT__:') || l.startsWith('__ERROR__:')
+    );
+    const compileError: string | undefined =
+      runResult?.compile?.stderr ||
+      (runResult?.run?.code !== 0 && producedNoOutput
+        ? runResult?.run?.stderr || 'The program did not compile or run.'
+        : undefined);
 
     if (compileError) {
       await admin
@@ -196,9 +212,6 @@ Deno.serve(async (req) => {
         .eq('id', submission_id);
       return json({ compile_error: compileError, test_results: [] });
     }
-
-    const stdout: string = runResult?.run?.stdout || '';
-    const lines = stdout.split('\n').map((l: string) => l.trim()).filter(Boolean);
 
     const results: {
       test_id: string;

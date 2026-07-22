@@ -12,6 +12,11 @@ import { java } from "@codemirror/lang-java";
 import { a11yLightEditorTheme } from "@/lib/codeEditorThemes";
 import TestCaseEditor, { newTestCase, generateKey } from "./TestCaseEditor";
 
+// Defined once at module scope, not inline in JSX - a new array reference
+// on every render makes @uiw/react-codemirror tear down and rebuild the
+// editor's state, which drops the current selection/cursor mid-edit.
+const CODE_EXTENSIONS = [java(), ...a11yLightEditorTheme];
+
 const QUILL_MODULES = {
   toolbar: [
     [{ header: [false, 3, 4] }],
@@ -188,7 +193,7 @@ export default function CodingProblemForm({ initial, onSave, onCancel }) {
             value={form.starter_code || ""}
             onChange={(value) => updateField("starter_code", value)}
             placeholder={`public class ${form.class_name || "Solution"} {\n\n}`}
-            extensions={[java(), ...a11yLightEditorTheme]}
+            extensions={CODE_EXTENSIONS}
             theme="none"
             minHeight="250px"
             basicSetup={{ tabSize: 4 }}
