@@ -324,7 +324,7 @@ export default function TeacherDashboard() {
       </AlertDialog>
 
       <Dialog open={showCodingForm} onOpenChange={setShowCodingForm}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl w-[90vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingCoding ? "Edit Coding Problem" : "New Coding Problem"}</DialogTitle>
           </DialogHeader>
