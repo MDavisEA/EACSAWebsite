@@ -39,22 +39,24 @@ export function newTestCase(harnessType, methodArgCount = 0) {
   return { ...base, check_kind: "min_length", param: 8 };
 }
 
+// onUpdate always takes a single patch object to merge, even for a lone
+// field - some changes here (label+id, check_kind+param) touch two fields
+// at once, and a caller reading test-case state from a prop (not local
+// React state) can't safely absorb two separate onUpdate calls in a row.
 export default function TestCaseEditor({ testCase, index, harnessType, methodArgTypes, onUpdate, onRemove, canRemove, idError }) {
   const handleLabelChange = (value) => {
-    onUpdate("label", value);
-    if (!testCase.id) onUpdate("id", slugify(value));
+    onUpdate(testCase.id ? { label: value } : { label: value, id: slugify(value) });
   };
 
   const handleCheckKindChange = (kind) => {
     const meta = PROPERTY_CHECK_KINDS.find((k) => k.value === kind);
-    onUpdate("check_kind", kind);
-    onUpdate("param", meta?.needsParam ? meta.paramDefault : undefined);
+    onUpdate({ check_kind: kind, param: meta?.needsParam ? meta.paramDefault : undefined });
   };
 
   const updateMethodArg = (argIdx, value) => {
     const args = [...(testCase.method_args || [])];
     args[argIdx] = value;
-    onUpdate("method_args", args);
+    onUpdate({ method_args: args });
   };
 
   const checkKindMeta = PROPERTY_CHECK_KINDS.find((k) => k.value === testCase.check_kind);
@@ -77,7 +79,7 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
             <Label className="text-xs text-slate-500">Test ID</Label>
             <Input
               value={testCase.id}
-              onChange={(e) => onUpdate("id", slugify(e.target.value))}
+              onChange={(e) => onUpdate({ id: slugify(e.target.value) })}
               placeholder="unique_id"
               className={`h-8 text-sm w-36 font-mono ${idError ? "border-destructive" : ""}`}
             />
@@ -89,12 +91,12 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
               min="0"
               step="1"
               value={testCase.points ?? 1}
-              onChange={(e) => onUpdate("points", e.target.value === "" ? 0 : parseInt(e.target.value))}
+              onChange={(e) => onUpdate({ points: e.target.value === "" ? 0 : parseInt(e.target.value) })}
               className="h-8 text-sm w-20 text-center"
             />
           </div>
           <div className="flex items-center gap-1.5 pt-4">
-            <Switch checked={!!testCase.hidden} onCheckedChange={(v) => onUpdate("hidden", v)} className="scale-90" />
+            <Switch checked={!!testCase.hidden} onCheckedChange={(v) => onUpdate({ hidden: v })} className="scale-90" />
             <Label className="text-xs text-slate-500 flex items-center gap-1">
               <EyeOff className="w-3 h-3" /> Hidden
             </Label>
@@ -135,7 +137,7 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
             <Label className="text-xs text-slate-500">Expected Output</Label>
             <Input
               value={testCase.expected_output ?? ""}
-              onChange={(e) => onUpdate("expected_output", e.target.value)}
+              onChange={(e) => onUpdate({ expected_output: e.target.value })}
               placeholder="Exact return value, as a string"
               className="h-8 text-sm font-mono"
             />
@@ -165,7 +167,7 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
                 type="number"
                 min="0"
                 value={testCase.param ?? checkKindMeta.paramDefault}
-                onChange={(e) => onUpdate("param", e.target.value === "" ? checkKindMeta.paramDefault : parseInt(e.target.value))}
+                onChange={(e) => onUpdate({ param: e.target.value === "" ? checkKindMeta.paramDefault : parseInt(e.target.value) })}
                 className="h-8 text-sm w-32"
               />
             </div>

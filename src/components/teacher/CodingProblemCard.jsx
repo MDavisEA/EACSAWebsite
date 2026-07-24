@@ -10,8 +10,11 @@ export default function CodingProblemCard({ problem, onEdit, onDelete, onToggleA
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const testCount = problem.test_cases?.length || 0;
-  const hiddenCount = problem.test_cases?.filter((tc) => tc.hidden).length || 0;
+  const methods = problem.methods || [];
+  const allTestCases = methods.flatMap((m) => m.test_cases || []);
+  const testCount = allTestCases.length;
+  const hiddenCount = allTestCases.filter((tc) => tc.hidden).length;
+  const methodNames = methods.map((m) => m.method_name).join(", ");
   const studentLink = `${window.location.origin}/code?id=${problem.id}`;
 
   const copyLink = () => {
@@ -32,12 +35,12 @@ export default function CodingProblemCard({ problem, onEdit, onDelete, onToggleA
                   {problem.is_active ? "Active" : "Inactive"}
                 </Badge>
                 <Badge variant="outline">
-                  {problem.harness_type === "exact_match" ? "Exact match" : "Property check"}
+                  {methods.length} method{methods.length !== 1 ? "s" : ""}
                 </Badge>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1 font-mono">
-                  <Code2 className="w-3 h-3" /> {problem.class_name}.{problem.method_name}()
+                  <Code2 className="w-3 h-3" /> {problem.class_name}: {methodNames}
                 </span>
                 <span>
                   {testCount} test{testCount !== 1 ? "s" : ""}

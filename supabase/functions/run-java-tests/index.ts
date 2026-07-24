@@ -14,14 +14,18 @@ interface TestCase {
   param?: number;
 }
 
-interface CodingProblem {
-  id: string;
-  class_name: string;
-  harness_type: 'exact_match' | 'property_check';
+interface Method {
   method_name: string;
+  harness_type: 'exact_match' | 'property_check';
   method_arg_types: string[];
   trial_count?: number;
   test_cases: TestCase[];
+}
+
+interface CodingProblem {
+  id: string;
+  class_name: string;
+  methods: Method[];
 }
 
 // Piston's Java package doesn't run javac on multiple files - it renames
@@ -36,23 +40,26 @@ function stripPublicModifier(code: string, className: string): string {
   return code.replace(re, (_m, modifiers, rest) => `${modifiers}class${rest}`);
 }
 
-function buildDriver(problem: CodingProblem): string {
-  const { class_name, harness_type, method_name, method_arg_types = [], trial_count = 30 } = problem;
+// One problem can test several methods (e.g. a 3-method assignment). Each
+// method's driver code is wrapped in its own block (braces) so local
+// variable names never collide across methods even though everything
+// ends up concatenated into one main(). Every marker line is tagged with
+// the method name so results can be attributed back to the right method.
+function buildMethodDriver(className: string, method: Method): string {
+  const { method_name, harness_type, method_arg_types = [], trial_count = 30, test_cases } = method;
 
   if (harness_type === 'property_check') {
     return `
-public class Main {
-  public static void main(String[] args) {
-    int trials = ${trial_count};
-    for (int i = 0; i < trials; i++) {
-      Object result = ${class_name}.${method_name}();
-      System.out.println("__TRIAL__:" + String.valueOf(result));
-    }
-  }
-}`.trim();
+    {
+      int trials = ${trial_count};
+      for (int i = 0; i < trials; i++) {
+        Object result = ${className}.${method_name}();
+        System.out.println("__TRIAL__:${method_name}:" + String.valueOf(result));
+      }
+    }`;
   }
 
-  const calls = problem.test_cases
+  const calls = test_cases
     .filter((tc) => tc.check_kind === 'exact_output')
     .map((tc, idx) => {
       const args = (tc.method_args || []).map((val, i) => {
@@ -62,43 +69,63 @@ public class Main {
       });
       return `
     try {
-      Object r${idx} = ${class_name}.${method_name}(${args.join(', ')});
-      System.out.println("__RESULT__:${tc.id}:" + String.valueOf(r${idx}));
+      Object r${idx} = ${className}.${method_name}(${args.join(', ')});
+      System.out.println("__RESULT__:${method_name}:${tc.id}:" + String.valueOf(r${idx}));
     } catch (Exception e) {
-      System.out.println("__ERROR__:${tc.id}:" + e.toString());
+      System.out.println("__ERROR__:${method_name}:${tc.id}:" + e.toString());
     }`;
     })
     .join('\n');
 
   return `
+    {
+${calls}
+    }`;
+}
+
+function buildDriver(problem: CodingProblem): string {
+  const blocks = problem.methods.map((m) => buildMethodDriver(problem.class_name, m)).join('\n');
+  return `
 public class Main {
   public static void main(String[] args) {
-${calls}
+${blocks}
   }
 }`.trim();
 }
 
 function evaluateProperty(tc: TestCase, trials: string[]): { passed: boolean; detail: string } {
-  const check = (pred: (s: string) => boolean, failMsg: string) => {
+  const check = (pred: (s: string) => boolean, passMsg: string, failMsg: string) => {
     const failing = trials.find((t) => !pred(t));
     return failing === undefined
-      ? { passed: true, detail: 'Held across all trials' }
+      ? { passed: true, detail: passMsg }
       : { passed: false, detail: `${failMsg} (e.g. saw "${failing}")` };
   };
 
   switch (tc.check_kind) {
     case 'min_length':
-      return check((s) => s.length >= (tc.param ?? 0), `Expected length >= ${tc.param}`);
+      return check(
+        (s) => s.length >= (tc.param ?? 0),
+        `Length was always >= ${tc.param}`,
+        `Expected length >= ${tc.param}`
+      );
     case 'max_length':
-      return check((s) => s.length <= (tc.param ?? Infinity), `Expected length <= ${tc.param}`);
+      return check(
+        (s) => s.length <= (tc.param ?? Infinity),
+        `Length was always <= ${tc.param}`,
+        `Expected length <= ${tc.param}`
+      );
     case 'contains_upper':
-      return check((s) => /[A-Z]/.test(s), 'Expected at least one uppercase letter');
+      return check((s) => /[A-Z]/.test(s), 'Every trial had an uppercase letter', 'Expected at least one uppercase letter');
     case 'contains_lower':
-      return check((s) => /[a-z]/.test(s), 'Expected at least one lowercase letter');
+      return check((s) => /[a-z]/.test(s), 'Every trial had a lowercase letter', 'Expected at least one lowercase letter');
     case 'contains_digit':
-      return check((s) => /[0-9]/.test(s), 'Expected at least one digit');
+      return check((s) => /[0-9]/.test(s), 'Every trial had a digit', 'Expected at least one digit');
     case 'contains_special':
-      return check((s) => /[!@#$%^&*()`~<>,.;:'\[\]{}\/|_+\-=?]/.test(s), 'Expected at least one special character');
+      return check(
+        (s) => /[!@#$%^&*()`~<>,.;:'\[\]{}\/|_+\-=?]/.test(s),
+        'Every trial had a special character',
+        'Expected at least one special character'
+      );
     case 'no_repeated_chars_over': {
       const limit = tc.param ?? Infinity;
       const hasRun = (s: string) => {
@@ -109,7 +136,11 @@ function evaluateProperty(tc: TestCase, trials: string[]): { passed: boolean; de
         }
         return false;
       };
-      return check((s) => !hasRun(s), `Expected no run of the same character longer than ${limit}`);
+      return check(
+        (s) => !hasRun(s),
+        `No run of the same character longer than ${limit}`,
+        `Expected no run of the same character longer than ${limit}`
+      );
     }
     case 'trial_variety': {
       const minUniqueFraction = (tc.param ?? 80) / 100;
@@ -214,6 +245,7 @@ Deno.serve(async (req) => {
     }
 
     const results: {
+      method_name: string;
       test_id: string;
       label: string;
       hidden: boolean;
@@ -223,42 +255,51 @@ Deno.serve(async (req) => {
       detail: string;
     }[] = [];
 
-    if (problem.harness_type === 'property_check') {
-      const trials = lines.filter((l) => l.startsWith('__TRIAL__:')).map((l) => l.slice('__TRIAL__:'.length));
-      for (const tc of problem.test_cases) {
-        const { passed, detail } = evaluateProperty(tc, trials);
-        results.push({
-          test_id: tc.id,
-          label: tc.hidden ? 'Hidden test' : tc.label,
-          hidden: !!tc.hidden,
-          passed,
-          points_earned: passed ? tc.points : 0,
-          points_possible: tc.points,
-          detail: tc.hidden ? (passed ? 'Passed' : 'Failed') : detail,
-        });
-      }
-    } else {
-      const resultMap: Record<string, string> = {};
-      for (const l of lines) {
-        const m = l.match(/^__RESULT__:([^:]+):(.*)$/) || l.match(/^__ERROR__:([^:]+):(.*)$/);
-        if (m) resultMap[m[1]] = m[2];
-      }
-      for (const tc of problem.test_cases) {
-        const actual = resultMap[tc.id];
-        const passed = actual !== undefined && actual === String(tc.expected_output);
-        results.push({
-          test_id: tc.id,
-          label: tc.hidden ? 'Hidden test' : tc.label,
-          hidden: !!tc.hidden,
-          passed,
-          points_earned: passed ? tc.points : 0,
-          points_possible: tc.points,
-          detail: tc.hidden
-            ? passed
-              ? 'Passed'
-              : 'Failed'
-            : `Expected "${tc.expected_output}", got "${actual ?? '(no output)'}"`,
-        });
+    for (const method of problem.methods) {
+      const { method_name, harness_type, test_cases } = method;
+
+      if (harness_type === 'property_check') {
+        const prefix = `__TRIAL__:${method_name}:`;
+        const trials = lines.filter((l) => l.startsWith(prefix)).map((l) => l.slice(prefix.length));
+        for (const tc of test_cases) {
+          const { passed, detail } = evaluateProperty(tc, trials);
+          results.push({
+            method_name,
+            test_id: tc.id,
+            label: tc.hidden ? 'Hidden test' : tc.label,
+            hidden: !!tc.hidden,
+            passed,
+            points_earned: passed ? tc.points : 0,
+            points_possible: tc.points,
+            detail: tc.hidden ? (passed ? 'Passed' : 'Failed') : detail,
+          });
+        }
+      } else {
+        for (const tc of test_cases) {
+          const resultPrefix = `__RESULT__:${method_name}:${tc.id}:`;
+          const errorPrefix = `__ERROR__:${method_name}:${tc.id}:`;
+          const matchLine = lines.find((l) => l.startsWith(resultPrefix) || l.startsWith(errorPrefix));
+          const actual = matchLine
+            ? matchLine.startsWith(resultPrefix)
+              ? matchLine.slice(resultPrefix.length)
+              : matchLine.slice(errorPrefix.length)
+            : undefined;
+          const passed = actual !== undefined && actual === String(tc.expected_output);
+          results.push({
+            method_name,
+            test_id: tc.id,
+            label: tc.hidden ? 'Hidden test' : tc.label,
+            hidden: !!tc.hidden,
+            passed,
+            points_earned: passed ? tc.points : 0,
+            points_possible: tc.points,
+            detail: tc.hidden
+              ? passed
+                ? 'Passed'
+                : 'Failed'
+              : `Expected "${tc.expected_output}", got "${actual ?? '(no output)'}"`,
+          });
+        }
       }
     }
 

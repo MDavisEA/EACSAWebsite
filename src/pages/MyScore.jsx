@@ -147,8 +147,19 @@ export default function MyScore() {
                       <pre className="text-xs text-destructive whitespace-pre-wrap font-mono">{result.compile_error}</pre>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {(result.test_results || []).map((r) => (
+                    <div className="space-y-4">
+                      {Object.entries(
+                        (result.test_results || []).reduce((acc, r) => {
+                          const key = r.method_name || "";
+                          (acc[key] = acc[key] || []).push(r);
+                          return acc;
+                        }, {})
+                      ).map(([methodName, rs]) => (
+                        <div key={methodName} className="space-y-2">
+                          {methodName && (
+                            <p className="text-xs font-mono font-semibold text-slate-500">{methodName}()</p>
+                          )}
+                          {rs.map((r) => (
                         <div key={r.test_id} className="flex items-start gap-2 text-sm border rounded-lg px-3 py-2 bg-slate-50/50">
                           {r.hidden ? (
                             <EyeOff className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
@@ -164,6 +175,8 @@ export default function MyScore() {
                           <span className="ml-auto text-xs text-muted-foreground flex-shrink-0">
                             {r.points_earned}/{r.points_possible} pt
                           </span>
+                        </div>
+                          ))}
                         </div>
                       ))}
                       {(!result.test_results || result.test_results.length === 0) && (

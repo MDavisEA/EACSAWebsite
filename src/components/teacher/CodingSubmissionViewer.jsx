@@ -249,23 +249,36 @@ export default function CodingSubmissionViewer({ problem }) {
                       <pre className="text-xs text-destructive whitespace-pre-wrap font-mono">{selected.compile_error}</pre>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {(selected.test_results || []).map((r) => (
-                        <div key={r.test_id} className="flex items-start gap-2 text-sm border rounded-lg px-3 py-2 bg-slate-50/50">
-                          {r.hidden ? (
-                            <EyeOff className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                          ) : r.passed ? (
-                            <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                    <div className="space-y-4">
+                      {Object.entries(
+                        (selected.test_results || []).reduce((acc, r) => {
+                          const key = r.method_name || "";
+                          (acc[key] = acc[key] || []).push(r);
+                          return acc;
+                        }, {})
+                      ).map(([methodName, rs]) => (
+                        <div key={methodName} className="space-y-2">
+                          {methodName && (
+                            <p className="text-xs font-mono font-semibold text-slate-500">{methodName}()</p>
                           )}
-                          <div>
-                            <p className={r.hidden ? "text-slate-400 italic" : "text-slate-700"}>{r.label}</p>
-                            <p className="text-xs text-muted-foreground">{r.detail}</p>
-                          </div>
-                          <span className="ml-auto text-xs text-muted-foreground flex-shrink-0">
-                            {r.points_earned}/{r.points_possible} pt
-                          </span>
+                          {rs.map((r) => (
+                            <div key={r.test_id} className="flex items-start gap-2 text-sm border rounded-lg px-3 py-2 bg-slate-50/50">
+                              {r.hidden ? (
+                                <EyeOff className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                              ) : r.passed ? (
+                                <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                              )}
+                              <div>
+                                <p className={r.hidden ? "text-slate-400 italic" : "text-slate-700"}>{r.label}</p>
+                                <p className="text-xs text-muted-foreground">{r.detail}</p>
+                              </div>
+                              <span className="ml-auto text-xs text-muted-foreground flex-shrink-0">
+                                {r.points_earned}/{r.points_possible} pt
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       ))}
                       {(!selected.test_results || selected.test_results.length === 0) && (

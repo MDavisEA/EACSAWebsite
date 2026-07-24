@@ -133,17 +133,20 @@ export default function CodePracticePage() {
     );
   }
 
-  const resultsById = {};
-  (results?.test_results || []).forEach((r) => { resultsById[r.test_id] = r; });
+  const resultsByKey = {};
+  (results?.test_results || []).forEach((r) => { resultsByKey[`${r.method_name}::${r.test_id}`] = r; });
 
-  const checklist = [
-    ...(problem.visible_checks || []).map((c) => ({ ...c, hidden: false })),
-    ...Array.from({ length: problem.hidden_check_count || 0 }, (_, i) => ({
-      id: `__hidden_${i}`,
-      label: "Hidden test",
-      hidden: true,
-    })),
-  ];
+  const methodChecklists = (problem.methods || []).map((m) => ({
+    method_name: m.method_name,
+    checks: [
+      ...(m.visible_checks || []).map((c) => ({ ...c, hidden: false })),
+      ...Array.from({ length: m.hidden_check_count || 0 }, (_, i) => ({
+        id: `__hidden_${i}`,
+        label: "Hidden test",
+        hidden: true,
+      })),
+    ],
+  }));
 
   return (
     <div className="h-screen flex flex-col bg-[#1e1e1e] text-slate-100 overflow-hidden">
@@ -170,37 +173,41 @@ export default function CodePracticePage() {
             dangerouslySetInnerHTML={{ __html: problem.description_html || "" }}
           />
 
-          <div>
-            <h3 className="text-sm font-semibold text-slate-300 mb-2">Checks</h3>
-            <div className="space-y-2">
-              {checklist.map((c) => {
-                const r = resultsById[c.id];
-                return (
-                  <div
-                    key={c.id}
-                    className="flex items-center gap-2 text-sm border border-slate-700 rounded-lg px-3 py-2 bg-[#2d2d2d]"
-                  >
-                    {c.hidden ? (
-                      <EyeOff className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                    ) : r ? (
-                      r.passed ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      ) : (
-                        <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                      )
-                    ) : (
-                      <div className="w-4 h-4 rounded-full border-2 border-slate-600 flex-shrink-0" />
-                    )}
-                    <span className={c.hidden ? "text-slate-500 italic" : "text-slate-200"}>
-                      {c.label}
-                    </span>
-                    {!c.hidden && "points" in c && (
-                      <span className="ml-auto text-xs text-slate-500">{c.points} pt</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+          <div className="space-y-5">
+            {methodChecklists.map((mc) => (
+              <div key={mc.method_name}>
+                <h3 className="text-xs font-mono font-semibold text-emerald-400/90 mb-2">{mc.method_name}()</h3>
+                <div className="space-y-2">
+                  {mc.checks.map((c) => {
+                    const r = c.hidden ? null : resultsByKey[`${mc.method_name}::${c.id}`];
+                    return (
+                      <div
+                        key={c.id}
+                        className="flex items-center gap-2 text-sm border border-slate-700 rounded-lg px-3 py-2 bg-[#2d2d2d]"
+                      >
+                        {c.hidden ? (
+                          <EyeOff className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                        ) : r ? (
+                          r.passed ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                          )
+                        ) : (
+                          <div className="w-4 h-4 rounded-full border-2 border-slate-600 flex-shrink-0" />
+                        )}
+                        <span className={c.hidden ? "text-slate-500 italic" : "text-slate-200"}>
+                          {c.label}
+                        </span>
+                        {!c.hidden && "points" in c && (
+                          <span className="ml-auto text-xs text-slate-500">{c.points} pt</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -233,21 +240,32 @@ export default function CodePracticePage() {
                   <pre className="text-xs text-red-300 whitespace-pre-wrap font-mono">{results.compile_error}</pre>
                 </div>
               ) : (
-                <div className="space-y-1.5">
+                <div className="space-y-2.5">
                   <p className="text-sm font-medium text-slate-200">
                     {results.tests_passed}/{results.tests_total} checks passed
                     {typeof results.autograde_score === "number" && ` — ${results.autograde_score} pts`}
                   </p>
-                  {(results.test_results || []).filter((r) => !r.hidden).map((r) => (
-                    <div key={r.test_id} className="text-xs text-slate-400 flex items-start gap-1.5">
-                      {r.passed ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
-                      ) : (
-                        <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
-                      )}
-                      <span>{r.detail}</span>
-                    </div>
-                  ))}
+                  {(problem.methods || []).map((m) => {
+                    const methodResults = (results.test_results || []).filter(
+                      (r) => r.method_name === m.method_name && !r.hidden
+                    );
+                    if (methodResults.length === 0) return null;
+                    return (
+                      <div key={m.method_name} className="space-y-1">
+                        <p className="text-xs font-mono font-semibold text-slate-400">{m.method_name}()</p>
+                        {methodResults.map((r) => (
+                          <div key={r.test_id} className="text-xs text-slate-400 flex items-start gap-1.5 pl-2">
+                            {r.passed ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                            ) : (
+                              <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
+                            )}
+                            <span>{r.detail}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

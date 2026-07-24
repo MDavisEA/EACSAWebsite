@@ -4,7 +4,8 @@ import { createAdminClient, getTeacherFromRequest } from '../_shared/teacherAuth
 // Students get starter code, description, and the LABELS of test cases
 // (so they know what's being checked) but never expected_output, method_args,
 // or which ones are hidden - that's exactly the info that would let someone
-// game the autograder instead of solving the problem.
+// game the autograder instead of solving the problem. A problem can test
+// several methods, so checks are grouped per method rather than flattened.
 function sanitizeForStudent(problem: Record<string, any>) {
   return {
     id: problem.id,
@@ -14,10 +15,13 @@ function sanitizeForStudent(problem: Record<string, any>) {
     class_name: problem.class_name,
     starter_code: problem.starter_code,
     points_possible: problem.points_possible,
-    visible_checks: (problem.test_cases || [])
-      .filter((tc: Record<string, any>) => !tc.hidden)
-      .map((tc: Record<string, any>) => ({ id: tc.id, label: tc.label, points: tc.points })),
-    hidden_check_count: (problem.test_cases || []).filter((tc: Record<string, any>) => tc.hidden).length,
+    methods: (problem.methods || []).map((m: Record<string, any>) => ({
+      method_name: m.method_name,
+      visible_checks: (m.test_cases || [])
+        .filter((tc: Record<string, any>) => !tc.hidden)
+        .map((tc: Record<string, any>) => ({ id: tc.id, label: tc.label, points: tc.points })),
+      hidden_check_count: (m.test_cases || []).filter((tc: Record<string, any>) => tc.hidden).length,
+    })),
   };
 }
 
