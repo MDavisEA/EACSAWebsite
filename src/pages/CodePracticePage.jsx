@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useGoogleSession } from "@/lib/useGoogleSession";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
@@ -18,11 +19,10 @@ export default function CodePracticePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const problemId = searchParams.get("id");
-  const studentName = problemId
-    ? (sessionStorage.getItem(`student_name_${problemId}`) || "")
-    : "";
+  const { session, user, loading: sessionLoading } = useGoogleSession();
+  const studentName = user?.user_metadata?.full_name || user?.email || "";
 
-  const draftKey = problemId && studentName ? `code_draft_${problemId}_${studentName}` : null;
+  const draftKey = problemId && user ? `code_draft_${problemId}_${user.id}` : null;
 
   const [problem, setProblem] = useState(null);
   const [code, setCode] = useState("");
@@ -37,12 +37,13 @@ export default function CodePracticePage() {
   const submissionRef = useRef(null); // { id, session_token }
 
   useEffect(() => {
-    if (!problemId || !studentName) {
+    if (sessionLoading) return;
+    if (!problemId || !session) {
       navigate(problemId ? `/code?id=${problemId}` : "/code");
       return;
     }
     load();
-  }, []);
+  }, [sessionLoading]);
 
   const load = async () => {
     const results = await base44.entities.CodingProblem.filter({ id: problemId });
@@ -57,7 +58,6 @@ export default function CodePracticePage() {
 
     const existing = await base44.entities.Submission.filter({
       coding_problem_id: problemId,
-      student_name: studentName,
       submitted: false,
     });
 
@@ -65,10 +65,7 @@ export default function CodePracticePage() {
     if (existing.length > 0) {
       sub = existing[0];
     } else {
-      sub = await base44.entities.Submission.create({
-        coding_problem_id: problemId,
-        student_name: studentName,
-      });
+      sub = await base44.entities.Submission.create({ coding_problem_id: problemId });
     }
     submissionRef.current = { id: sub.id, session_token: sub.session_token };
     setCode(draft || sub.code || p.starter_code || "");

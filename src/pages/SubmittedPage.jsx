@@ -1,18 +1,13 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { useGoogleSession } from "@/lib/useGoogleSession";
 import { CheckCircle } from "lucide-react";
 
 export default function SubmittedPage() {
   const navigate = useNavigate();
-  const studentName = (() => {
-    // Try to find the student name from any active session in sessionStorage
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i);
-      if (key?.startsWith("student_name_")) return sessionStorage.getItem(key) || "Student";
-    }
-    return "Student";
-  })();
+  const { user } = useGoogleSession();
+  const studentName = user?.user_metadata?.full_name || user?.email || "Student";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-green-50 flex items-center justify-center p-6">

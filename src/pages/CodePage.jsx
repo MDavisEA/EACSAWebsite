@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useGoogleSession } from "@/lib/useGoogleSession";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Code2, AlertCircle, ChevronRight, Trophy } from "lucide-react";
+import { Code2, AlertCircle, ChevronRight, Trophy, LogIn } from "lucide-react";
 
 export default function CodePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const problemId = searchParams.get("id");
+  const { session, user, loading: sessionLoading, domainRejected } = useGoogleSession();
 
   const [problem, setProblem] = useState(null);
   const [activeProblems, setActiveProblems] = useState([]);
-  const [studentName, setStudentName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -44,9 +44,12 @@ export default function CodePage() {
     setLoading(false);
   };
 
+  const handleSignIn = () => {
+    base44.auth.signInWithGoogle(window.location.href);
+  };
+
   const handleStart = () => {
-    if (!studentName.trim() || !problem) return;
-    sessionStorage.setItem(`student_name_${problem.id}`, studentName.trim());
+    if (!session || !problem) return;
     navigate(`/code-practice?id=${problem.id}`);
   };
 
@@ -54,7 +57,7 @@ export default function CodePage() {
     navigate(`/code?id=${p.id}`);
   };
 
-  if (loading || (problemId && !problem && !error)) {
+  if (loading || sessionLoading || (problemId && !problem && !error)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#1e1e1e]">
         <div className="w-8 h-8 border-4 border-slate-700 border-t-emerald-400 rounded-full animate-spin" />
@@ -145,20 +148,25 @@ export default function CodePage() {
         </div>
 
         <div className="bg-[#252526] rounded-xl border border-slate-700 p-6 space-y-5">
-          <div>
-            <label className="text-sm font-medium mb-2 block text-slate-200">Your Name</label>
-            <Input
-              placeholder="Enter your full name"
-              value={studentName}
-              onChange={(e) => setStudentName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleStart()}
-              autoFocus
-              className="bg-[#1e1e1e] border-slate-600 text-slate-100 placeholder:text-slate-500"
-            />
-          </div>
-          <Button onClick={handleStart} disabled={!studentName.trim()} className="w-full" size="lg">
-            Begin Problem
-          </Button>
+          {domainRejected && (
+            <p className="text-sm text-red-400 text-center">
+              Please sign in with your school Google account (@{"episcopalacademy.org"}).
+            </p>
+          )}
+          {session ? (
+            <>
+              <p className="text-sm text-center text-slate-300">
+                Signed in as <span className="font-medium text-slate-100">{user.user_metadata?.full_name || user.email}</span>
+              </p>
+              <Button onClick={handleStart} className="w-full" size="lg">
+                Begin Problem
+              </Button>
+            </>
+          ) : (
+            <Button onClick={handleSignIn} className="w-full" size="lg">
+              <LogIn className="w-4 h-4 mr-2" /> Sign in with Google
+            </Button>
+          )}
           <p className="text-xs text-center text-slate-500">
             Once you begin, your code will be autosaved. You can submit when ready.
           </p>

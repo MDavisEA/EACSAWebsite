@@ -12,6 +12,7 @@ import ExamPage from '@/pages/ExamPage';
 import SubmittedPage from '@/pages/SubmittedPage';
 import TeacherDashboard from '@/pages/TeacherDashboard';
 import MyScore from '@/pages/MyScore';
+import MyWork from '@/pages/MyWork';
 import CodePage from '@/pages/CodePage';
 import CodePracticePage from '@/pages/CodePracticePage';
 
@@ -43,6 +44,7 @@ const AuthenticatedApp = () => {
       <Route path="/submitted" element={<SubmittedPage />} />
       <Route path="/teacher" element={<TeacherDashboard />} />
       <Route path="/my-score" element={<MyScore />} />
+      <Route path="/my-work" element={<MyWork />} />
       <Route path="/code" element={<CodePage />} />
       <Route path="/code-practice" element={<CodePracticePage />} />
       <Route path="*" element={<PageNotFound />} />

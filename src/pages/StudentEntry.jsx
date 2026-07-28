@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useGoogleSession } from "@/lib/useGoogleSession";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { BookOpen, AlertCircle, Clock, ChevronRight } from "lucide-react";
+import { BookOpen, AlertCircle, Clock, ChevronRight, LogIn } from "lucide-react";
 
 export default function StudentEntry() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const assignmentId = searchParams.get("id");
+  const { session, user, loading: sessionLoading, domainRejected } = useGoogleSession();
 
   const [assignment, setAssignment] = useState(null);
   const [featuredAssignments, setFeaturedAssignments] = useState([]);
-  const [studentName, setStudentName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -47,9 +47,12 @@ export default function StudentEntry() {
     setLoading(false);
   };
 
+  const handleSignIn = () => {
+    base44.auth.signInWithGoogle(window.location.href);
+  };
+
   const handleStart = () => {
-    if (!studentName.trim() || !assignment) return;
-    sessionStorage.setItem(`student_name_${assignment.id}`, studentName.trim());
+    if (!session || !assignment) return;
     navigate(`/exam?id=${assignment.id}`);
   };
 
@@ -57,7 +60,7 @@ export default function StudentEntry() {
     navigate(`/student?id=${a.id}`);
   };
 
-  if (loading || (assignmentId && !assignment && !error)) {
+  if (loading || sessionLoading || (assignmentId && !assignment && !error)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-primary rounded-full animate-spin" />
@@ -152,24 +155,25 @@ export default function StudentEntry() {
         </div>
 
         <div className="bg-card rounded-xl border border-border p-6 space-y-5">
-          <div>
-            <label className="text-sm font-medium mb-2 block">Your Name</label>
-            <Input
-              placeholder="Enter your full name"
-              value={studentName}
-              onChange={(e) => setStudentName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleStart()}
-              autoFocus
-            />
-          </div>
-          <Button
-            onClick={handleStart}
-            disabled={!studentName.trim()}
-            className="w-full"
-            size="lg"
-          >
-            Begin Assignment
-          </Button>
+          {domainRejected && (
+            <p className="text-sm text-destructive text-center">
+              Please sign in with your school Google account (@episcopalacademy.org).
+            </p>
+          )}
+          {session ? (
+            <>
+              <p className="text-sm text-center text-muted-foreground">
+                Signed in as <span className="font-medium text-foreground">{user.user_metadata?.full_name || user.email}</span>
+              </p>
+              <Button onClick={handleStart} className="w-full" size="lg">
+                Begin Assignment
+              </Button>
+            </>
+          ) : (
+            <Button onClick={handleSignIn} className="w-full" size="lg">
+              <LogIn className="w-4 h-4 mr-2" /> Sign in with Google
+            </Button>
+          )}
           <p className="text-xs text-center text-muted-foreground">
             Once you begin, your work will be autosaved. You can submit when ready.
           </p>

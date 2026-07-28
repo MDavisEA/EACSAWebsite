@@ -1,4 +1,5 @@
 import { supabase } from '@/api/supabaseClient';
+import { getSessionAuthMethod } from '@/lib/sessionAuthMethod';
 
 // ============================================================================
 // This file replaces the old @base44/sdk client. Every page/component in the
@@ -22,7 +23,14 @@ async function authHeader() {
 
 async function hasActiveTeacherSession() {
   const { data } = await supabase.auth.getSession();
-  return !!data?.session;
+  // A Supabase session alone no longer implies "teacher" now that students
+  // also get real sessions via Google sign-in. Teachers authenticate with
+  // email/password (Landing.jsx), students via Google OAuth - checking how
+  // THIS session was established (via the token's amr claim, not the
+  // account's overall app_metadata.provider) stays correct even if the same
+  // account ends up with both an email/password and a Google identity linked
+  // (e.g. a teacher testing the student flow with their own school email).
+  return getSessionAuthMethod(data?.session) === 'password';
 }
 
 async function callFunction(name, body) {
@@ -47,31 +55,11 @@ async function callFunction(name, body) {
   return data;
 }
 
-// ---- localStorage helpers for the submission session-token cache ----
+// ---- localStorage helper for the legacy (pre-Google-sign-in) session-token
+// cache. Nothing writes new entries here anymore - this only still reads
+// entries an old anonymous submission cached before sign-in was required. ----
 
-const tokenKeyByAssignment = (parentId, studentName) => `sub_token::${parentId}::${studentName}`;
 const tokenKeyById = (submissionId) => `sub_token_by_id::${submissionId}`;
-
-function cacheToken(parentId, studentName, submission) {
-  const cached = JSON.stringify({ id: submission.id, session_token: submission.session_token });
-  try {
-    localStorage.setItem(tokenKeyByAssignment(parentId, studentName), cached);
-    localStorage.setItem(tokenKeyById(submission.id), cached);
-  } catch {
-    // localStorage can throw in some locked-down browser contexts - the
-    // session still works within the current page load, it just won't
-    // survive a refresh. Not fatal.
-  }
-}
-
-function readCachedTokenByAssignment(parentId, studentName) {
-  try {
-    const raw = localStorage.getItem(tokenKeyByAssignment(parentId, studentName));
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
 
 function readCachedTokenById(submissionId) {
   try {
@@ -147,24 +135,23 @@ const Assignment = {
 
 const Submission = {
   async create(fields) {
+    // Sign-in is required to start new work now, so identity comes from the
+    // caller's Google JWT (attached by authHeader() inside callFunction) -
+    // the server derives student_name/student_user_id from that, not from
+    // anything passed here. No localStorage token caching needed either:
+    // ownership of the resulting submission is proven by the JWT itself.
     if (fields.coding_problem_id) {
-      const parentId = fields.coding_problem_id;
       const data = await callFunction('submissions', {
         action: 'startCoding',
-        coding_problem_id: parentId,
-        student_name: fields.student_name,
+        coding_problem_id: fields.coding_problem_id,
       });
-      cacheToken(parentId, fields.student_name, data.result);
       return data.result;
     }
-    const parentId = fields.assignment_id;
     const data = await callFunction('submissions', {
       action: 'startFresh',
       assignment_id: fields.assignment_id,
-      student_name: fields.student_name,
       initial_responses: fields.responses,
     });
-    cacheToken(parentId, fields.student_name, data.result);
     return data.result;
   },
 
@@ -172,22 +159,24 @@ const Submission = {
     const keys = Object.keys(criteria).sort().join(',');
 
     if (
-      (keys === 'assignment_id,student_name,submitted' || keys === 'coding_problem_id,student_name,submitted') &&
+      (keys === 'assignment_id,submitted' || keys === 'coding_problem_id,submitted') &&
       criteria.submitted === false
     ) {
-      const parentId = criteria.assignment_id || criteria.coding_problem_id;
-      const cached = readCachedTokenByAssignment(parentId, criteria.student_name);
-      if (!cached) return []; // no local record - caller will create fresh
       const data = await callFunction('submissions', {
-        action: 'resume',
-        submission_id: cached.id,
-        session_token: cached.session_token,
+        action: 'findMyOpenSubmission',
+        assignment_id: criteria.assignment_id,
+        coding_problem_id: criteria.coding_problem_id,
       });
       return data.result ? [data.result] : [];
     }
 
     if (keys === 'access_code,submitted' && criteria.submitted === true) {
       const data = await callFunction('submissions', { action: 'getByAccessCode', access_code: criteria.access_code });
+      return data.results;
+    }
+
+    if (keys === 'mine,submitted' && criteria.mine === true && criteria.submitted === true) {
+      const data = await callFunction('submissions', { action: 'myScores' });
       return data.results;
     }
 
@@ -222,18 +211,18 @@ const Submission = {
       return data.result;
     }
 
-    // Student path - needs the cached session token for this submission.
+    // Student path. Ownership is normally proven by the caller's Google JWT
+    // (attached automatically via authHeader()). The cached session_token is
+    // only a fallback, for anonymous submissions started before sign-in was
+    // required - it's harmlessly ignored server-side for anything owned by
+    // an authenticated student.
     const cached = readCachedTokenById(id);
-    if (!cached) {
-      throw new Error(
-        'No local session found for this submission (cleared storage or a different device). Refresh and start the assignment again.'
-      );
-    }
+    const sessionToken = cached?.session_token || '';
     if (fields.submitted === true) {
       const data = await callFunction('submissions', {
         action: 'submitFinal',
         submission_id: id,
-        session_token: cached.session_token,
+        session_token: sessionToken,
         responses: fields.responses,
         time_spent_seconds: fields.time_spent_seconds,
       });
@@ -242,7 +231,7 @@ const Submission = {
     const data = await callFunction('submissions', {
       action: 'saveResponses',
       submission_id: id,
-      session_token: cached.session_token,
+      session_token: sessionToken,
       responses: fields.responses,
     });
     return data.result;
@@ -310,6 +299,21 @@ const auth = {
 
   redirectToLogin() {
     window.location.href = '/';
+  },
+
+  // Students sign in with their school Google account instead of creating a
+  // password. `hd` is a hint to Google's login screen (pre-fills/restricts
+  // to that Workspace domain) - it is NOT the real security boundary, which
+  // is enforced server-side in every Edge Function via getStudentFromRequest
+  // checking the email domain on the verified JWT.
+  async signInWithGoogle(redirectTo) {
+    return supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectTo || window.location.href,
+        queryParams: { hd: 'episcopalacademy.org', prompt: 'select_account' },
+      },
+    });
   },
 };
 

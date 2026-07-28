@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import ResizableDivider from "@/components/exam/ResizableDivider";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useGoogleSession } from "@/lib/useGoogleSession";
 import ExamHeader from "@/components/exam/ExamHeader";
 import ExamFooter from "@/components/exam/ExamFooter";
 import QuestionPanel from "@/components/exam/QuestionPanel";
@@ -14,12 +15,11 @@ export default function ExamPage() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
   const assignmentId = urlParams.get("id");
-  const studentName = assignmentId
-    ? (sessionStorage.getItem(`student_name_${assignmentId}`) || "")
-    : "";
+  const { session, user, loading: sessionLoading } = useGoogleSession();
+  const studentName = user?.user_metadata?.full_name || user?.email || "";
 
-  const localStorageKey = assignmentId && studentName
-    ? `exam_responses_${assignmentId}_${studentName}`
+  const localStorageKey = assignmentId && user
+    ? `exam_responses_${assignmentId}_${user.id}`
     : null;
 
   // Read localStorage immediately (synchronously) so initial state is never empty
@@ -70,12 +70,13 @@ export default function ExamPage() {
   }, []);
 
   useEffect(() => {
-    if (!assignmentId || !studentName) {
+    if (sessionLoading) return;
+    if (!assignmentId || !session) {
       navigate("/");
       return;
     }
     loadAssignment();
-  }, []);
+  }, [sessionLoading]);
 
   const loadAssignment = async () => {
     const results = await base44.entities.Assignment.filter({ id: assignmentId });
@@ -98,7 +99,6 @@ export default function ExamPage() {
     // Check for existing unsubmitted DB submission
     const existing = await base44.entities.Submission.filter({
       assignment_id: assignmentId,
-      student_name: studentName,
       submitted: false,
     });
 
@@ -115,13 +115,9 @@ export default function ExamPage() {
         setRecoveredDraft(true);
       }
     } else {
-      const code = Math.random().toString(36).substring(2, 6).toUpperCase() + "-" + Math.random().toString(36).substring(2, 6).toUpperCase();
       sub = await base44.entities.Submission.create({
         assignment_id: assignmentId,
-        student_name: studentName,
         responses: localDraft,
-        submitted: false,
-        access_code: code,
       });
       responsesRef.current = localDraft;
       setResponses(localDraft);

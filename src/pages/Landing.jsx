@@ -47,6 +47,25 @@ export default function Landing() {
         </div>
 
         <div className="space-y-6">
+          {/* My Work - the digital replacement for access codes, for
+              signed-in students */}
+          <button
+            onClick={() => navigate("/my-work")}
+            className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 text-left transition-all hover:shadow-lg hover:border-amber-300 w-full"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center group-hover:bg-amber-100 transition-colors">
+                <Star className="w-6 h-6 text-amber-500" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">My Work</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Sign in with your school Google account to see all of your graded work
+                </p>
+              </div>
+            </div>
+          </button>
+
           {/* Section: AP FRQ Practice */}
           <div className="rounded-2xl border border-blue-100 bg-blue-50/30 p-4">
             <div className="flex items-center gap-2 mb-3 px-1">

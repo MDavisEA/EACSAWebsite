@@ -1,5 +1,6 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient } from '../_shared/teacherAuth.ts';
+import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 
 const PISTON_URL = 'https://emkc.org/api/v2/piston/execute';
 
@@ -176,12 +177,22 @@ Deno.serve(async (req) => {
     // Ownership check - this was missing in the first (Base44) version of this
     // function. Without it, anyone who knew a submission_id could run code
     // "as" that submission and overwrite someone else's autograde history.
+    // Two ownership models coexist here, same as submissions/index.ts:
+    // student_user_id (Google-signed-in students) takes precedence when set,
+    // else fall back to the legacy session_token check.
+    const student = await getStudentFromRequest(req, admin);
     const { data: submission, error: subErr } = await admin
       .from('submissions')
       .select('*')
       .eq('id', submission_id)
       .maybeSingle();
-    if (subErr || !submission || submission.session_token !== session_token) {
+    if (subErr || !submission) {
+      return json({ error: 'Unauthorized' }, 401);
+    }
+    const owned = submission.student_user_id
+      ? !!student && submission.student_user_id === student.id
+      : submission.session_token === session_token;
+    if (!owned) {
       return json({ error: 'Unauthorized' }, 401);
     }
     if (submission.submitted) {

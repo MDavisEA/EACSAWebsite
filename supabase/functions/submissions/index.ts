@@ -1,5 +1,6 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest } from '../_shared/teacherAuth.ts';
+import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 
 function generateAccessCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 - avoids ambiguity
@@ -11,18 +12,30 @@ function generateAccessCode(): string {
   return code;
 }
 
-// Verifies the caller actually holds the secret for this submission before
-// allowing any read/write of it. This is the fix for the old app's behavior,
-// where anyone who knew (or guessed) a student's name could pull up and edit
-// their in-progress work.
-async function verifyOwnership(admin: any, submissionId: string, sessionToken: string) {
+// Verifies the caller actually owns this submission before allowing any
+// read/write of it. Two ownership models coexist:
+//  - student_user_id set (new, Google-signed-in students): the caller's JWT
+//    must resolve (via getStudentFromRequest) to that same user.
+//  - student_user_id null (legacy/anonymous rows created before sign-in was
+//    required): fall back to the original session_token check, so anything
+//    already in progress at rollout keeps working untouched.
+async function verifyOwnership(
+  admin: any,
+  submissionId: string,
+  sessionToken: string,
+  student: { id: string } | null
+) {
   const { data, error } = await admin
     .from('submissions')
     .select('*')
     .eq('id', submissionId)
     .maybeSingle();
   if (error || !data) return null;
-  if (data.session_token !== sessionToken) return null;
+  if (data.student_user_id) {
+    if (!student || data.student_user_id !== student.id) return null;
+  } else {
+    if (data.session_token !== sessionToken) return null;
+  }
   return data;
 }
 
@@ -35,38 +48,65 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // ============ Student-facing actions (no login, token-gated) ============
+    // ============ Student-facing actions ============
+    // Sign-in with a school Google account is required to start new work.
+    // Resolved once per request; null if there's no valid student JWT.
+    const student = await getStudentFromRequest(req, admin);
 
     if (action === 'startFresh') {
-      const { assignment_id, coding_problem_id, student_name, initial_responses } = body;
-      if (!student_name || (!assignment_id && !coding_problem_id)) {
-        return json({ error: 'student_name and one of assignment_id/coding_problem_id are required' }, 400);
+      const { assignment_id, coding_problem_id } = body;
+      if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      if (!assignment_id && !coding_problem_id) {
+        return json({ error: 'One of assignment_id/coding_problem_id is required' }, 400);
       }
       const { data, error } = await admin
         .from('submissions')
         .insert({
           assignment_id: assignment_id || null,
           coding_problem_id: coding_problem_id || null,
-          student_name,
-          responses: initial_responses || {},
+          student_name: student.name,
+          student_user_id: student.id,
+          responses: body.initial_responses || {},
           submitted: false,
           access_code: generateAccessCode(),
         })
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
-      return json({ result: data }); // includes id + session_token - client caches both
+      return json({ result: data });
+    }
+
+    if (action === 'findMyOpenSubmission') {
+      const { assignment_id, coding_problem_id } = body;
+      if (!student) return json({ result: null });
+      let query = admin.from('submissions').select('*').eq('student_user_id', student.id).eq('submitted', false);
+      query = assignment_id ? query.eq('assignment_id', assignment_id) : query.eq('coding_problem_id', coding_problem_id);
+      const { data, error } = await query.maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
+    if (action === 'myScores') {
+      if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      const { data, error } = await admin
+        .from('submissions')
+        .select('*')
+        .eq('student_user_id', student.id)
+        .eq('submitted', true)
+        .order('submitted_at', { ascending: false });
+      if (error) return json({ error: error.message }, 500);
+      return json({ results: data || [] });
     }
 
     if (action === 'resume') {
-      const sub = await verifyOwnership(admin, body.submission_id, body.session_token);
+      const sub = await verifyOwnership(admin, body.submission_id, body.session_token, student);
       if (!sub) return json({ result: null }); // client falls back to startFresh
       if (sub.submitted) return json({ result: null }); // can't "resume" a finished submission
       return json({ result: sub });
     }
 
     if (action === 'saveResponses') {
-      const sub = await verifyOwnership(admin, body.submission_id, body.session_token);
+      const sub = await verifyOwnership(admin, body.submission_id, body.session_token, student);
       if (!sub) return json({ error: 'Unauthorized' }, 401);
       if (sub.submitted) return json({ error: 'Already submitted' }, 409);
       const { data, error } = await admin
@@ -80,7 +120,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'submitFinal') {
-      const sub = await verifyOwnership(admin, body.submission_id, body.session_token);
+      const sub = await verifyOwnership(admin, body.submission_id, body.session_token, student);
       if (!sub) return json({ error: 'Unauthorized' }, 401);
       if (sub.submitted) return json({ result: sub }); // idempotent - already submitted
       const { data, error } = await admin
@@ -99,15 +139,15 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'startCoding') {
-      const { coding_problem_id, student_name } = body;
-      if (!coding_problem_id || !student_name) {
-        return json({ error: 'coding_problem_id and student_name are required' }, 400);
-      }
+      const { coding_problem_id } = body;
+      if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      if (!coding_problem_id) return json({ error: 'coding_problem_id is required' }, 400);
       const { data, error } = await admin
         .from('submissions')
         .insert({
           coding_problem_id,
-          student_name,
+          student_name: student.name,
+          student_user_id: student.id,
           submitted: false,
           access_code: generateAccessCode(),
         })
@@ -118,7 +158,8 @@ Deno.serve(async (req) => {
     }
 
     // ============ Public score lookup (access code = shared secret, same
-    // model the old app used - unchanged) ============
+    // model the old app used - unchanged, still works for pre-Google-sign-in
+    // submissions and anyone who wants to look up an old code) ============
 
     if (action === 'getByAccessCode') {
       const trimmed = (body.access_code || '').trim().toUpperCase();
