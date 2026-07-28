@@ -237,9 +237,23 @@ Deno.serve(async (req) => {
         : undefined);
 
     if (compileError) {
+      // Every attempt gets recorded here - not just successful runs - so
+      // a teacher reviewing a student's process can see syntax struggles
+      // (compile errors) as distinct from logic struggles (ran but failed
+      // checks), not just silence between the first and last attempt.
+      const historyEntry = {
+        timestamp: new Date().toISOString(),
+        final: !!final,
+        code,
+        compile_error: compileError,
+        tests_passed: 0,
+        tests_total: 0,
+        results: [],
+      };
+      const run_history = [...(submission.run_history || []), historyEntry];
       await admin
         .from('submissions')
-        .update({ code, compile_error: compileError, test_results: [] })
+        .update({ code, compile_error: compileError, test_results: [], run_history })
         .eq('id', submission_id);
       return json({ compile_error: compileError, test_results: [] });
     }
@@ -306,11 +320,17 @@ Deno.serve(async (req) => {
     const tests_passed = results.filter((r) => r.passed).length;
     const autograde_score = results.reduce((sum, r) => sum + r.points_earned, 0);
 
+    // A full code snapshot and per-check breakdown per attempt - not just
+    // the aggregate pass count - so a teacher can see exactly which check
+    // a student was stuck on and how their code changed between tries.
     const historyEntry = {
       timestamp: new Date().toISOString(),
       final: !!final,
+      code,
+      compile_error: null,
       tests_passed,
       tests_total: results.length,
+      results,
     };
     const run_history = [...(submission.run_history || []), historyEntry];
 
