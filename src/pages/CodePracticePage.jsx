@@ -113,7 +113,10 @@ export default function CodePracticePage() {
       const data = await runTests(true);
       setResults(data);
       if (!data.compile_error) {
-        await base44.entities.Submission.update(submissionRef.current.id, { submitted: true });
+        // run-java-tests marks the submission submitted itself when
+        // final is true and there's no compile error - no separate
+        // finalize call needed (and no gap between two round-trips for
+        // something to interrupt).
         if (draftKey) localStorage.removeItem(draftKey);
         setFinalized(true);
         navigate("/submitted");

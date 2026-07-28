@@ -341,7 +341,14 @@ Deno.serve(async (req) => {
       compile_error: '',
     };
     if (final) {
+      // Finalize in this same write rather than requiring the client to
+      // make a second, separate call to lock the submission - that gap
+      // between two round-trips is exactly the window where an
+      // interrupted request could grade a submission successfully but
+      // never mark it submitted.
       update.autograde_score = autograde_score;
+      update.submitted = true;
+      update.submitted_at = new Date().toISOString();
     }
     await admin.from('submissions').update(update).eq('id', submission_id);
 
