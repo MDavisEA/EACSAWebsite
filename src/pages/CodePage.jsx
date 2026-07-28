@@ -96,7 +96,9 @@ export default function CodePage() {
                         <span className="flex items-center gap-1">
                           <Trophy className="w-3 h-3" /> {p.points_possible ?? 0} pts
                         </span>
-                        <span>{(p.visible_checks?.length || 0) + (p.hidden_check_count || 0)} checks</span>
+                        <span>
+                          {(p.methods || []).reduce((sum, m) => sum + (m.visible_checks?.length || 0) + (m.hidden_check_count || 0), 0)} checks
+                        </span>
                       </div>
                     </div>
                     <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
