@@ -2,6 +2,48 @@ import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 
+// Accepts a full gist URL or a bare gist id.
+function extractGistId(url: string): string | null {
+  const m = url.trim().match(/gist\.github\.com\/[^/]+\/([0-9a-f]+)/i);
+  if (m) return m[1];
+  const bare = url.trim().replace(/\/+$/, '');
+  return /^[0-9a-f]{20,}$/i.test(bare) ? bare : null;
+}
+
+// Fetches a public gist's .java files server-side, so a submission is a
+// snapshot taken at submit time - the student can't edit the gist after the
+// deadline and have it silently count as their submission. Uses GITHUB_TOKEN
+// if set (raises the rate limit from 60/hr to 5,000/hr; no scopes needed for
+// reading public gists) - falls back to unauthenticated if not configured.
+async function fetchGistJavaFiles(
+  gistId: string
+): Promise<{ files: { filename: string; content: string }[]; gistUpdatedAt: string | null } | { error: string }> {
+  const headers: Record<string, string> = { 'User-Agent': 'ap-csa-practice' };
+  const token = Deno.env.get('GITHUB_TOKEN');
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const resp = await fetch(`https://api.github.com/gists/${gistId}`, { headers });
+  if (resp.status === 404) return { error: "That gist wasn't found - check the URL and make sure it's not private." };
+  if (resp.status === 403) return { error: 'GitHub rate-limited this request. Please try again in a few minutes.' };
+  if (!resp.ok) return { error: `GitHub returned an error (${resp.status}) fetching that gist.` };
+
+  const data = await resp.json();
+  const files: { filename: string; content: string }[] = [];
+  for (const [filename, meta] of Object.entries<any>(data.files || {})) {
+    if (!filename.toLowerCase().endsWith('.java')) continue;
+    if (meta.truncated || meta.content == null) {
+      const rawResp = await fetch(meta.raw_url, { headers: { 'User-Agent': 'ap-csa-practice' } });
+      files.push({ filename, content: await rawResp.text() });
+    } else {
+      files.push({ filename, content: meta.content });
+    }
+  }
+  if (files.length === 0) {
+    return { error: 'No .java files found in that gist - check the URL and make sure the gist is public.' };
+  }
+  return { files, gistUpdatedAt: data.updated_at ?? null };
+}
+
 function generateAccessCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 - avoids ambiguity
   let code = '';
@@ -86,6 +128,19 @@ Deno.serve(async (req) => {
       return json({ result: data });
     }
 
+    if (action === 'myProjectSubmission') {
+      const { project_id } = body;
+      if (!student || !project_id) return json({ result: null });
+      const { data, error } = await admin
+        .from('submissions')
+        .select('*')
+        .eq('project_id', project_id)
+        .eq('student_user_id', student.id)
+        .maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
     if (action === 'myScores') {
       if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
       const { data, error } = await admin
@@ -157,6 +212,46 @@ Deno.serve(async (req) => {
       return json({ result: data });
     }
 
+    if (action === 'submitProject') {
+      const { project_id, gist_url } = body;
+      if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      if (!project_id || !gist_url) return json({ error: 'project_id and gist_url are required' }, 400);
+
+      const gistId = extractGistId(gist_url);
+      if (!gistId) return json({ error: "That doesn't look like a gist URL. It should look like https://gist.github.com/yourname/abc123..." }, 400);
+
+      const fetched = await fetchGistJavaFiles(gistId);
+      if ('error' in fetched) return json({ error: fetched.error }, 400);
+
+      // Re-submitting (e.g. fixed a typo in the URL) overwrites the same row
+      // rather than creating a second one - one submission per student per
+      // project, always reflecting the last gist snapshot they submitted.
+      const { data: existing } = await admin
+        .from('submissions')
+        .select('id')
+        .eq('project_id', project_id)
+        .eq('student_user_id', student.id)
+        .maybeSingle();
+
+      const row = {
+        project_id,
+        student_name: student.name,
+        student_user_id: student.id,
+        gist_url,
+        files: fetched.files,
+        gist_captured_at: new Date().toISOString(),
+        submitted: true,
+        submitted_at: new Date().toISOString(),
+      };
+
+      const query = existing
+        ? admin.from('submissions').update(row).eq('id', existing.id)
+        : admin.from('submissions').insert({ ...row, access_code: generateAccessCode() });
+      const { data, error } = await query.select().single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
     // ============ Public score lookup (access code = shared secret, same
     // model the old app used - unchanged, still works for pre-Google-sign-in
     // submissions and anyone who wants to look up an old code) ============
@@ -184,6 +279,7 @@ Deno.serve(async (req) => {
       let query = admin.from('submissions').select('*').eq('submitted', true);
       if (body.assignment_id) query = query.eq('assignment_id', body.assignment_id);
       if (body.coding_problem_id) query = query.eq('coding_problem_id', body.coding_problem_id);
+      if (body.project_id) query = query.eq('project_id', body.project_id);
       const { data, error } = await query.order(column, { ascending });
       if (error) return json({ error: error.message }, 500);
       return json({ results: data || [] });

@@ -11,6 +11,8 @@ import AssignmentForm from "@/components/teacher/AssignmentForm";
 import AssignmentCard from "@/components/teacher/AssignmentCard";
 import CodingProblemForm from "@/components/teacher/CodingProblemForm";
 import CodingProblemCard from "@/components/teacher/CodingProblemCard";
+import ProjectForm from "@/components/teacher/ProjectForm";
+import ProjectCard from "@/components/teacher/ProjectCard";
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
@@ -27,6 +29,11 @@ export default function TeacherDashboard() {
   const [showCodingForm, setShowCodingForm] = useState(false);
   const [editingCoding, setEditingCoding] = useState(null);
   const [deletingCoding, setDeletingCoding] = useState(null);
+
+  const [projects, setProjects] = useState([]);
+  const [showProjectForm, setShowProjectForm] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [deletingProject, setDeletingProject] = useState(null);
 
   const generateCode = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -58,6 +65,7 @@ export default function TeacherDashboard() {
         await base44.auth.me();
         loadAssignments();
         loadCodingProblems();
+        loadProjects();
       } catch {
         navigate("/");
       }
@@ -67,6 +75,11 @@ export default function TeacherDashboard() {
   const loadCodingProblems = async () => {
     const results = await base44.entities.CodingProblem.list();
     setCodingProblems(results);
+  };
+
+  const loadProjects = async () => {
+    const results = await base44.entities.Project.list();
+    setProjects(results);
   };
 
   const loadAssignments = async () => {
@@ -176,6 +189,40 @@ export default function TeacherDashboard() {
     loadCodingProblems();
   };
 
+  const handleSaveProject = async (data) => {
+    if (editingProject) {
+      await base44.entities.Project.update(editingProject.id, data);
+    } else {
+      await base44.entities.Project.create(data);
+    }
+    setShowProjectForm(false);
+    setEditingProject(null);
+    loadProjects();
+  };
+
+  const handleDeleteProject = async () => {
+    if (deletingProject) {
+      await base44.entities.Project.delete(deletingProject.id);
+      setDeletingProject(null);
+      loadProjects();
+    }
+  };
+
+  const handleToggleProjectActive = async (project) => {
+    await base44.entities.Project.update(project.id, { is_active: !project.is_active });
+    loadProjects();
+  };
+
+  const handleDuplicateProject = async (project) => {
+    const { id, created_at, updated_at, ...data } = project;
+    await base44.entities.Project.create({
+      ...data,
+      title: `${project.title} (Copy)`,
+      is_active: false,
+    });
+    loadProjects();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -199,13 +246,19 @@ export default function TeacherDashboard() {
                 {backfilling ? "Generating..." : backfillDone != null ? `Done (${backfillDone} updated)` : "Generate Missing Codes"}
               </Button>
             )}
-            {activeTab === "assignments" ? (
+            {activeTab === "assignments" && (
               <Button onClick={() => { setEditing(null); setShowForm(true); }}>
                 <Plus className="w-4 h-4 mr-1" /> New Assignment
               </Button>
-            ) : (
+            )}
+            {activeTab === "coding" && (
               <Button onClick={() => { setEditingCoding(null); setShowCodingForm(true); }}>
                 <Plus className="w-4 h-4 mr-1" /> New Coding Problem
+              </Button>
+            )}
+            {activeTab === "projects" && (
+              <Button onClick={() => { setEditingProject(null); setShowProjectForm(true); }}>
+                <Plus className="w-4 h-4 mr-1" /> New Project
               </Button>
             )}
             <Button variant="ghost" size="sm" onClick={handleLogout}>
@@ -220,6 +273,7 @@ export default function TeacherDashboard() {
           <TabsList className="mb-6">
             <TabsTrigger value="assignments">FRQ Assignments</TabsTrigger>
             <TabsTrigger value="coding">Coding Problems</TabsTrigger>
+            <TabsTrigger value="projects">Projects</TabsTrigger>
           </TabsList>
 
           <TabsContent value="assignments">
@@ -292,6 +346,34 @@ export default function TeacherDashboard() {
               </div>
             )}
           </TabsContent>
+
+          <TabsContent value="projects">
+            {projects.length === 0 ? (
+              <div className="text-center py-20">
+                <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
+                <h2 className="text-lg font-semibold mb-2">No projects yet</h2>
+                <p className="text-muted-foreground mb-6">
+                  Create a big project - students turn in a gist link, and you get an export ready for an AI review pass.
+                </p>
+                <Button onClick={() => setShowProjectForm(true)}>
+                  <Plus className="w-4 h-4 mr-1" /> Create Project
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {projects.map((p) => (
+                  <ProjectCard
+                    key={p.id}
+                    project={p}
+                    onEdit={() => { setEditingProject(p); setShowProjectForm(true); }}
+                    onDelete={() => setDeletingProject(p)}
+                    onToggleActive={() => handleToggleProjectActive(p)}
+                    onDuplicate={() => handleDuplicateProject(p)}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
         </Tabs>
       </main>
 
@@ -347,6 +429,34 @@ export default function TeacherDashboard() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteCoding}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={showProjectForm} onOpenChange={setShowProjectForm}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingProject ? "Edit Project" : "New Project"}</DialogTitle>
+          </DialogHeader>
+          <ProjectForm
+            initial={editingProject}
+            onSave={handleSaveProject}
+            onCancel={() => { setShowProjectForm(false); setEditingProject(null); }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingProject} onOpenChange={() => setDeletingProject(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{deletingProject?.title}" and all related student submissions. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteProject}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

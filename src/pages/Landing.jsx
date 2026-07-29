@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { GraduationCap, BookOpen, Lock, Star, Code2 } from "lucide-react";
+import { GraduationCap, BookOpen, Lock, Star, Code2, FolderGit2 } from "lucide-react";
 import { supabase } from "@/api/supabaseClient";
 
 // The old version of this page checked a plaintext passcode ("apcsa2024")
@@ -145,6 +145,32 @@ export default function Landing() {
                     <h2 className="text-lg font-semibold text-foreground">Check My Score</h2>
                     <p className="text-sm text-muted-foreground mt-0.5">
                       Enter your access code to view your graded score
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Section: Projects */}
+          <div className="rounded-2xl border border-violet-100 bg-violet-50/30 p-4">
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <FolderGit2 className="w-4 h-4 text-violet-600" />
+              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Projects</h2>
+            </div>
+            <div className="grid gap-3">
+              <button
+                onClick={() => navigate("/project")}
+                className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 text-left transition-all hover:shadow-lg hover:border-violet-300"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-violet-50 flex items-center justify-center group-hover:bg-violet-100 transition-colors">
+                    <FolderGit2 className="w-6 h-6 text-violet-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Turn In a Project</h2>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Submit your gist link for a big assignment
                     </p>
                   </div>
                 </div>

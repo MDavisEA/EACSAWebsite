@@ -181,13 +181,14 @@ const Submission = {
     }
 
     if (
-      (keys === 'assignment_id,submitted' || keys === 'coding_problem_id,submitted') &&
+      (keys === 'assignment_id,submitted' || keys === 'coding_problem_id,submitted' || keys === 'project_id,submitted') &&
       criteria.submitted === true
     ) {
       const data = await callFunction('submissions', {
         action: 'listForAssignment',
         assignment_id: criteria.assignment_id,
         coding_problem_id: criteria.coding_problem_id,
+        project_id: criteria.project_id,
         sort: parseSort(sort),
       });
       return data.results;
@@ -240,6 +241,20 @@ const Submission = {
   async delete(id) {
     await callFunction('submissions', { action: 'delete', submission_id: id });
   },
+
+  // Project submissions are a single "fetch the gist's .java files and
+  // snapshot them" action rather than an in-browser editor session, so they
+  // don't fit the create/filter/update shape above - two dedicated methods
+  // instead.
+  async submitGist(project_id, gist_url) {
+    const data = await callFunction('submissions', { action: 'submitProject', project_id, gist_url });
+    return data.result;
+  },
+
+  async getMyProjectSubmission(project_id) {
+    const data = await callFunction('submissions', { action: 'myProjectSubmission', project_id });
+    return data.result;
+  },
 };
 
 // ============================================================================
@@ -278,6 +293,45 @@ const CodingProblem = {
 
   async delete(id) {
     await callFunction('coding-problems', { action: 'delete', id });
+  },
+};
+
+// ============================================================================
+// entities.Project (big assignments turned in as a gist link, reviewed
+// against a rubric with an AI assistant rather than autograded)
+// ============================================================================
+
+const Project = {
+  async filter(criteria = {}) {
+    const keys = Object.keys(criteria).sort().join(',');
+    if (keys === 'is_active' && criteria.is_active === true) {
+      const data = await callFunction('projects', { action: 'listActive' });
+      return data.results;
+    }
+    if (keys === 'id') {
+      const data = await callFunction('projects', { action: 'getActive', id: criteria.id });
+      return data.result ? [data.result] : [];
+    }
+    throw new Error(`Project.filter: unsupported criteria shape {${keys}}`);
+  },
+
+  async list() {
+    const data = await callFunction('projects', { action: 'list' });
+    return data.results;
+  },
+
+  async create(fields) {
+    const data = await callFunction('projects', { action: 'create', data: fields });
+    return data.result;
+  },
+
+  async update(id, fields) {
+    const data = await callFunction('projects', { action: 'update', id, data: fields });
+    return data.result;
+  },
+
+  async delete(id) {
+    await callFunction('projects', { action: 'delete', id });
   },
 };
 
@@ -353,7 +407,7 @@ const functions = {
 };
 
 export const base44 = {
-  entities: { Assignment, Submission, CodingProblem },
+  entities: { Assignment, Submission, CodingProblem, Project },
   auth,
   integrations,
   functions,

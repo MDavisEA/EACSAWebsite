@@ -15,6 +15,7 @@ import MyScore from '@/pages/MyScore';
 import MyWork from '@/pages/MyWork';
 import CodePage from '@/pages/CodePage';
 import CodePracticePage from '@/pages/CodePracticePage';
+import ProjectPage from '@/pages/ProjectPage';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -47,6 +48,7 @@ const AuthenticatedApp = () => {
       <Route path="/my-work" element={<MyWork />} />
       <Route path="/code" element={<CodePage />} />
       <Route path="/code-practice" element={<CodePracticePage />} />
+      <Route path="/project" element={<ProjectPage />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
