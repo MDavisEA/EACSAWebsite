@@ -21,7 +21,23 @@ const QUILL_MODULES = {
 
 const QUILL_FORMATS = ["header", "bold", "italic", "underline", "code", "list", "bullet", "code-block"];
 
-const DEFAULT_REVIEW_PROMPT = `Review each student's submission against the rubric above. Do not assign a grade or numeric score - instead, flag which submissions I should read closely and why, note anything that appears to work by accident or via a shortcut rather than genuine understanding, and call out any misconceptions worth addressing with the whole class.`;
+const DEFAULT_REVIEW_PROMPT = `Review each submission against the rubric above. Do not assign grades or numeric scores.
+
+Keep every entry short and scannable - I am reading a lot of these in one sitting. No preamble, no restating the assignment back to me.
+
+For each student, use this shape:
+
+### Student Name
+- BROKEN - file:line - what the logic error actually is, in one sentence
+- BETTER - what they could have done more simply or efficiently, in one sentence
+- SUSPECT - anything that only appears to work, or works by accident or via a shortcut rather than real understanding
+
+Rules:
+- Always include the file name and line number on anything BROKEN. Being able to jump straight to it matters more to me than explaining it thoroughly.
+- Skip any line that does not apply. If a submission is correct and well written, just write "clean" and move on.
+- One sentence per line. If something genuinely needs more explanation, put it underneath that student rather than making the line longer.
+
+At the end, add a "Class-wide" section listing any misconception common enough to be worth addressing with the whole class, most common first.`;
 
 function defaultForm() {
   return {
