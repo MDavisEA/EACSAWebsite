@@ -24,7 +24,7 @@ export async function exportProjectForReview(project, submissions) {
   const assignmentText = htmlToPlainText(project.description_html);
   const rubric = project.rubric_md || "(no rubric set)";
   const reviewPrompt = project.review_prompt || "Review each submission against the rubric.";
-  const hasStarterCode = !!project.starter_code?.trim();
+  const hasStarterCode = (project.starter_files || []).length > 0;
 
   zip.file(
     "CLAUDE.md",
@@ -46,7 +46,8 @@ export async function exportProjectForReview(project, submissions) {
   zip.file("rubric.md", rubric);
   zip.file("assignment.md", assignmentText || "(no description)");
   if (hasStarterCode) {
-    zip.folder("starter").file("StarterCode.java", project.starter_code);
+    const starterFolder = zip.folder("starter");
+    project.starter_files.forEach((f) => starterFolder.file(f.filename, f.content));
   }
 
   const rosterRows = ["name,submitted_at,gist_url,file_count"];

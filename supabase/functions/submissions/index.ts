@@ -1,48 +1,7 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
-
-// Accepts a full gist URL or a bare gist id.
-function extractGistId(url: string): string | null {
-  const m = url.trim().match(/gist\.github\.com\/[^/]+\/([0-9a-f]+)/i);
-  if (m) return m[1];
-  const bare = url.trim().replace(/\/+$/, '');
-  return /^[0-9a-f]{20,}$/i.test(bare) ? bare : null;
-}
-
-// Fetches a public gist's .java files server-side, so a submission is a
-// snapshot taken at submit time - the student can't edit the gist after the
-// deadline and have it silently count as their submission. Uses GITHUB_TOKEN
-// if set (raises the rate limit from 60/hr to 5,000/hr; no scopes needed for
-// reading public gists) - falls back to unauthenticated if not configured.
-async function fetchGistJavaFiles(
-  gistId: string
-): Promise<{ files: { filename: string; content: string }[]; gistUpdatedAt: string | null } | { error: string }> {
-  const headers: Record<string, string> = { 'User-Agent': 'ap-csa-practice' };
-  const token = Deno.env.get('GITHUB_TOKEN');
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  const resp = await fetch(`https://api.github.com/gists/${gistId}`, { headers });
-  if (resp.status === 404) return { error: "That gist wasn't found - check the URL and make sure it's not private." };
-  if (resp.status === 403) return { error: 'GitHub rate-limited this request. Please try again in a few minutes.' };
-  if (!resp.ok) return { error: `GitHub returned an error (${resp.status}) fetching that gist.` };
-
-  const data = await resp.json();
-  const files: { filename: string; content: string }[] = [];
-  for (const [filename, meta] of Object.entries<any>(data.files || {})) {
-    if (!filename.toLowerCase().endsWith('.java')) continue;
-    if (meta.truncated || meta.content == null) {
-      const rawResp = await fetch(meta.raw_url, { headers: { 'User-Agent': 'ap-csa-practice' } });
-      files.push({ filename, content: await rawResp.text() });
-    } else {
-      files.push({ filename, content: meta.content });
-    }
-  }
-  if (files.length === 0) {
-    return { error: 'No .java files found in that gist - check the URL and make sure the gist is public.' };
-  }
-  return { files, gistUpdatedAt: data.updated_at ?? null };
-}
+import { extractGistId, fetchGistJavaFiles } from '../_shared/gist.ts';
 
 function generateAccessCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 - avoids ambiguity

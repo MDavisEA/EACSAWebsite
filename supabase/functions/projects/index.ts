@@ -1,5 +1,6 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest } from '../_shared/teacherAuth.ts';
+import { extractGistId, fetchGistJavaFiles } from '../_shared/gist.ts';
 
 // Students see the rubric (it's the point - they should know what they're
 // reviewed against) but never review_prompt, which is instructions aimed at
@@ -10,7 +11,7 @@ function sanitizeForStudent(project: Record<string, any>) {
     title: project.title,
     description_html: project.description_html,
     rubric_md: project.rubric_md,
-    starter_code: project.starter_code,
+    starter_files: project.starter_files || [],
   };
 }
 
@@ -75,6 +76,17 @@ Deno.serve(async (req) => {
       const { error } = await admin.from('projects').delete().eq('id', body.id);
       if (error) return json({ error: error.message }, 500);
       return json({ success: true });
+    }
+
+    // Lets a teacher populate starter code from a gist instead of (or in
+    // addition to) dragging files in directly - reuses the exact same fetch
+    // logic used for a student's own submission gist.
+    if (action === 'fetchStarterGist') {
+      const gistId = extractGistId(body.gist_url || '');
+      if (!gistId) return json({ error: "That doesn't look like a gist URL." }, 400);
+      const fetched = await fetchGistJavaFiles(gistId);
+      if ('error' in fetched) return json({ error: fetched.error }, 400);
+      return json({ result: { files: fetched.files } });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);

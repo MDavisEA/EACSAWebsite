@@ -169,14 +169,19 @@ export default function ProjectPage() {
           </div>
         )}
 
-        {project.starter_code && (
-          <div className="bg-card rounded-xl border border-border p-6">
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        {project.starter_files?.length > 0 && (
+          <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               Starter Code
             </h2>
-            <pre className="bg-slate-50 border rounded-lg p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto">
-              {project.starter_code}
-            </pre>
+            {project.starter_files.map((f) => (
+              <div key={f.filename}>
+                <p className="text-xs font-mono font-semibold text-slate-500 mb-1">{f.filename}</p>
+                <pre className="bg-slate-50 border rounded-lg p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto">
+                  {f.content}
+                </pre>
+              </div>
+            ))}
           </div>
         )}
 

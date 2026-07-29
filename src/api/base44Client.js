@@ -333,6 +333,13 @@ const Project = {
   async delete(id) {
     await callFunction('projects', { action: 'delete', id });
   },
+
+  // Lets the teacher populate starter code from a gist in the project form,
+  // reusing the same gist-fetch action a student's own submission uses.
+  async fetchStarterGist(gist_url) {
+    const data = await callFunction('projects', { action: 'fetchStarterGist', gist_url });
+    return data.result;
+  },
 };
 
 // ============================================================================
