@@ -19,9 +19,11 @@ function toCsvField(value) {
 // CLAUDE.md is the load-bearing file - Claude Code and Cowork both read it
 // automatically when pointed at a folder, so the rubric and review
 // instructions don't need to be re-typed every time.
-export async function exportProjectForReview(project, submissions) {
+export async function exportProjectForReview(project, submissions, options = {}) {
   const zip = new JSZip();
-  const assignmentText = htmlToPlainText(project.description_html);
+  const shortDescription = htmlToPlainText(project.description_html);
+  const assignmentText =
+    [shortDescription, options.googleDocText].filter(Boolean).join("\n\n---\n\n") || "(no description)";
   const rubric = project.rubric_md || "(no rubric set)";
   const reviewPrompt = project.review_prompt || "Review each submission against the rubric.";
   const hasStarterCode = (project.starter_files || []).length > 0;
@@ -36,7 +38,7 @@ export async function exportProjectForReview(project, submissions) {
           `share it - only code beyond what was provided is theirs.\n\n`
         : "") +
       `## Rubric\n${rubric}\n\n` +
-      `## Assignment\n${assignmentText || "(no description)"}\n\n` +
+      `## Assignment\n${assignmentText}\n\n` +
       `## Layout\n` +
       (hasStarterCode ? `- \`starter/\` — the starter code given to every student\n` : "") +
       `- \`submissions/\` — one folder per student, containing their .java files\n` +
@@ -44,7 +46,7 @@ export async function exportProjectForReview(project, submissions) {
       `- \`roster.csv\` — every student who submitted, for cross-reference\n`
   );
   zip.file("rubric.md", rubric);
-  zip.file("assignment.md", assignmentText || "(no description)");
+  zip.file("assignment.md", assignmentText);
   if (hasStarterCode) {
     const starterFolder = zip.folder("starter");
     project.starter_files.forEach((f) => starterFolder.file(f.filename, f.content));

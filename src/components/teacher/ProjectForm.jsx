@@ -29,6 +29,7 @@ function defaultForm() {
     description_html: "",
     rubric_md: "",
     starter_files: [],
+    google_doc_url: "",
     review_prompt: DEFAULT_REVIEW_PROMPT,
     is_active: true,
   };
@@ -127,6 +128,19 @@ export default function ProjectForm({ initial, onSave, onCancel }) {
             className="bg-white"
           />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Google Doc (optional)</Label>
+        <Input
+          value={form.google_doc_url || ""}
+          onChange={(e) => updateField("google_doc_url", e.target.value)}
+          placeholder="https://docs.google.com/document/d/..."
+        />
+        <p className="text-xs text-muted-foreground">
+          For directions easier to write in Docs than the box above. Embedded on the student page and
+          pulled into the review export - share it as "Anyone with the link - Viewer" first.
+        </p>
       </div>
 
       <div className="space-y-2">

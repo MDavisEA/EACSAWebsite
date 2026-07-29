@@ -1,6 +1,7 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest } from '../_shared/teacherAuth.ts';
 import { extractGistId, fetchGistJavaFiles } from '../_shared/gist.ts';
+import { extractGoogleDocId } from '../_shared/googleDoc.ts';
 
 // Students see the rubric (it's the point - they should know what they're
 // reviewed against) but never review_prompt, which is instructions aimed at
@@ -12,6 +13,7 @@ function sanitizeForStudent(project: Record<string, any>) {
     description_html: project.description_html,
     rubric_md: project.rubric_md,
     starter_files: project.starter_files || [],
+    google_doc_url: project.google_doc_url,
   };
 }
 
@@ -87,6 +89,27 @@ Deno.serve(async (req) => {
       const fetched = await fetchGistJavaFiles(gistId);
       if ('error' in fetched) return json({ error: fetched.error }, 400);
       return json({ result: { files: fetched.files } });
+    }
+
+    // Fetches the live plain-text content of a Google Doc, for the review
+    // export. Done server-side (not a browser fetch) because Google's export
+    // endpoint doesn't send CORS headers a page could read cross-origin.
+    if (action === 'fetchGoogleDocText') {
+      const docId = extractGoogleDocId(body.google_doc_url || '');
+      if (!docId) return json({ error: "That doesn't look like a Google Doc URL." }, 400);
+      const resp = await fetch(`https://docs.google.com/document/d/${docId}/export?format=txt`);
+      const contentType = resp.headers.get('content-type') || '';
+      // A doc that isn't shared publicly redirects to a Google sign-in page
+      // instead of erroring - fetch() follows the redirect and gets a 200
+      // response, just one with an HTML sign-in page instead of the export.
+      if (!resp.ok || !contentType.includes('text/plain')) {
+        return json(
+          { error: 'Could not read that Google Doc. Share it as "Anyone with the link - Viewer" and try again.' },
+          400
+        );
+      }
+      const text = await resp.text();
+      return json({ result: { text } });
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);

@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import ReactMarkdown from "react-markdown";
-import { FolderGit2, AlertCircle, ChevronRight, LogIn, CheckCircle2, FileCode2 } from "lucide-react";
+import { googleDocEmbedUrl } from "@/lib/googleDoc";
+import { FolderGit2, AlertCircle, ChevronRight, LogIn, CheckCircle2, FileCode2, ExternalLink } from "lucide-react";
 
 export default function ProjectPage() {
   const navigate = useNavigate();
@@ -155,6 +156,33 @@ export default function ProjectPage() {
               className="prose prose-sm max-w-none quill-render"
               dangerouslySetInnerHTML={{ __html: project.description_html }}
             />
+          </div>
+        )}
+
+        {project.google_doc_url && (
+          <div className="bg-card rounded-xl border border-border p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Assignment (Google Doc)
+              </h2>
+              <a
+                href={project.google_doc_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+              >
+                Open in new tab <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <iframe
+              src={googleDocEmbedUrl(project.google_doc_url)}
+              title="Assignment directions"
+              className="w-full rounded-lg border"
+              style={{ height: 600 }}
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              If this does not load, ask your teacher to check the sharing settings.
+            </p>
           </div>
         )}
 

@@ -12,6 +12,7 @@ export default function ProjectSubmissionViewer({ project }) {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
@@ -37,8 +38,20 @@ export default function ProjectSubmissionViewer({ project }) {
 
   const handleExport = async () => {
     setExporting(true);
+    setExportError("");
     try {
-      await exportProjectForReview(project, submissions);
+      let googleDocText;
+      if (project.google_doc_url) {
+        // Fetched fresh here rather than relying on anything cached, so the
+        // export always reflects the current text of the doc. If this fails
+        // (not shared publicly, deleted, etc.), stop rather than silently
+        // shipping a review pass missing the real directions.
+        const result = await base44.entities.Project.fetchGoogleDocText(project.google_doc_url);
+        googleDocText = result.text;
+      }
+      await exportProjectForReview(project, submissions, { googleDocText });
+    } catch (e) {
+      setExportError(e.message || "Couldn't build the export.");
     } finally {
       setExporting(false);
     }
@@ -62,6 +75,7 @@ export default function ProjectSubmissionViewer({ project }) {
           )}
         </Button>
       </div>
+      {exportError && <p className="text-sm text-destructive">{exportError}</p>}
 
       {submissions.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-6">No submissions yet.</p>

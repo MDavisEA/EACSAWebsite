@@ -340,6 +340,13 @@ const Project = {
     const data = await callFunction('projects', { action: 'fetchStarterGist', gist_url });
     return data.result;
   },
+
+  // Live text of a project's Google Doc, for the review export - fetched
+  // server-side to sidestep CORS (see the edge function for why).
+  async fetchGoogleDocText(google_doc_url) {
+    const data = await callFunction('projects', { action: 'fetchGoogleDocText', google_doc_url });
+    return data.result;
+  },
 };
 
 // ============================================================================
