@@ -285,6 +285,64 @@ Deno.serve(async (req) => {
       return json({ success: true });
     }
 
+    // Lets a teacher seed a project's submissions from a name,gist_url CSV
+    // instead of every student signing in individually - useful for testing
+    // with an existing list of gists, or backfilling gists collected before
+    // this site could accept them directly. These rows have no
+    // student_user_id (nobody signed in to create them), so re-running the
+    // same import updates by student_name instead of duplicating.
+    if (action === 'bulkImportProject') {
+      const { project_id, rows } = body;
+      if (!project_id || !Array.isArray(rows)) {
+        return json({ error: 'project_id and rows are required' }, 400);
+      }
+      const results: { student_name: string; status: 'ok' | 'error'; error?: string }[] = [];
+      for (const row of rows) {
+        const studentName = (row.student_name || '').trim();
+        const gistUrl = (row.gist_url || '').trim();
+        if (!studentName || !gistUrl) {
+          results.push({ student_name: studentName || '(blank)', status: 'error', error: 'Missing name or gist URL' });
+          continue;
+        }
+        const gistId = extractGistId(gistUrl);
+        if (!gistId) {
+          results.push({ student_name: studentName, status: 'error', error: "Doesn't look like a gist URL" });
+          continue;
+        }
+        const fetched = await fetchGistJavaFiles(gistId);
+        if ('error' in fetched) {
+          results.push({ student_name: studentName, status: 'error', error: fetched.error });
+          continue;
+        }
+
+        const { data: existing } = await admin
+          .from('submissions')
+          .select('id')
+          .eq('project_id', project_id)
+          .is('student_user_id', null)
+          .eq('student_name', studentName)
+          .maybeSingle();
+
+        const rowData = {
+          project_id,
+          student_name: studentName,
+          gist_url: gistUrl,
+          files: fetched.files,
+          gist_captured_at: new Date().toISOString(),
+          submitted: true,
+          submitted_at: new Date().toISOString(),
+        };
+        const query = existing
+          ? admin.from('submissions').update(rowData).eq('id', existing.id)
+          : admin.from('submissions').insert({ ...rowData, access_code: generateAccessCode() });
+        const { error } = await query;
+        results.push(
+          error ? { student_name: studentName, status: 'error', error: error.message } : { student_name: studentName, status: 'ok' }
+        );
+      }
+      return json({ results });
+    }
+
     return json({ error: `Unknown action: ${action}` }, 400);
   } catch (error) {
     return json({ error: (error as Error).message }, 500);

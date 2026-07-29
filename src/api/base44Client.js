@@ -255,6 +255,14 @@ const Submission = {
     const data = await callFunction('submissions', { action: 'myProjectSubmission', project_id });
     return data.result;
   },
+
+  // Teacher-only: seed a project's submissions from a name,gist_url list -
+  // no student sign-in needed. Returns a per-row {student_name, status,
+  // error?} so the caller can show which ones failed and why.
+  async bulkImportProject(project_id, rows) {
+    const data = await callFunction('submissions', { action: 'bulkImportProject', project_id, rows });
+    return data.results;
+  },
 };
 
 // ============================================================================
