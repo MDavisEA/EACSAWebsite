@@ -24,20 +24,30 @@ export async function exportProjectForReview(project, submissions) {
   const assignmentText = htmlToPlainText(project.description_html);
   const rubric = project.rubric_md || "(no rubric set)";
   const reviewPrompt = project.review_prompt || "Review each submission against the rubric.";
+  const hasStarterCode = !!project.starter_code?.trim();
 
   zip.file(
     "CLAUDE.md",
     `# ${project.title} — Review Pass\n\n` +
       `## What I want from you\n${reviewPrompt}\n\n` +
+      (hasStarterCode
+        ? `**Every student was given the same starter code** (see \`starter/\`). Don't attribute it to ` +
+          `any individual student, and don't flag students as similar to each other just because they ` +
+          `share it - only code beyond what was provided is theirs.\n\n`
+        : "") +
       `## Rubric\n${rubric}\n\n` +
       `## Assignment\n${assignmentText || "(no description)"}\n\n` +
       `## Layout\n` +
+      (hasStarterCode ? `- \`starter/\` — the starter code given to every student\n` : "") +
       `- \`submissions/\` — one folder per student, containing their .java files\n` +
       `- \`_meta.json\` in each folder — gist URL and submission time\n` +
       `- \`roster.csv\` — every student who submitted, for cross-reference\n`
   );
   zip.file("rubric.md", rubric);
   zip.file("assignment.md", assignmentText || "(no description)");
+  if (hasStarterCode) {
+    zip.folder("starter").file("StarterCode.java", project.starter_code);
+  }
 
   const rosterRows = ["name,submitted_at,gist_url,file_count"];
   const submissionsFolder = zip.folder("submissions");

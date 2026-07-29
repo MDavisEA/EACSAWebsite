@@ -6,6 +6,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
+import CodeMirror from "@uiw/react-codemirror";
+import { java } from "@codemirror/lang-java";
+import { a11yLightEditorTheme } from "@/lib/codeEditorThemes";
+
+// Defined once at module scope, not inline in JSX - a new array reference
+// on every render makes @uiw/react-codemirror tear down and rebuild the
+// editor's state, which drops the current selection/cursor mid-edit.
+const CODE_EXTENSIONS = [java(), ...a11yLightEditorTheme];
 
 const QUILL_MODULES = {
   toolbar: [
@@ -26,6 +34,7 @@ function defaultForm() {
     title: "",
     description_html: "",
     rubric_md: "",
+    starter_code: "",
     review_prompt: DEFAULT_REVIEW_PROMPT,
     is_active: true,
   };
@@ -78,6 +87,25 @@ export default function ProjectForm({ initial, onSave, onCancel }) {
         />
         <p className="text-xs text-muted-foreground">
           Shown to students on their submission page, and included in the export for your AI review pass.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Starter Code (optional, shown to students)</Label>
+        <div className="border rounded-md overflow-hidden">
+          <CodeMirror
+            value={form.starter_code || ""}
+            onChange={(value) => updateField("starter_code", value)}
+            placeholder="Paste any starter code you're handing out, if any..."
+            extensions={CODE_EXTENSIONS}
+            theme="none"
+            minHeight="150px"
+            basicSetup={{ tabSize: 4 }}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Included in the export so your AI review pass knows what was given to students, rather
+          than reviewing your own boilerplate as if a student wrote it.
         </p>
       </div>
 

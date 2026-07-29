@@ -10,6 +10,7 @@ function sanitizeForStudent(project: Record<string, any>) {
     title: project.title,
     description_html: project.description_html,
     rubric_md: project.rubric_md,
+    starter_code: project.starter_code,
   };
 }
 

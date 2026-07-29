@@ -169,6 +169,17 @@ export default function ProjectPage() {
           </div>
         )}
 
+        {project.starter_code && (
+          <div className="bg-card rounded-xl border border-border p-6">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Starter Code
+            </h2>
+            <pre className="bg-slate-50 border rounded-lg p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto">
+              {project.starter_code}
+            </pre>
+          </div>
+        )}
+
         <div className="bg-card rounded-xl border border-border p-6 space-y-4">
           {domainRejected && (
             <p className="text-sm text-destructive text-center">
