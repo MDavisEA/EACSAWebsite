@@ -15,6 +15,9 @@ dist-ssr/
 .env.*
 !.env.example
 
+# Claude Code tool state (includes throwaway git worktrees)
+.claude/
+
 # Editor / OS
 .DS_Store
 .idea/

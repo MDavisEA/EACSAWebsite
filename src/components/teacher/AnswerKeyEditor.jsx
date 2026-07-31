@@ -1,6 +1,5 @@
 import React, { useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
 import { Upload, X, KeyRound } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import ReactQuill from "react-quill";

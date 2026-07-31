@@ -123,7 +123,7 @@ export default function ResponsePanel({
         const lineStart = val.lastIndexOf("\n", start - 1) + 1;
         const fullSelText = val.substring(lineStart, end);
         const afterSel = val.substring(end);
-        const unindented = fullSelText.replace(/^    /gm, "").replace(/^\t/gm, "");
+        const unindented = fullSelText.replace(/^ {4}/gm, "").replace(/^\t/gm, "");
         const removed = fullSelText.length - unindented.length;
         const newVal = val.substring(0, lineStart) + unindented + afterSel;
         ta.value = newVal;

@@ -174,9 +174,35 @@ span[data-underline]:hover {
   font-size: 0.85em;
 }
 
-/* Plain react-markdown rendering (project rubrics) - Tailwind's preflight
-   strips default list styling and there's no typography plugin installed,
-   so lists render with no bullets/numbers without this. */
+/* Lists in teacher-authored rich text (Quill). Tailwind's preflight strips
+   default list-style and there is no typography plugin installed, so without
+   this every bulleted/numbered list the teacher writes renders as unmarked
+   lines wherever it is shown to students - assignment descriptions, question
+   prompts, answer keys. Quill emits ordered lists as <ol> and bullets as
+   <ul>, but nests both under .ql-editor-style markup, hence the direct
+   list-style rules rather than relying on defaults. */
+.quill-render ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+}
+.quill-render ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+}
+.quill-render li + li {
+  margin-top: 0.25rem;
+}
+/* Nested lists - a sub-list opening right under its parent item otherwise
+   sits flush against it. */
+.quill-render ul ul,
+.quill-render ol ol,
+.quill-render ul ol,
+.quill-render ol ul {
+  margin-top: 0.25rem;
+}
+
+/* Plain react-markdown rendering (project rubrics) - same underlying reason
+   as the Quill rules above. */
 .markdown-render ul {
   list-style: disc;
   padding-left: 1.25rem;

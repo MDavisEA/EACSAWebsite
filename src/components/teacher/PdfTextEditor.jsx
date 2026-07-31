@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Eye, Pencil, Check } from "lucide-react";
+import { Pencil, Check } from "lucide-react";
 import HighlightableText from "@/components/exam/HighlightableText";
 
 /**
