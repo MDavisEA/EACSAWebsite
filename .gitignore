@@ -1,0 +1,32 @@
+# Dependencies - reinstalled from package-lock.json, and Vercel runs its own
+# npm install, so there is no reason to track these.
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Environment - VITE_ vars are public by design (they ship in the browser
+# bundle), but keeping .env out of git is still the right default so a future
+# secret added here does not get committed by accident. .env.example stays
+# tracked as the template.
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Supabase CLI local state
+supabase/.branches/
+supabase/.temp/
