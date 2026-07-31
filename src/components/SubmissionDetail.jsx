@@ -41,7 +41,19 @@ function buildSections(sub, asgn) {
   });
 }
 
-export default function SubmissionDetail({ result, assignment, codingProblem }) {
+export default function SubmissionDetail({ result, assignment, codingProblem, project }) {
+  // A project's score and written feedback stay hidden until the teacher
+  // releases them, so nothing AI-assisted reaches a student before a human
+  // has reviewed it.
+  const isProject = !!result.project_id;
+  const projectFeedbackVisible = isProject && result.feedback_released;
+
+  const displayScore = result.coding_problem_id
+    ? result.autograde_score
+    : isProject
+    ? (projectFeedbackVisible ? result.score : null)
+    : result.score;
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl border shadow-sm p-6">
@@ -50,21 +62,64 @@ export default function SubmissionDetail({ result, assignment, codingProblem }) 
           <h2 className="text-xl font-bold">{result.student_name}</h2>
           {assignment && <p className="text-sm text-muted-foreground mt-1">{assignment.title}</p>}
           {codingProblem && <p className="text-sm text-muted-foreground mt-1">{codingProblem.title}</p>}
+          {project && <p className="text-sm text-muted-foreground mt-1">{project.title}</p>}
         </div>
         <div className="flex items-center justify-center gap-3 py-2">
           <Star className="w-8 h-8 text-amber-400 fill-amber-400" />
           <span className="text-5xl font-bold text-slate-800">
-            {(result.coding_problem_id ? result.autograde_score : result.score) != null
-              ? (result.coding_problem_id ? result.autograde_score : result.score)
-              : "—"}
+            {displayScore != null ? displayScore : "—"}
           </span>
           <span className="text-xl text-muted-foreground self-end mb-1">
             {result.coding_problem_id && codingProblem ? `/ ${codingProblem.points_possible ?? 0} pts` : "pts"}
           </span>
         </div>
+        {isProject && !projectFeedbackVisible && (
+          <p className="text-sm text-muted-foreground text-center">
+            Turned in. Your teacher has not released feedback for this project yet.
+          </p>
+        )}
       </div>
 
-      {result.coding_problem_id ? (
+      {isProject ? (
+        <div className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
+          {projectFeedbackVisible && result.teacher_comments && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Feedback</p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p className="text-sm text-amber-900 whitespace-pre-wrap">{result.teacher_comments}</p>
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+              What You Turned In
+            </p>
+            {result.gist_url && (
+              <a
+                href={result.gist_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline break-all"
+              >
+                {result.gist_url}
+              </a>
+            )}
+            <div className="mt-3 space-y-3">
+              {(result.files || []).map((f) => (
+                <div key={f.filename}>
+                  <p className="text-xs font-mono font-semibold text-slate-500 mb-1">{f.filename}</p>
+                  <pre className="bg-slate-50 border rounded-lg p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto">
+                    {f.content}
+                  </pre>
+                </div>
+              ))}
+              {(result.files || []).length === 0 && (
+                <p className="text-sm text-muted-foreground">No files were captured.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : result.coding_problem_id ? (
         <div className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Your Code</p>

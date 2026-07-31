@@ -263,6 +263,13 @@ const Submission = {
     const data = await callFunction('submissions', { action: 'bulkImportProject', project_id, rows });
     return data.results;
   },
+
+  // Teacher-only: re-check whether any submitted gist has been edited since
+  // it was snapshotted. Returns per-submission {status, current_updated_at}.
+  async recheckGists(project_id) {
+    const data = await callFunction('submissions', { action: 'recheckGists', project_id });
+    return data.results;
+  },
 };
 
 // ============================================================================
@@ -358,6 +365,44 @@ const Project = {
 };
 
 // ============================================================================
+// entities.Course (class rosters - exist so the teacher can see who has NOT
+// turned work in; entirely teacher-facing, never exposed to students)
+// ============================================================================
+
+const Course = {
+  async list() {
+    const data = await callFunction('courses', { action: 'list' });
+    return data.results;
+  },
+
+  async create(fields) {
+    const data = await callFunction('courses', { action: 'create', data: fields });
+    return data.result;
+  },
+
+  async update(id, fields) {
+    const data = await callFunction('courses', { action: 'update', id, data: fields });
+    return data.result;
+  },
+
+  async delete(id) {
+    await callFunction('courses', { action: 'delete', id });
+  },
+
+  async listRoster(course_id) {
+    const data = await callFunction('courses', { action: 'listRoster', course_id });
+    return data.results;
+  },
+
+  // Replaces the whole roster rather than appending, so re-uploading a
+  // corrected CSV is the natural way to fix a mistake.
+  async replaceRoster(course_id, students) {
+    const data = await callFunction('courses', { action: 'replaceRoster', course_id, students });
+    return data.results;
+  },
+};
+
+// ============================================================================
 // auth (teacher login)
 // ============================================================================
 
@@ -429,7 +474,7 @@ const functions = {
 };
 
 export const base44 = {
-  entities: { Assignment, Submission, CodingProblem, Project },
+  entities: { Assignment, Submission, CodingProblem, Project, Course },
   auth,
   integrations,
   functions,

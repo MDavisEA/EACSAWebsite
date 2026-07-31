@@ -1,7 +1,7 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
-import { extractGistId, fetchGistJavaFiles } from '../_shared/gist.ts';
+import { extractGistId, fetchGistJavaFiles, fetchGistUpdatedAt } from '../_shared/gist.ts';
 
 function generateAccessCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 - avoids ambiguity
@@ -11,6 +11,17 @@ function generateAccessCode(): string {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;
+}
+
+// Project feedback is withheld until the teacher releases it. This has to
+// happen server-side: hiding it in the UI still ships the text to the
+// browser, where anyone holding the access code could read it out of the
+// network response - and unreleased review text may be AI-generated and not
+// yet checked by a human. Only projects are gated; FRQ and coding
+// submissions have always shown their score as soon as one exists.
+function withheldIfUnreleased(row: Record<string, any> | null) {
+  if (!row || !row.project_id || row.feedback_released) return row;
+  return { ...row, score: null, teacher_comments: null };
 }
 
 // Verifies the caller actually owns this submission before allowing any
@@ -67,6 +78,7 @@ Deno.serve(async (req) => {
           coding_problem_id: coding_problem_id || null,
           student_name: student.name,
           student_user_id: student.id,
+          student_email: student.email,
           responses: body.initial_responses || {},
           submitted: false,
           access_code: generateAccessCode(),
@@ -97,7 +109,7 @@ Deno.serve(async (req) => {
         .eq('student_user_id', student.id)
         .maybeSingle();
       if (error) return json({ error: error.message }, 500);
-      return json({ result: data });
+      return json({ result: withheldIfUnreleased(data) });
     }
 
     if (action === 'myScores') {
@@ -109,7 +121,7 @@ Deno.serve(async (req) => {
         .eq('submitted', true)
         .order('submitted_at', { ascending: false });
       if (error) return json({ error: error.message }, 500);
-      return json({ results: data || [] });
+      return json({ results: (data || []).map(withheldIfUnreleased) });
     }
 
     if (action === 'resume') {
@@ -162,6 +174,7 @@ Deno.serve(async (req) => {
           coding_problem_id,
           student_name: student.name,
           student_user_id: student.id,
+          student_email: student.email,
           submitted: false,
           access_code: generateAccessCode(),
         })
@@ -196,9 +209,11 @@ Deno.serve(async (req) => {
         project_id,
         student_name: student.name,
         student_user_id: student.id,
+        student_email: student.email,
         gist_url,
         files: fetched.files,
         gist_captured_at: new Date().toISOString(),
+        gist_updated_at: fetched.gistUpdatedAt,
         submitted: true,
         submitted_at: new Date().toISOString(),
       };
@@ -224,7 +239,7 @@ Deno.serve(async (req) => {
         .eq('submitted', true)
         .maybeSingle();
       if (error) return json({ error: error.message }, 500);
-      return json({ results: data ? [data] : [] });
+      return json({ results: data ? [withheldIfUnreleased(data)] : [] });
     }
 
     // ============ Teacher-only actions ============
@@ -258,6 +273,8 @@ Deno.serve(async (req) => {
       if (body.part_comments !== undefined) update.part_comments = body.part_comments;
       if (body.style_score !== undefined) update.style_score = body.style_score;
       if (body.style_comments !== undefined) update.style_comments = body.style_comments;
+      if (body.teacher_comments !== undefined) update.teacher_comments = body.teacher_comments;
+      if (body.feedback_released !== undefined) update.feedback_released = body.feedback_released;
       const { data, error } = await admin
         .from('submissions')
         .update(update)
@@ -283,6 +300,64 @@ Deno.serve(async (req) => {
       const { error } = await admin.from('submissions').delete().eq('id', body.submission_id);
       if (error) return json({ error: error.message }, 500);
       return json({ success: true });
+    }
+
+    // Re-fetches each submitted gist's metadata (not its file bodies) and
+    // reports any whose updated_at is now newer than what we recorded when we
+    // snapshotted it - i.e. the student edited the gist after turning it in.
+    // Deliberately a factual "this changed, here is when" signal rather than
+    // any inference about why.
+    if (action === 'recheckGists') {
+      const { project_id } = body;
+      if (!project_id) return json({ error: 'project_id is required' }, 400);
+
+      const { data: subs, error } = await admin
+        .from('submissions')
+        .select('id, student_name, gist_url, gist_updated_at, gist_captured_at')
+        .eq('project_id', project_id)
+        .eq('submitted', true);
+      if (error) return json({ error: error.message }, 500);
+
+      const results: {
+        submission_id: string;
+        student_name: string;
+        status: 'unchanged' | 'edited' | 'unknown' | 'error';
+        current_updated_at?: string | null;
+        error?: string;
+      }[] = [];
+
+      for (const s of subs || []) {
+        const gistId = extractGistId(s.gist_url || '');
+        if (!gistId) {
+          results.push({ submission_id: s.id, student_name: s.student_name, status: 'error', error: 'Unrecognized gist URL' });
+          continue;
+        }
+        const fetched = await fetchGistUpdatedAt(gistId);
+        if ('error' in fetched) {
+          results.push({ submission_id: s.id, student_name: s.student_name, status: 'error', error: fetched.error });
+          continue;
+        }
+        // No baseline recorded (submitted before this was tracked) means we
+        // genuinely cannot say - report that rather than implying "unchanged".
+        if (!s.gist_updated_at) {
+          results.push({
+            submission_id: s.id,
+            student_name: s.student_name,
+            status: 'unknown',
+            current_updated_at: fetched.updatedAt,
+          });
+          continue;
+        }
+        const edited = !!fetched.updatedAt && new Date(fetched.updatedAt) > new Date(s.gist_updated_at);
+        results.push({
+          submission_id: s.id,
+          student_name: s.student_name,
+          status: edited ? 'edited' : 'unchanged',
+          current_updated_at: fetched.updatedAt,
+        });
+      }
+
+      return json({ results });
     }
 
     // Lets a teacher seed a project's submissions from a name,gist_url CSV
@@ -329,6 +404,7 @@ Deno.serve(async (req) => {
           gist_url: gistUrl,
           files: fetched.files,
           gist_captured_at: new Date().toISOString(),
+          gist_updated_at: fetched.gistUpdatedAt,
           submitted: true,
           submitted_at: new Date().toISOString(),
         };

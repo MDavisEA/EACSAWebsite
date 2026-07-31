@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Upload, FileCode2, X, Loader2, ChevronDown, ChevronUp } from "lucide-react";
@@ -46,9 +47,20 @@ function defaultForm() {
     rubric_md: "",
     starter_files: [],
     google_doc_url: "",
+    course_id: null,
+    due_date: "",
     review_prompt: DEFAULT_REVIEW_PROMPT,
     is_active: true,
   };
+}
+
+// <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in local time, but
+// due_date round-trips through Postgres as a UTC ISO string.
+function toLocalInputValue(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // Adds/replaces files by filename (dropping the same file twice, or a gist
@@ -64,8 +76,12 @@ function mergeFiles(existing, incoming) {
   return merged;
 }
 
-export default function ProjectForm({ initial, onSave, onCancel }) {
-  const [form, setForm] = useState(initial ? { ...defaultForm(), ...initial } : defaultForm());
+export default function ProjectForm({ initial, courses = [], onSave, onCancel }) {
+  const [form, setForm] = useState(
+    initial
+      ? { ...defaultForm(), ...initial, due_date: toLocalInputValue(initial.due_date) }
+      : defaultForm()
+  );
   const [dragActive, setDragActive] = useState(false);
   const [gistUrl, setGistUrl] = useState("");
   const [fetchingGist, setFetchingGist] = useState(false);
@@ -79,7 +95,12 @@ export default function ProjectForm({ initial, onSave, onCancel }) {
 
   const handleSubmit = () => {
     if (!isValid) return;
-    onSave(form);
+    // Empty strings would fail Postgres timestamp/uuid parsing - send null.
+    onSave({
+      ...form,
+      due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
+      course_id: form.course_id || null,
+    });
   };
 
   const addFiles = async (fileList) => {
@@ -130,6 +151,44 @@ export default function ProjectForm({ initial, onSave, onCancel }) {
           onChange={(e) => updateField("title", e.target.value)}
           placeholder="e.g. Inventory Management System"
         />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Course</Label>
+          <Select
+            value={form.course_id || "none"}
+            onValueChange={(v) => updateField("course_id", v === "none" ? null : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="No course" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No course</SelectItem>
+              {courses.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {courses.length === 0
+              ? "Add a course under the Courses tab to track who has not turned in."
+              : "Needed to see who has not turned in."}
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Due Date</Label>
+          <Input
+            type="datetime-local"
+            value={form.due_date || ""}
+            onChange={(e) => updateField("due_date", e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Optional. Submissions after this are flagged late - it does not block them.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-2">

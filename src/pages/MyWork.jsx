@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { useGoogleSession } from "@/lib/useGoogleSession";
 import { Button } from "@/components/ui/button";
 import SubmissionDetail from "@/components/SubmissionDetail";
-import { Star, BookOpen, Code2, ChevronRight, LogIn } from "lucide-react";
+import { Star, BookOpen, Code2, ChevronRight, LogIn, FolderGit2 } from "lucide-react";
 
 // The digital replacement for typing an access code: once a student is
 // signed in, every graded submission of theirs (FRQ + coding) is right
@@ -18,6 +18,7 @@ export default function MyWork() {
   const [selected, setSelected] = useState(null);
   const [assignmentsById, setAssignmentsById] = useState({});
   const [codingProblemsById, setCodingProblemsById] = useState({});
+  const [projectsById, setProjectsById] = useState({});
 
   useEffect(() => {
     if (sessionLoading) return;
@@ -32,6 +33,7 @@ export default function MyWork() {
 
     const assignmentIds = [...new Set(results.filter((r) => r.assignment_id).map((r) => r.assignment_id))];
     const codingProblemIds = [...new Set(results.filter((r) => r.coding_problem_id).map((r) => r.coding_problem_id))];
+    const projectIds = [...new Set(results.filter((r) => r.project_id).map((r) => r.project_id))];
 
     if (assignmentIds.length > 0) {
       const allAssignments = await base44.entities.Assignment.list();
@@ -46,6 +48,12 @@ export default function MyWork() {
       const map = {};
       fetched.flat().forEach((p) => { map[p.id] = p; });
       setCodingProblemsById(map);
+    }
+    if (projectIds.length > 0) {
+      const fetched = await Promise.all(projectIds.map((id) => base44.entities.Project.filter({ id })));
+      const map = {};
+      fetched.flat().forEach((p) => { map[p.id] = p; });
+      setProjectsById(map);
     }
     setLoading(false);
   };
@@ -80,13 +88,19 @@ export default function MyWork() {
   if (selected) {
     const assignment = selected.assignment_id ? assignmentsById[selected.assignment_id] : null;
     const codingProblem = selected.coding_problem_id ? codingProblemsById[selected.coding_problem_id] : null;
+    const project = selected.project_id ? projectsById[selected.project_id] : null;
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-start px-4 py-12">
         <div className="w-[75vw]">
           <Button variant="outline" className="mb-4" onClick={() => setSelected(null)}>
             ← Back to My Work
           </Button>
-          <SubmissionDetail result={selected} assignment={assignment} codingProblem={codingProblem} />
+          <SubmissionDetail
+            result={selected}
+            assignment={assignment}
+            codingProblem={codingProblem}
+            project={project}
+          />
         </div>
       </div>
     );
@@ -112,8 +126,17 @@ export default function MyWork() {
             {submissions.map((sub) => {
               const title = sub.coding_problem_id
                 ? codingProblemsById[sub.coding_problem_id]?.title || "Coding Problem"
+                : sub.project_id
+                ? projectsById[sub.project_id]?.title || "Project"
                 : assignmentsById[sub.assignment_id]?.title || "Assignment";
-              const score = sub.coding_problem_id ? sub.autograde_score : sub.score;
+              // A project shows no score until the teacher releases feedback -
+              // otherwise a student would see a number before any human had
+              // looked at the AI-assisted review that produced it.
+              const score = sub.coding_problem_id
+                ? sub.autograde_score
+                : sub.project_id
+                ? (sub.feedback_released ? sub.score : null)
+                : sub.score;
               const maxScore = sub.coding_problem_id ? codingProblemsById[sub.coding_problem_id]?.points_possible : null;
               return (
                 <button
@@ -124,6 +147,8 @@ export default function MyWork() {
                   <div className="flex items-center gap-3">
                     {sub.coding_problem_id ? (
                       <Code2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                    ) : sub.project_id ? (
+                      <FolderGit2 className="w-5 h-5 text-violet-600 flex-shrink-0" />
                     ) : (
                       <BookOpen className="w-5 h-5 text-primary flex-shrink-0" />
                     )}

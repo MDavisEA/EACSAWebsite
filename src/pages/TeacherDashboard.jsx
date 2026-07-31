@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, BookOpen, LogOut, KeyRound } from "lucide-react";
+import { Plus, BookOpen, LogOut, KeyRound, Users } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import AssignmentForm from "@/components/teacher/AssignmentForm";
 import AssignmentCard from "@/components/teacher/AssignmentCard";
@@ -13,6 +13,8 @@ import CodingProblemForm from "@/components/teacher/CodingProblemForm";
 import CodingProblemCard from "@/components/teacher/CodingProblemCard";
 import ProjectForm from "@/components/teacher/ProjectForm";
 import ProjectCard from "@/components/teacher/ProjectCard";
+import CourseForm from "@/components/teacher/CourseForm";
+import CourseCard from "@/components/teacher/CourseCard";
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
@@ -34,6 +36,11 @@ export default function TeacherDashboard() {
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
   const [deletingProject, setDeletingProject] = useState(null);
+
+  const [courses, setCourses] = useState([]);
+  const [showCourseForm, setShowCourseForm] = useState(false);
+  const [editingCourse, setEditingCourse] = useState(null);
+  const [deletingCourse, setDeletingCourse] = useState(null);
 
   const generateCode = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -66,6 +73,7 @@ export default function TeacherDashboard() {
         loadAssignments();
         loadCodingProblems();
         loadProjects();
+        loadCourses();
       } catch {
         navigate("/");
       }
@@ -80,6 +88,11 @@ export default function TeacherDashboard() {
   const loadProjects = async () => {
     const results = await base44.entities.Project.list();
     setProjects(results);
+  };
+
+  const loadCourses = async () => {
+    const results = await base44.entities.Course.list();
+    setCourses(results);
   };
 
   const loadAssignments = async () => {
@@ -213,6 +226,25 @@ export default function TeacherDashboard() {
     loadProjects();
   };
 
+  const handleSaveCourse = async (data) => {
+    if (editingCourse) {
+      await base44.entities.Course.update(editingCourse.id, data);
+    } else {
+      await base44.entities.Course.create(data);
+    }
+    setShowCourseForm(false);
+    setEditingCourse(null);
+    loadCourses();
+  };
+
+  const handleDeleteCourse = async () => {
+    if (deletingCourse) {
+      await base44.entities.Course.delete(deletingCourse.id);
+      setDeletingCourse(null);
+      loadCourses();
+    }
+  };
+
   const handleDuplicateProject = async (project) => {
     const { id, created_at, updated_at, ...data } = project;
     await base44.entities.Project.create({
@@ -261,6 +293,11 @@ export default function TeacherDashboard() {
                 <Plus className="w-4 h-4 mr-1" /> New Project
               </Button>
             )}
+            {activeTab === "courses" && (
+              <Button onClick={() => { setEditingCourse(null); setShowCourseForm(true); }}>
+                <Plus className="w-4 h-4 mr-1" /> New Course
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
@@ -274,6 +311,7 @@ export default function TeacherDashboard() {
             <TabsTrigger value="assignments">FRQ Assignments</TabsTrigger>
             <TabsTrigger value="coding">Coding Problems</TabsTrigger>
             <TabsTrigger value="projects">Projects</TabsTrigger>
+            <TabsTrigger value="courses">Courses</TabsTrigger>
           </TabsList>
 
           <TabsContent value="assignments">
@@ -374,6 +412,34 @@ export default function TeacherDashboard() {
               </div>
             )}
           </TabsContent>
+
+          <TabsContent value="courses">
+            {courses.length === 0 ? (
+              <div className="text-center py-20">
+                <Users className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
+                <h2 className="text-lg font-semibold mb-2">No courses yet</h2>
+                <p className="text-muted-foreground mb-6">
+                  Add a course and upload a roster, then project submissions can show you who has
+                  <em> not</em> turned work in - not just who has.
+                </p>
+                <Button onClick={() => setShowCourseForm(true)}>
+                  <Plus className="w-4 h-4 mr-1" /> Create Course
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {courses.map((c) => (
+                  <CourseCard
+                    key={c.id}
+                    course={c}
+                    onEdit={() => { setEditingCourse(c); setShowCourseForm(true); }}
+                    onDelete={() => setDeletingCourse(c)}
+                    onRosterChange={loadCourses}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
         </Tabs>
       </main>
 
@@ -440,6 +506,7 @@ export default function TeacherDashboard() {
           </DialogHeader>
           <ProjectForm
             initial={editingProject}
+            courses={courses}
             onSave={handleSaveProject}
             onCancel={() => { setShowProjectForm(false); setEditingProject(null); }}
           />
@@ -457,6 +524,36 @@ export default function TeacherDashboard() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteProject}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={showCourseForm} onOpenChange={setShowCourseForm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingCourse ? "Edit Course" : "New Course"}</DialogTitle>
+          </DialogHeader>
+          <CourseForm
+            initial={editingCourse}
+            onSave={handleSaveCourse}
+            onCancel={() => { setShowCourseForm(false); setEditingCourse(null); }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingCourse} onOpenChange={() => setDeletingCourse(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Course?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{deletingCourse?.name}" and its roster. Student
+              submissions are not deleted, but any project pointing at this course will lose its
+              roster comparison. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteCourse}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
