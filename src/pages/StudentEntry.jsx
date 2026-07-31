@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { useGoogleSession } from "@/lib/useGoogleSession";
+import { useGoogleSession, ALLOWED_STUDENT_DOMAIN } from "@/lib/useGoogleSession";
 import { Button } from "@/components/ui/button";
 import { BookOpen, AlertCircle, Clock, ChevronRight, LogIn } from "lucide-react";
 
@@ -157,7 +157,7 @@ export default function StudentEntry() {
         <div className="bg-card rounded-xl border border-border p-6 space-y-5">
           {domainRejected && (
             <p className="text-sm text-destructive text-center">
-              Please sign in with your school Google account (@episcopalacademy.org).
+              Please sign in with your school Google account (@{ALLOWED_STUDENT_DOMAIN}).
             </p>
           )}
           {session ? (

@@ -34,6 +34,7 @@ export default function ProjectSubmissionViewer({ project }) {
   const [submissions, setSubmissions] = useState([]);
   const [roster, setRoster] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -57,13 +58,21 @@ export default function ProjectSubmissionViewer({ project }) {
   }, [project.id, project.course_id]);
 
   const loadAll = async () => {
-    const subs = await base44.entities.Submission.filter(
-      { project_id: project.id, submitted: true },
-      "-submitted_at"
-    );
-    setSubmissions(subs);
-    setRoster(project.course_id ? await base44.entities.Course.listRoster(project.course_id) : []);
-    setLoading(false);
+    setLoadError("");
+    try {
+      const subs = await base44.entities.Submission.filter(
+        { project_id: project.id, submitted: true },
+        "-submitted_at"
+      );
+      setSubmissions(subs);
+      setRoster(project.course_id ? await base44.entities.Course.listRoster(project.course_id) : []);
+    } catch (e) {
+      // Without this, a failed fetch left the spinner up forever with no
+      // indication anything had gone wrong.
+      setLoadError(e.message || "Couldn't load submissions. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -161,6 +170,17 @@ export default function ProjectSubmissionViewer({ project }) {
 
   if (loading) {
     return <div className="py-8 text-center text-sm text-muted-foreground">Loading submissions...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="py-8 text-center space-y-3">
+        <p className="text-sm text-destructive">{loadError}</p>
+        <Button variant="outline" size="sm" onClick={() => { setLoading(true); loadAll(); }}>
+          Try again
+        </Button>
+      </div>
+    );
   }
 
   const { missing, unmatched } = roster.length > 0

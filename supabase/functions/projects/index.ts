@@ -14,6 +14,9 @@ function sanitizeForStudent(project: Record<string, any>) {
     rubric_md: project.rubric_md,
     starter_files: project.starter_files || [],
     google_doc_url: project.google_doc_url,
+    // Students need to see this - submissions past it get flagged late, and
+    // it would be unfair for the deadline to be invisible to them.
+    due_date: project.due_date,
   };
 }
 

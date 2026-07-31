@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,9 +31,18 @@ export default function ProjectCard({ project, onEdit, onDelete, onToggleActive,
                   {project.is_active ? "Active" : "Inactive"}
                 </Badge>
               </div>
-              <p className="text-xs text-muted-foreground">
-                {project.rubric_md ? "Rubric set" : "No rubric yet"}
-              </p>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>{project.rubric_md ? "Rubric set" : "No rubric yet"}</span>
+                {project.due_date && (
+                  <span>Due {format(new Date(project.due_date), "MMM d, h:mm a")}</span>
+                )}
+                {(project.starter_files || []).length > 0 && (
+                  <span>
+                    {project.starter_files.length} starter file
+                    {project.starter_files.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-1">
               <Switch checked={project.is_active} onCheckedChange={onToggleActive} className="mr-2" />

@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/api/supabaseClient';
 import { getSessionAuthMethod } from '@/lib/sessionAuthMethod';
 
-export const ALLOWED_STUDENT_DOMAIN = 'episcopalacademy.org';
+import { ALLOWED_STUDENT_DOMAIN } from '@/lib/schoolConfig';
+
+// Re-exported so pages that already import this hook can get the domain from
+// the same place, without a second import line.
+export { ALLOWED_STUDENT_DOMAIN };
 
 // Tracks the student's Google-signed-in session. Kept separate from
 // AuthContext.jsx (which is shaped around the teacher email/password login

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { useGoogleSession } from "@/lib/useGoogleSession";
+import { useGoogleSession, ALLOWED_STUDENT_DOMAIN } from "@/lib/useGoogleSession";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -41,26 +41,42 @@ export default function ProjectPage() {
   }, [projectId, sessionLoading, session]);
 
   const loadProject = async () => {
-    const results = await base44.entities.Project.filter({ id: projectId });
-    if (results.length === 0) {
-      setLoadError("Project not found or no longer active.");
-    } else {
-      setProject(results[0]);
-      setGistUrl(results[0].gist_url || "");
+    try {
+      const results = await base44.entities.Project.filter({ id: projectId });
+      if (results.length === 0) {
+        setLoadError("Project not found or no longer active.");
+      } else {
+        setProject(results[0]);
+        setGistUrl(results[0].gist_url || "");
+      }
+    } catch (e) {
+      setLoadError(e.message || "Couldn't load this project. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const loadActive = async () => {
-    const results = await base44.entities.Project.filter({ is_active: true });
-    setActiveProjects(results);
-    setLoading(false);
+    try {
+      setActiveProjects(await base44.entities.Project.filter({ is_active: true }));
+    } catch (e) {
+      setLoadError(e.message || "Couldn't load projects. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // A failure here is non-fatal - the page still works for submitting, the
+  // student just does not see their previous submission, so it stays quiet
+  // rather than blocking the whole page behind an error.
   const loadMySubmission = async () => {
-    const sub = await base44.entities.Submission.getMyProjectSubmission(projectId);
-    setMySubmission(sub);
-    if (sub?.gist_url) setGistUrl(sub.gist_url);
+    try {
+      const sub = await base44.entities.Submission.getMyProjectSubmission(projectId);
+      setMySubmission(sub);
+      if (sub?.gist_url) setGistUrl(sub.gist_url);
+    } catch {
+      // ignored on purpose
+    }
   };
 
   const handleSubmit = async () => {
@@ -145,6 +161,15 @@ export default function ProjectPage() {
             <FolderGit2 className="w-7 h-7 text-violet-600" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">{project.title}</h1>
+          {project.due_date && (
+            <p className={`text-sm mt-2 ${new Date(project.due_date) < new Date() ? "text-destructive" : "text-muted-foreground"}`}>
+              Due {new Date(project.due_date).toLocaleString(undefined, {
+                weekday: "short", month: "short", day: "numeric",
+                hour: "numeric", minute: "2-digit",
+              })}
+              {new Date(project.due_date) < new Date() && " — past due, submissions are marked late"}
+            </p>
+          )}
         </div>
 
         {project.description_html && (
@@ -216,7 +241,7 @@ export default function ProjectPage() {
         <div className="bg-card rounded-xl border border-border p-6 space-y-4">
           {domainRejected && (
             <p className="text-sm text-destructive text-center">
-              Please sign in with your school Google account (@episcopalacademy.org).
+              Please sign in with your school Google account (@{ALLOWED_STUDENT_DOMAIN}).
             </p>
           )}
 

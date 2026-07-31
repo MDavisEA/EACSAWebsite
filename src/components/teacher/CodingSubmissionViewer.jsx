@@ -27,6 +27,7 @@ function computeAttemptStats(submission) {
 export default function CodingSubmissionViewer({ problem }) {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [selected, setSelected] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [sortOrder, setSortOrder] = useState("newest");
@@ -39,12 +40,19 @@ export default function CodingSubmissionViewer({ problem }) {
   }, [problem.id]);
 
   const loadSubmissions = async () => {
-    const results = await base44.entities.Submission.filter(
-      { coding_problem_id: problem.id, submitted: true },
-      "-submitted_at"
-    );
-    setSubmissions(results);
-    setLoading(false);
+    setLoadError("");
+    try {
+      const results = await base44.entities.Submission.filter(
+        { coding_problem_id: problem.id, submitted: true },
+        "-submitted_at"
+      );
+      setSubmissions(results);
+    } catch (e) {
+      // Without this, a failed fetch left the spinner up forever.
+      setLoadError(e.message || "Couldn't load submissions. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const sortedSubmissions = [...submissions].sort((a, b) => {
@@ -126,6 +134,17 @@ export default function CodingSubmissionViewer({ problem }) {
 
   if (loading) {
     return <div className="py-8 text-center text-muted-foreground">Loading submissions...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="py-8 text-center space-y-3">
+        <p className="text-sm text-destructive">{loadError}</p>
+        <Button variant="outline" size="sm" onClick={() => { setLoading(true); loadSubmissions(); }}>
+          Try again
+        </Button>
+      </div>
+    );
   }
 
   const selectedStats = selected ? computeAttemptStats(selected) : null;

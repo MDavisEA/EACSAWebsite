@@ -15,6 +15,7 @@ export default function MyWork() {
   const { session, user, loading: sessionLoading } = useGoogleSession();
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [selected, setSelected] = useState(null);
   const [assignmentsById, setAssignmentsById] = useState({});
   const [codingProblemsById, setCodingProblemsById] = useState({});
@@ -28,34 +29,41 @@ export default function MyWork() {
 
   const load = async () => {
     setLoading(true);
-    const results = await base44.entities.Submission.filter({ mine: true, submitted: true });
-    setSubmissions(results);
+    setLoadError("");
+    try {
+      const results = await base44.entities.Submission.filter({ mine: true, submitted: true });
+      setSubmissions(results);
 
-    const assignmentIds = [...new Set(results.filter((r) => r.assignment_id).map((r) => r.assignment_id))];
-    const codingProblemIds = [...new Set(results.filter((r) => r.coding_problem_id).map((r) => r.coding_problem_id))];
-    const projectIds = [...new Set(results.filter((r) => r.project_id).map((r) => r.project_id))];
+      const assignmentIds = [...new Set(results.filter((r) => r.assignment_id).map((r) => r.assignment_id))];
+      const codingProblemIds = [...new Set(results.filter((r) => r.coding_problem_id).map((r) => r.coding_problem_id))];
+      const projectIds = [...new Set(results.filter((r) => r.project_id).map((r) => r.project_id))];
 
-    if (assignmentIds.length > 0) {
-      const allAssignments = await base44.entities.Assignment.list();
-      const map = {};
-      allAssignments.filter((a) => assignmentIds.includes(a.id)).forEach((a) => { map[a.id] = a; });
-      setAssignmentsById(map);
+      if (assignmentIds.length > 0) {
+        const allAssignments = await base44.entities.Assignment.list();
+        const map = {};
+        allAssignments.filter((a) => assignmentIds.includes(a.id)).forEach((a) => { map[a.id] = a; });
+        setAssignmentsById(map);
+      }
+      if (codingProblemIds.length > 0) {
+        const fetched = await Promise.all(
+          codingProblemIds.map((id) => base44.entities.CodingProblem.filter({ id }))
+        );
+        const map = {};
+        fetched.flat().forEach((p) => { map[p.id] = p; });
+        setCodingProblemsById(map);
+      }
+      if (projectIds.length > 0) {
+        const fetched = await Promise.all(projectIds.map((id) => base44.entities.Project.filter({ id })));
+        const map = {};
+        fetched.flat().forEach((p) => { map[p.id] = p; });
+        setProjectsById(map);
+      }
+    } catch (e) {
+      // Without this, a failed fetch left the spinner up forever.
+      setLoadError(e.message || "Couldn't load your work. Check your connection and try again.");
+    } finally {
+      setLoading(false);
     }
-    if (codingProblemIds.length > 0) {
-      const fetched = await Promise.all(
-        codingProblemIds.map((id) => base44.entities.CodingProblem.filter({ id }))
-      );
-      const map = {};
-      fetched.flat().forEach((p) => { map[p.id] = p; });
-      setCodingProblemsById(map);
-    }
-    if (projectIds.length > 0) {
-      const fetched = await Promise.all(projectIds.map((id) => base44.entities.Project.filter({ id })));
-      const map = {};
-      fetched.flat().forEach((p) => { map[p.id] = p; });
-      setProjectsById(map);
-    }
-    setLoading(false);
   };
 
   if (sessionLoading || loading) {
@@ -116,7 +124,14 @@ export default function MyWork() {
           </p>
         </div>
 
-        {submissions.length === 0 ? (
+        {loadError ? (
+          <div className="text-center bg-white border rounded-xl p-8 space-y-3">
+            <p className="text-sm text-destructive">{loadError}</p>
+            <Button variant="outline" size="sm" onClick={load}>
+              Try again
+            </Button>
+          </div>
+        ) : submissions.length === 0 ? (
           <div className="text-center text-muted-foreground bg-white border rounded-xl p-8">
             <p className="text-sm">Nothing graded yet.</p>
             <p className="text-xs mt-1">Once your teacher grades something (or an autograded problem is submitted), it will show up here.</p>

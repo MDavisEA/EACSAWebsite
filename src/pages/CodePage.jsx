@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { useGoogleSession } from "@/lib/useGoogleSession";
+import { useGoogleSession, ALLOWED_STUDENT_DOMAIN } from "@/lib/useGoogleSession";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Code2, AlertCircle, ChevronRight, Trophy, LogIn } from "lucide-react";
@@ -150,7 +150,7 @@ export default function CodePage() {
         <div className="bg-[#252526] rounded-xl border border-slate-700 p-6 space-y-5">
           {domainRejected && (
             <p className="text-sm text-red-400 text-center">
-              Please sign in with your school Google account (@{"episcopalacademy.org"}).
+              Please sign in with your school Google account (@{ALLOWED_STUDENT_DOMAIN}).
             </p>
           )}
           {session ? (

@@ -1,5 +1,6 @@
 import { supabase } from '@/api/supabaseClient';
 import { getSessionAuthMethod } from '@/lib/sessionAuthMethod';
+import { ALLOWED_STUDENT_DOMAIN } from '@/lib/schoolConfig';
 
 // ============================================================================
 // This file replaces the old @base44/sdk client. Every page/component in the
@@ -432,7 +433,7 @@ const auth = {
       provider: 'google',
       options: {
         redirectTo: redirectTo || window.location.href,
-        queryParams: { hd: 'episcopalacademy.org', prompt: 'select_account' },
+        queryParams: { hd: ALLOWED_STUDENT_DOMAIN, prompt: 'select_account' },
       },
     });
   },
