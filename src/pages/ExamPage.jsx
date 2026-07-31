@@ -3,6 +3,7 @@ import ResizableDivider from "@/components/exam/ResizableDivider";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useGoogleSession } from "@/lib/useGoogleSession";
+import { Button } from "@/components/ui/button";
 import ExamHeader from "@/components/exam/ExamHeader";
 import ExamFooter from "@/components/exam/ExamFooter";
 import QuestionPanel from "@/components/exam/QuestionPanel";
@@ -40,6 +41,7 @@ export default function ExamPage() {
   const [showBlankWarning, setShowBlankWarning] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [blockedReason, setBlockedReason] = useState("");
   const [startTime] = useState(Date.now());
   const [splitPercent, setSplitPercent] = useState(50);
   const [recoveredDraft, setRecoveredDraft] = useState(false);
@@ -82,7 +84,6 @@ export default function ExamPage() {
     const results = await base44.entities.Assignment.filter({ id: assignmentId });
     if (results.length === 0) { navigate("/"); return; }
     const a = results[0];
-    setAssignment(a);
 
     if (a.time_limit_minutes) {
       setTimeRemaining(a.time_limit_minutes * 60);
@@ -101,6 +102,25 @@ export default function ExamPage() {
       assignment_id: assignmentId,
       submitted: false,
     });
+
+    // These were only ever checked on StudentEntry, which a bookmarked
+    // /exam?id=... URL skips. Anyone already mid-exam keeps going (their work
+    // is real and the server still lets them submit); only a fresh start on a
+    // closed assignment is refused, matching the server-side gate.
+    if (existing.length === 0) {
+      if (!a.is_active) {
+        setBlockedReason("This assignment is no longer active.");
+        setLoading(false);
+        return;
+      }
+      if (a.due_date && new Date(a.due_date) < new Date()) {
+        setBlockedReason("This assignment is past its due date.");
+        setLoading(false);
+        return;
+      }
+    }
+
+    setAssignment(a);
 
     let sub;
     if (existing.length > 0) {
@@ -255,6 +275,20 @@ export default function ExamPage() {
     isDirtyRef.current = false;
     navigate("/submitted");
   };
+
+  if (blockedReason) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="text-center max-w-md">
+          <h1 className="text-xl font-semibold mb-2">Unable to Start</h1>
+          <p className="text-muted-foreground mb-6">{blockedReason}</p>
+          <Button variant="outline" onClick={() => navigate("/")}>
+            Return to Home
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || !assignment) {
     return (

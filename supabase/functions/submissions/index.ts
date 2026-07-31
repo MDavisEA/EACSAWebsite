@@ -71,6 +71,36 @@ Deno.serve(async (req) => {
       if (!assignment_id && !coding_problem_id) {
         return json({ error: 'One of assignment_id/coding_problem_id is required' }, 400);
       }
+
+      // is_active / due_date used to be enforced only in StudentEntry.jsx, which
+      // a bookmarked /exam?id=... URL skips entirely - so a student could start
+      // and submit a closed or past-due assignment just by reusing an old link.
+      // Checked here because this is where new work actually begins. Deliberately
+      // NOT checked on read or on submitFinal: a student already mid-exam should
+      // be able to finish and submit even if the deadline passes while they work.
+      if (assignment_id) {
+        const { data: asgn } = await admin
+          .from('assignments')
+          .select('is_active, due_date')
+          .eq('id', assignment_id)
+          .maybeSingle();
+        if (!asgn) return json({ error: 'Assignment not found.' }, 404);
+        if (!asgn.is_active) return json({ error: 'This assignment is no longer active.' }, 409);
+        if (asgn.due_date && new Date(asgn.due_date) < new Date()) {
+          return json({ error: 'This assignment is past its due date.' }, 409);
+        }
+      }
+
+      if (coding_problem_id) {
+        const { data: prob } = await admin
+          .from('coding_problems')
+          .select('is_active')
+          .eq('id', coding_problem_id)
+          .maybeSingle();
+        if (!prob) return json({ error: 'Problem not found.' }, 404);
+        if (!prob.is_active) return json({ error: 'This problem is no longer active.' }, 409);
+      }
+
       const { data, error } = await admin
         .from('submissions')
         .insert({
@@ -168,6 +198,17 @@ Deno.serve(async (req) => {
       const { coding_problem_id } = body;
       if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
       if (!coding_problem_id) return json({ error: 'coding_problem_id is required' }, 400);
+
+      // Same reason as startFresh: a bookmarked /code-practice?id=... URL
+      // skips the picker page where this was previously the only check.
+      const { data: prob } = await admin
+        .from('coding_problems')
+        .select('is_active')
+        .eq('id', coding_problem_id)
+        .maybeSingle();
+      if (!prob) return json({ error: 'Problem not found.' }, 404);
+      if (!prob.is_active) return json({ error: 'This problem is no longer active.' }, 409);
+
       const { data, error } = await admin
         .from('submissions')
         .insert({
@@ -188,6 +229,18 @@ Deno.serve(async (req) => {
       const { project_id, gist_url } = body;
       if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
       if (!project_id || !gist_url) return json({ error: 'project_id and gist_url are required' }, 400);
+
+      // A project turned inactive should stop accepting submissions, including
+      // from a student holding a direct link. Due date is deliberately not
+      // enforced here - late project work is flagged for the teacher rather
+      // than rejected, so they can decide what to do with it.
+      const { data: proj } = await admin
+        .from('projects')
+        .select('is_active')
+        .eq('id', project_id)
+        .maybeSingle();
+      if (!proj) return json({ error: 'Project not found.' }, 404);
+      if (!proj.is_active) return json({ error: 'This project is no longer accepting submissions.' }, 409);
 
       const gistId = extractGistId(gist_url);
       if (!gistId) return json({ error: "That doesn't look like a gist URL. It should look like https://gist.github.com/yourname/abc123..." }, 400);
