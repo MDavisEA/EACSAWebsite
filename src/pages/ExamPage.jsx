@@ -42,7 +42,11 @@ export default function ExamPage() {
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [loading, setLoading] = useState(true);
   const [blockedReason, setBlockedReason] = useState("");
-  const [startTime] = useState(Date.now());
+  const [submitError, setSubmitError] = useState("");
+  const submittingRef = useRef(false);
+  // Set from the submission's server-side created_at once loaded, so it
+  // survives a page reload (see loadAssignment).
+  const startedAtRef = useRef(Date.now());
   const [splitPercent, setSplitPercent] = useState(50);
   const [recoveredDraft, setRecoveredDraft] = useState(false);
 
@@ -84,10 +88,6 @@ export default function ExamPage() {
     const results = await base44.entities.Assignment.filter({ id: assignmentId });
     if (results.length === 0) { navigate("/"); return; }
     const a = results[0];
-
-    if (a.time_limit_minutes) {
-      setTimeRemaining(a.time_limit_minutes * 60);
-    }
 
     if (a.questions[0]?.parts?.length > 0) {
       setCurrentPartId(a.questions[0].parts[0].id);
@@ -144,6 +144,18 @@ export default function ExamPage() {
       if (hasLocalDraft && Object.keys(localDraft).some((k) => localDraft[k]?.trim())) {
         setRecoveredDraft(true);
       }
+    }
+
+    // The clock runs from when the submission row was created, not from when
+    // this component mounted. Deriving it from mount time meant a page reload
+    // handed out a brand new full-length timer, so a student could reload
+    // near zero and keep going indefinitely - the time limit was effectively
+    // unenforceable. created_at is server-set, so it survives reloads and is
+    // not something the browser can move.
+    startedAtRef.current = sub.created_at ? new Date(sub.created_at).getTime() : Date.now();
+    if (a.time_limit_minutes) {
+      const elapsedSec = Math.floor((Date.now() - startedAtRef.current) / 1000);
+      setTimeRemaining(Math.max(0, a.time_limit_minutes * 60 - elapsedSec));
     }
 
     submissionIdRef.current = sub.id;
@@ -264,13 +276,34 @@ export default function ExamPage() {
   };
 
   const handleSubmit = async () => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    await base44.entities.Submission.update(submissionIdRef.current, {
-      responses: responsesRef.current,
-      submitted: true,
-      submitted_at: new Date().toISOString(),
-      time_spent_seconds: elapsed,
-    });
+    // Guard against a double submit - the timer can fire handleSubmit at the
+    // same moment the student clicks Submit.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitError("");
+
+    const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000);
+    try {
+      await base44.entities.Submission.update(submissionIdRef.current, {
+        responses: responsesRef.current,
+        submitted: true,
+        submitted_at: new Date().toISOString(),
+        time_spent_seconds: elapsed,
+      });
+    } catch (e) {
+      // Previously this threw with nothing catching it: navigate() never ran,
+      // no message appeared, and the student was left believing they had
+      // submitted. Their answers are still in localStorage and the DB, so the
+      // right move is to say so and let them retry rather than fail quietly.
+      submittingRef.current = false;
+      setSubmitError(
+        (e.message || "Something went wrong submitting.") +
+          " Your answers are saved - please try submitting again."
+      );
+      return;
+    }
+
+    // Only clear the local backup once the server has actually accepted it.
     if (localStorageKey) localStorage.removeItem(localStorageKey);
     isDirtyRef.current = false;
     navigate("/submitted");
@@ -325,6 +358,15 @@ export default function ExamPage() {
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {submitError && (
+        <div className="bg-red-50 border-b border-red-200 px-4 py-2 flex items-center justify-between flex-shrink-0">
+          <span className="text-sm text-red-700 font-medium">{submitError}</span>
+          <Button size="sm" variant="outline" className="ml-4" onClick={handleSubmit}>
+            Retry Submit
+          </Button>
         </div>
       )}
 
