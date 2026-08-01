@@ -103,7 +103,18 @@ export default function CodingProblemForm({ initial, onSave, onCancel }) {
     return m.test_cases.some((tc) => !tc.id || idCounts[tc.id] > 1);
   });
 
-  const isValid = form.title.trim() && form.class_name.trim() && !hasMethodNameErrors && !hasTestCaseIdErrors;
+  // The grader wraps student code in its own `public class Main`, so a problem
+  // named Main would put two classes of that name in one file and every
+  // submission would fail to compile with an error that looks like the
+  // student's fault. Especially worth catching now that whole-program problems
+  // exist, since Main is exactly what an IDE names a class with a main().
+  const classNameError =
+    form.class_name.trim() === "Main"
+      ? 'Cannot be "Main" — the grader already uses that name internally. Try "Solution".'
+      : null;
+
+  const isValid =
+    form.title.trim() && form.class_name.trim() && !classNameError && !hasMethodNameErrors && !hasTestCaseIdErrors;
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -136,11 +147,15 @@ export default function CodingProblemForm({ initial, onSave, onCancel }) {
             value={form.class_name}
             onChange={(e) => updateField("class_name", e.target.value)}
             placeholder="Solution"
-            className="font-mono"
+            className={`font-mono ${classNameError ? "border-destructive" : ""}`}
           />
-          <p className="text-xs text-muted-foreground">
-            Students must name their public class exactly this.
-          </p>
+          {classNameError ? (
+            <p className="text-xs text-destructive">{classNameError}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Students must name their public class exactly this.
+            </p>
+          )}
         </div>
       </div>
 

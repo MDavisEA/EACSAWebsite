@@ -141,7 +141,11 @@ export default function CodePage() {
           <h1 className="text-2xl font-bold tracking-tight mb-2 text-slate-100">{problem.title}</h1>
           <div className="flex items-center justify-center gap-2 mt-3">
             <Badge variant="outline" className="font-mono text-xs border-slate-600 text-slate-300">
-              {problem.class_name}.{"{"}method{"}"}()
+              {/* A whole-program problem has no method to call, so telling the
+                  student to write Solution.someMethod() would be wrong. */}
+              {(problem.methods || []).every((m) => m.harness_type === "program_output")
+                ? `${problem.class_name}.main()`
+                : `${problem.class_name}.{method}()`}
             </Badge>
             <Badge variant="outline" className="border-slate-600 text-slate-300">{problem.points_possible ?? 0} pts</Badge>
           </div>

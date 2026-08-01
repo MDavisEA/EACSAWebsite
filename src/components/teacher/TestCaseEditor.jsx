@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Trash2, EyeOff } from "lucide-react";
 
@@ -35,6 +36,9 @@ export function newTestCase(harnessType, methodArgCount = 0) {
   const base = { _uid: generateKey(), id: "", label: "", hidden: false, points: 1 };
   if (harnessType === "exact_match") {
     return { ...base, check_kind: "exact_output", method_args: Array(methodArgCount).fill(""), expected_output: "" };
+  }
+  if (harnessType === "program_output") {
+    return { ...base, check_kind: "output_contains", stdin: "", expected_output: "", ignore_case: false };
   }
   return { ...base, check_kind: "min_length", param: 8 };
 }
@@ -110,7 +114,43 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
       </div>
       {idError && <p className="text-xs text-destructive">{idError}</p>}
 
-      {harnessType === "exact_match" ? (
+      {harnessType === "program_output" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-slate-500">Input typed into the program</Label>
+            <Textarea
+              value={testCase.stdin ?? ""}
+              onChange={(e) => onUpdate({ stdin: e.target.value })}
+              placeholder={"One value per line, e.g.\n3\n4"}
+              className="text-sm font-mono min-h-[80px]"
+            />
+            <p className="text-xs text-muted-foreground">
+              One value per line — this is what Scanner reads. Leave blank if the program takes no input.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-slate-500">Output must contain</Label>
+            <Input
+              value={testCase.expected_output ?? ""}
+              onChange={(e) => onUpdate({ expected_output: e.target.value })}
+              placeholder="e.g. 7"
+              className="h-8 text-sm font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              Passes as long as this appears somewhere in what they print, so they can word the rest
+              however they like.
+            </p>
+            <div className="flex items-center gap-1.5 pt-1">
+              <Switch
+                checked={!!testCase.ignore_case}
+                onCheckedChange={(v) => onUpdate({ ignore_case: v })}
+                className="scale-90"
+              />
+              <Label className="text-xs text-slate-500">Ignore capitalization</Label>
+            </div>
+          </div>
+        </div>
+      ) : harnessType === "exact_match" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-500">

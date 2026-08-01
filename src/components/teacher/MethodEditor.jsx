@@ -10,10 +10,10 @@ export function newMethod() {
   return {
     _uid: generateKey(),
     method_name: "",
-    harness_type: "property_check",
+    harness_type: "program_output",
     method_arg_types: [],
     trial_count: 30,
-    test_cases: [newTestCase("property_check")],
+    test_cases: [newTestCase("program_output")],
   };
 }
 
@@ -22,6 +22,8 @@ export function newMethod() {
 // test_cases - land in one atomic update rather than two separate calls
 // racing against the same stale parent state.
 export default function MethodEditor({ method, index, onUpdate, onRemove, canRemove, nameError }) {
+  const isProgram = method.harness_type === "program_output";
+
   const handleHarnessChange = (value) => {
     if (value === method.harness_type) return;
     if (method.test_cases.length > 0) {
@@ -89,14 +91,19 @@ export default function MethodEditor({ method, index, onUpdate, onRemove, canRem
       <div className="flex items-start justify-between gap-3">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">Method Name *</Label>
+            <Label className="text-xs text-slate-500">
+              {isProgram ? "Group Name *" : "Method Name *"}
+            </Label>
             <Input
               value={method.method_name}
               onChange={(e) => onUpdate({ method_name: e.target.value })}
-              placeholder="e.g. generatePassword"
+              placeholder={isProgram ? "e.g. Program output" : "e.g. generatePassword"}
               className={`font-mono ${nameError ? "border-destructive" : ""}`}
             />
             {nameError && <p className="text-xs text-destructive">{nameError}</p>}
+            {isProgram && !nameError && (
+              <p className="text-xs text-muted-foreground">Just a heading for these tests.</p>
+            )}
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-slate-500">Check Type</Label>
@@ -105,6 +112,7 @@ export default function MethodEditor({ method, index, onUpdate, onRemove, canRem
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="program_output">Whole program (no methods needed)</SelectItem>
                 <SelectItem value="exact_match">Exact output match</SelectItem>
                 <SelectItem value="property_check">Randomized property check</SelectItem>
               </SelectContent>
@@ -119,12 +127,14 @@ export default function MethodEditor({ method, index, onUpdate, onRemove, canRem
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {method.harness_type === "exact_match"
+        {isProgram
+          ? "Runs the student's whole program once per test case, types in the input you give it, and checks that the right answer appears somewhere in what they print. Use this before students are writing methods."
+          : method.harness_type === "exact_match"
           ? "Calls the method once per test case with fixed arguments and compares the return value exactly."
           : "Calls a zero-argument method many times and checks properties of the outputs (e.g. length, variety) — good for randomized methods."}
       </p>
 
-      {method.harness_type === "exact_match" ? (
+      {isProgram ? null : method.harness_type === "exact_match" ? (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label className="text-xs text-slate-500">Method Argument Types (in order)</Label>

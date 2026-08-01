@@ -13,11 +13,17 @@ interface TestCase {
   method_args?: unknown[];
   expected_output?: string;
   param?: number;
+  // program_output only: what gets typed into stdin, and whether the
+  // "must contain" comparison ignores capitalization.
+  stdin?: string;
+  ignore_case?: boolean;
 }
 
 interface Method {
+  // For program_output this is a display/grouping label rather than a real
+  // Java method name - results are keyed by it either way.
   method_name: string;
-  harness_type: 'exact_match' | 'property_check';
+  harness_type: 'exact_match' | 'property_check' | 'program_output';
   method_arg_types: string[];
   trial_count?: number;
   test_cases: TestCase[];
@@ -41,13 +47,79 @@ function stripPublicModifier(code: string, className: string): string {
   return code.replace(re, (_m, modifiers, rest) => `${modifiers}class${rest}`);
 }
 
+// Java requires every import to appear before the first type declaration. The
+// driver class is concatenated ahead of the student's code, so a student
+// writing `import java.util.Scanner;` (or ArrayList, HashMap, ...) would put
+// an import after a class and fail to compile - through no fault of their own,
+// with an error pointing at their import line. Pull the imports out and float
+// them to the very top of the combined file.
+//
+// `package` declarations are dropped entirely: Piston compiles one loose file,
+// and a package statement would put the student's class somewhere the driver
+// cannot name.
+function hoistImportsAndStripPackage(code: string): { imports: string[]; body: string } {
+  const importRe = /^[ \t]*import[ \t]+(?:static[ \t]+)?[\w.*]+[ \t]*;[ \t]*$/gm;
+  const packageRe = /^[ \t]*package[ \t]+[\w.]+[ \t]*;[ \t]*$/gm;
+
+  const imports = [...new Set((code.match(importRe) || []).map((l) => l.trim()))];
+  const body = code.replace(importRe, '').replace(packageRe, '');
+  return { imports, body };
+}
+
 // One problem can test several methods (e.g. a 3-method assignment). Each
 // method's driver code is wrapped in its own block (braces) so local
 // variable names never collide across methods even though everything
 // ends up concatenated into one main(). Every marker line is tagged with
 // the method name so results can be attributed back to the right method.
+// Escapes a string for embedding in Java source as a double-quoted literal.
+function javaStringLiteral(s: string): string {
+  return JSON.stringify(String(s ?? ''));
+}
+
 function buildMethodDriver(className: string, method: Method): string {
   const { method_name, harness_type, method_arg_types = [], trial_count = 30, test_cases } = method;
+
+  // Runs the student's whole program once per test case: feeds the test's
+  // input to stdin, runs main(), and captures everything it printed.
+  //
+  // Two details that matter:
+  //  - Output is captured into a buffer and emitted Base64-encoded on ONE
+  //    line. Printing it raw would interleave multi-line student output with
+  //    the __MARKER__ lines the grader parses, and a student printing
+  //    something marker-shaped could forge a result.
+  //  - System.out/System.in are restored in a finally, so one test blowing up
+  //    cannot swallow the output of the tests after it.
+  if (harness_type === 'program_output') {
+    const runs = test_cases
+      .map((tc, idx) => {
+        const stdinLiteral = javaStringLiteral(tc.stdin ?? '');
+        return `
+    {
+      java.io.ByteArrayOutputStream __buf${idx} = new java.io.ByteArrayOutputStream();
+      java.io.PrintStream __origOut${idx} = System.out;
+      java.io.InputStream __origIn${idx} = System.in;
+      try {
+        System.setIn(new java.io.ByteArrayInputStream(${stdinLiteral}.getBytes("UTF-8")));
+        System.setOut(new java.io.PrintStream(__buf${idx}, true, "UTF-8"));
+        ${className}.main(new String[]{});
+      } catch (Throwable __t${idx}) {
+        System.setOut(__origOut${idx});
+        System.setIn(__origIn${idx});
+        System.out.println("__ERROR__:${method_name}:${tc.id}:" + __t${idx}.toString());
+      } finally {
+        System.setOut(__origOut${idx});
+        System.setIn(__origIn${idx});
+      }
+      System.out.println("__OUTB64__:${method_name}:${tc.id}:"
+        + java.util.Base64.getEncoder().encodeToString(__buf${idx}.toByteArray()));
+    }`;
+      })
+      .join('\n');
+    return `
+    {
+${runs}
+    }`;
+  }
 
   if (harness_type === 'property_check') {
     return `
@@ -208,7 +280,9 @@ Deno.serve(async (req) => {
     const problem = problems as CodingProblem;
 
     const driverSource = buildDriver(problem);
-    const combinedSource = `${driverSource}\n\n${stripPublicModifier(code, problem.class_name)}`;
+    const { imports, body } = hoistImportsAndStripPackage(code);
+    const importBlock = imports.length > 0 ? `${imports.join('\n')}\n\n` : '';
+    const combinedSource = `${importBlock}${driverSource}\n\n${stripPublicModifier(body, problem.class_name)}`;
 
     const pistonHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
     const pistonApiKey = Deno.env.get('PISTON_API_KEY');
@@ -239,7 +313,14 @@ Deno.serve(async (req) => {
     // trial/result markers. Without this check, an empty trials array
     // vacuously "passes" every property_check test (see evaluateProperty).
     const producedNoOutput = !lines.some(
-      (l) => l.startsWith('__TRIAL__:') || l.startsWith('__RESULT__:') || l.startsWith('__ERROR__:')
+      (l) =>
+        l.startsWith('__TRIAL__:') ||
+        l.startsWith('__RESULT__:') ||
+        l.startsWith('__ERROR__:') ||
+        // program_output tests emit only this marker on a clean run, so
+        // leaving it out here would report every passing whole-program
+        // submission as a compile error.
+        l.startsWith('__OUTB64__:')
     );
     const compileError: string | undefined =
       runResult?.compile?.stderr ||
@@ -283,7 +364,61 @@ Deno.serve(async (req) => {
     for (const method of problem.methods) {
       const { method_name, harness_type, test_cases } = method;
 
-      if (harness_type === 'property_check') {
+      if (harness_type === 'program_output') {
+        for (const tc of test_cases) {
+          const outPrefix = `__OUTB64__:${method_name}:${tc.id}:`;
+          const errPrefix = `__ERROR__:${method_name}:${tc.id}:`;
+          const outLine = lines.find((l) => l.startsWith(outPrefix));
+          const errLine = lines.find((l) => l.startsWith(errPrefix));
+
+          let output = '';
+          if (outLine) {
+            try {
+              output = new TextDecoder().decode(
+                Uint8Array.from(atob(outLine.slice(outPrefix.length)), (c) => c.charCodeAt(0))
+              );
+            } catch {
+              output = '';
+            }
+          }
+
+          const expected = String(tc.expected_output ?? '');
+          const haystack = tc.ignore_case ? output.toLowerCase() : output;
+          const needle = tc.ignore_case ? expected.toLowerCase() : expected;
+          // Deliberately a substring check, not equality: the teacher is
+          // checking that the right answer appears, and students are free to
+          // word the surrounding text however they like.
+          const passed = expected !== '' && haystack.includes(needle);
+
+          let detail: string;
+          if (errLine) {
+            const crashed = errLine.slice(errPrefix.length);
+            detail = `Program crashed: ${crashed}`;
+          } else if (!outLine) {
+            detail = 'The program did not run for this test.';
+          } else if (passed) {
+            detail = `Found "${expected}" in the output`;
+          } else if (output.trim() === '') {
+            detail = `Expected the output to contain "${expected}", but the program printed nothing`;
+          } else {
+            const shown = output.trim().length > 300 ? output.trim().slice(0, 300) + '…' : output.trim();
+            detail = `Expected the output to contain "${expected}", but got: ${shown}`;
+          }
+
+          results.push({
+            method_name,
+            test_id: tc.id,
+            label: tc.hidden ? 'Hidden test' : tc.label,
+            hidden: !!tc.hidden,
+            passed,
+            points_earned: passed ? tc.points : 0,
+            points_possible: tc.points,
+            // A hidden test must not reveal the expected answer, the input, or
+            // the student's own output for that input.
+            detail: tc.hidden ? (passed ? 'Passed' : 'Failed') : detail,
+          });
+        }
+      } else if (harness_type === 'property_check') {
         const prefix = `__TRIAL__:${method_name}:`;
         const trials = lines.filter((l) => l.startsWith(prefix)).map((l) => l.slice(prefix.length));
         for (const tc of test_cases) {

@@ -17,6 +17,10 @@ function sanitizeForStudent(problem: Record<string, any>) {
     points_possible: problem.points_possible,
     methods: (problem.methods || []).map((m: Record<string, any>) => ({
       method_name: m.method_name,
+      // Not sensitive - it only says how the work is checked, which the check
+      // labels already imply - and the student page needs it to avoid telling
+      // a whole-program student to write `Solution.someMethod()`.
+      harness_type: m.harness_type,
       visible_checks: (m.test_cases || [])
         .filter((tc: Record<string, any>) => !tc.hidden)
         .map((tc: Record<string, any>) => ({ id: tc.id, label: tc.label, points: tc.points })),
