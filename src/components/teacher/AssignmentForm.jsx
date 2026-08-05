@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import QuestionEditor from "./QuestionEditor";
@@ -25,11 +26,22 @@ function newQuestion(num) {
   };
 }
 
-export default function AssignmentForm({ initial, onSave, onCancel }) {
+// <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in local time, while
+// due_date round-trips through Postgres as a UTC ISO string.
+function toLocalInputValue(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export default function AssignmentForm({ initial, courses = [], onSave, onCancel }) {
   const [form, setForm] = useState(
     initial
       ? {
           ...initial,
+          due_date: toLocalInputValue(initial.due_date),
+          course_id: initial.course_id ?? null,
           questions: initial.questions.map((q) => ({
             ...q,
             prompt_images: q.prompt_images || [],
@@ -43,6 +55,7 @@ export default function AssignmentForm({ initial, onSave, onCancel }) {
           questions: [newQuestion(1)],
           time_limit_minutes: null,
           due_date: "",
+          course_id: null,
           is_active: true,
           reference_sheet_url: "",
         }
@@ -84,6 +97,8 @@ export default function AssignmentForm({ initial, onSave, onCancel }) {
     if (!form.title.trim()) return;
     const normalized = {
       ...form,
+      course_id: form.course_id || null,
+      due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
       questions: form.questions.map((q) => ({
         ...q,
         max_score: q.max_score ?? 9,
@@ -138,6 +153,28 @@ export default function AssignmentForm({ initial, onSave, onCancel }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
+          <Label>Course</Label>
+          <Select
+            value={form.course_id || "none"}
+            onValueChange={(v) => updateField("course_id", v === "none" ? null : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="No course" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No course</SelectItem>
+              {courses.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Leave as No course to show this to every student.
+          </p>
+        </div>
+        <div className="space-y-2">
           <Label>Due Date (optional)</Label>
           <Input
             type="datetime-local"
@@ -145,13 +182,14 @@ export default function AssignmentForm({ initial, onSave, onCancel }) {
             onChange={(e) => updateField("due_date", e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-3 pt-6">
-          <Switch
-            checked={form.is_active}
-            onCheckedChange={(v) => updateField("is_active", v)}
-          />
-          <Label>Active (visible to students)</Label>
-        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Switch
+          checked={form.is_active}
+          onCheckedChange={(v) => updateField("is_active", v)}
+        />
+        <Label>Active (visible to students)</Label>
       </div>
 
       {/* Questions */}

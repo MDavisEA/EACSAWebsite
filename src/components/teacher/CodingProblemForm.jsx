@@ -36,8 +36,19 @@ function defaultForm() {
     class_name: "Solution",
     starter_code: "",
     methods: [newMethod()],
+    course_id: null,
+    due_date: "",
     is_active: true,
   };
+}
+
+// <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in local time, while
+// due_date round-trips through Postgres as a UTC ISO string.
+function toLocalInputValue(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function hydrateMethod(m) {
@@ -49,11 +60,13 @@ function hydrateMethod(m) {
   };
 }
 
-export default function CodingProblemForm({ initial, onSave, onCancel }) {
+export default function CodingProblemForm({ initial, courses = [], onSave, onCancel }) {
   const [form, setForm] = useState(
     initial
       ? {
+          ...defaultForm(),
           ...initial,
+          due_date: toLocalInputValue(initial.due_date),
           methods: initial.methods?.length ? initial.methods.map(hydrateMethod) : [newMethod()],
         }
       : defaultForm()
@@ -121,6 +134,8 @@ export default function CodingProblemForm({ initial, onSave, onCancel }) {
     onSave({
       ...form,
       language: "java",
+      course_id: form.course_id || null,
+      due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
       methods: form.methods.map(({ _uid, ...m }) => ({
         ...m,
         method_arg_types: m.method_arg_types.map((t) => t.trim()).filter(Boolean),
@@ -156,6 +171,40 @@ export default function CodingProblemForm({ initial, onSave, onCancel }) {
               Students must name their public class exactly this.
             </p>
           )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Course</Label>
+          <Select
+            value={form.course_id || "none"}
+            onValueChange={(v) => updateField("course_id", v === "none" ? null : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="No course" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No course</SelectItem>
+              {courses.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Leave as No course to show this to every student.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Due Date</Label>
+          <Input
+            type="datetime-local"
+            value={form.due_date || ""}
+            onChange={(e) => updateField("due_date", e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">Optional — shown to students.</p>
         </div>
       </div>
 

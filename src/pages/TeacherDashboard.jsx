@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { supabase } from "@/api/supabaseClient";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, BookOpen, LogOut, KeyRound, Users } from "lucide-react";
+import { Plus, BookOpen, LogOut, KeyRound, Users, Lock } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import AssignmentForm from "@/components/teacher/AssignmentForm";
 import AssignmentCard from "@/components/teacher/AssignmentCard";
@@ -26,6 +28,13 @@ export default function TeacherDashboard() {
   const [deleting, setDeleting] = useState(null);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillDone, setBackfillDone] = useState(null);
+
+  // Teacher sign-in lives on this page now that nothing links here.
+  const [authed, setAuthed] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
 
   const [codingProblems, setCodingProblems] = useState([]);
   const [showCodingForm, setShowCodingForm] = useState(false);
@@ -70,15 +79,37 @@ export default function TeacherDashboard() {
     (async () => {
       try {
         await base44.auth.me();
+        setAuthed(true);
         loadAssignments();
         loadCodingProblems();
         loadProjects();
         loadCourses();
       } catch {
-        navigate("/");
+        // Show the login form in place rather than redirecting. This page is
+        // deliberately unlinked from the rest of the site, so bouncing to "/"
+        // would land the teacher on the student dashboard with no way back in.
+        setAuthed(false);
+        setLoading(false);
       }
     })();
   }, []);
+
+  const handleTeacherLogin = async () => {
+    setLoginError("");
+    setLoggingIn(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoggingIn(false);
+    if (error) {
+      setLoginError("Incorrect email or password. Please try again.");
+      return;
+    }
+    setAuthed(true);
+    setLoading(true);
+    loadAssignments();
+    loadCodingProblems();
+    loadProjects();
+    loadCourses();
+  };
 
   const loadCodingProblems = async () => {
     const results = await base44.entities.CodingProblem.list();
@@ -254,6 +285,41 @@ export default function TeacherDashboard() {
     });
     loadProjects();
   };
+
+  if (!authed && !loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center p-6">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-100 mb-5">
+              <Lock className="w-7 h-7 text-slate-600" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight">Teacher Sign In</h1>
+          </div>
+          <div className="bg-card border rounded-xl p-6 space-y-4">
+            <Input
+              type="email"
+              placeholder="you@school.edu"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setLoginError(""); }}
+              autoFocus
+            />
+            <Input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setLoginError(""); }}
+              onKeyDown={(e) => e.key === "Enter" && handleTeacherLogin()}
+            />
+            {loginError && <p className="text-sm text-destructive">{loginError}</p>}
+            <Button onClick={handleTeacherLogin} className="w-full" disabled={loggingIn}>
+              {loggingIn ? "Signing in..." : "Sign In"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -450,6 +516,7 @@ export default function TeacherDashboard() {
           </DialogHeader>
           <AssignmentForm
             initial={editing}
+            courses={courses}
             onSave={handleSave}
             onCancel={() => { setShowForm(false); setEditing(null); }}
           />
@@ -478,6 +545,7 @@ export default function TeacherDashboard() {
           </DialogHeader>
           <CodingProblemForm
             initial={editingCoding}
+            courses={courses}
             onSave={handleSaveCoding}
             onCancel={() => { setShowCodingForm(false); setEditingCoding(null); }}
           />

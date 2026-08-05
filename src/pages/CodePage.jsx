@@ -73,13 +73,13 @@ export default function CodePage() {
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 mb-5">
               <Code2 className="w-7 h-7 text-emerald-400" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight mb-2 text-slate-100">Select a Coding Problem</h1>
+            <h1 className="text-2xl font-bold tracking-tight mb-2 text-slate-100">Select a Code Practice Problem</h1>
             <p className="text-sm text-slate-400">Choose a problem to begin</p>
           </div>
 
           {activeProblems.length === 0 ? (
             <div className="text-center text-slate-400 bg-[#252526] border border-slate-700 rounded-xl p-8">
-              <p className="text-sm">No coding problems are available right now.</p>
+              <p className="text-sm">No code practice problems are available right now.</p>
               <p className="text-xs mt-1">Check back later or ask your teacher for a link.</p>
             </div>
           ) : (

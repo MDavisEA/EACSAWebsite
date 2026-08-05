@@ -1,18 +1,17 @@
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
-import Landing from '@/pages/Landing';
+import StudentDashboard from '@/pages/StudentDashboard';
 import StudentEntry from '@/pages/StudentEntry';
 import ExamPage from '@/pages/ExamPage';
 import SubmittedPage from '@/pages/SubmittedPage';
 import TeacherDashboard from '@/pages/TeacherDashboard';
 import MyScore from '@/pages/MyScore';
-import MyWork from '@/pages/MyWork';
 import CodePage from '@/pages/CodePage';
 import CodePracticePage from '@/pages/CodePracticePage';
 import ProjectPage from '@/pages/ProjectPage';
@@ -39,13 +38,19 @@ const AuthenticatedApp = () => {
 
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      {/* The front door is the student dashboard - it renders its own
+          sign-in prompt when nobody is signed in. /teacher is intentionally
+          unlinked from anywhere in the UI; it still enforces real auth. */}
+      <Route path="/" element={<StudentDashboard />} />
       <Route path="/student" element={<StudentEntry />} />
       <Route path="/exam" element={<ExamPage />} />
       <Route path="/submitted" element={<SubmittedPage />} />
       <Route path="/teacher" element={<TeacherDashboard />} />
       <Route path="/my-score" element={<MyScore />} />
-      <Route path="/my-work" element={<MyWork />} />
+      {/* Kept as a redirect: the dashboard now shows status and scores
+          inline, so My Work no longer needs its own page - but students may
+          have bookmarked it. */}
+      <Route path="/my-work" element={<Navigate to="/" replace />} />
       <Route path="/code" element={<CodePage />} />
       <Route path="/code-practice" element={<CodePracticePage />} />
       <Route path="/project" element={<ProjectPage />} />

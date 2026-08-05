@@ -404,6 +404,20 @@ const Course = {
 };
 
 // ============================================================================
+// entities.StudentWork - the signed-in student's own dashboard. Its own
+// namespace rather than a Submission method because it spans all three work
+// types plus their submissions, and returns a narrow summary shape rather
+// than any one entity.
+// ============================================================================
+
+const StudentWork = {
+  async myAssignedWork() {
+    const data = await callFunction('student-work', { action: 'myAssignedWork' });
+    return { items: data.results, studentName: data.student_name };
+  },
+};
+
+// ============================================================================
 // auth (teacher login)
 // ============================================================================
 
@@ -475,7 +489,7 @@ const functions = {
 };
 
 export const base44 = {
-  entities: { Assignment, Submission, CodingProblem, Project, Course },
+  entities: { Assignment, Submission, CodingProblem, Project, Course, StudentWork },
   auth,
   integrations,
   functions,
