@@ -72,8 +72,24 @@ Deno.serve(async (req) => {
     }
 
     const mySubs = subs.data || [];
-    const findSub = (field: string, id: string) =>
-      mySubs.find((s: Record<string, any>) => s[field] === id);
+
+    // A student can legitimately end up with more than one row for the same
+    // item: startFresh inserts unconditionally, and findMyOpenSubmission only
+    // looks for UNSUBMITTED rows - so re-opening an assignment they already
+    // finished creates a second, empty one alongside the graded one. Picking
+    // arbitrarily would show "In progress" and hide a grade they already have,
+    // so prefer the row that represents real work: a submitted one over an
+    // in-progress one, and the most recently submitted among those.
+    const findSub = (field: string, id: string) => {
+      const matches = mySubs.filter((s: Record<string, any>) => s[field] === id);
+      if (matches.length <= 1) return matches[0];
+      const submitted = matches.filter((s: Record<string, any>) => s.submitted);
+      if (submitted.length === 0) return matches[0];
+      return submitted.sort(
+        (a: Record<string, any>, b: Record<string, any>) =>
+          new Date(b.submitted_at ?? 0).getTime() - new Date(a.submitted_at ?? 0).getTime()
+      )[0];
+    };
 
     // Project feedback is release-gated (see submissions/index.ts); FRQ and
     // code scores are not, and must not become gated retroactively or every
@@ -95,8 +111,11 @@ Deno.serve(async (req) => {
       if (!visibleToMe(a.course_id)) continue;
       const sub = findSub('assignment_id', a.id);
       const { status, score } = statusFor(sub, sub?.score ?? null, false);
+      // `?? 9` matches what SubmissionDetail and SubmissionViewer already
+      // assume for a question with no explicit max_score - defaulting to 0
+      // here instead would show a different total than the detail view.
       const maxScore = (a.questions || []).reduce(
-        (sum: number, q: Record<string, any>) => sum + (Number(q.max_score) || 0),
+        (sum: number, q: Record<string, any>) => sum + (Number(q.max_score ?? 9) || 0),
         0
       );
       items.push({

@@ -73,6 +73,24 @@ export default function TeacherDashboard() {
     setBackfillDone(missing.length);
   };
 
+  // Having a valid Supabase session is NOT enough to be a teacher - the
+  // Edge Functions also require a teacher_profiles row (defense in depth), so
+  // these loads can fail for a perfectly valid login. Surfacing that as a
+  // message beats leaving the page on a spinner forever.
+  const loadAll = async () => {
+    try {
+      await Promise.all([loadCodingProblems(), loadProjects(), loadCourses(), loadAssignments()]);
+    } catch {
+      // Sign them back out rather than leaving a live session: the shim treats
+      // any password-established session as a teacher session, so a dangling
+      // one would make the rest of the app take teacher-only branches.
+      await supabase.auth.signOut();
+      setLoading(false);
+      setAuthed(false);
+      setLoginError("That account isn't set up as a teacher on this site.");
+    }
+  };
+
   useEffect(() => {
     // Old version trusted a sessionStorage flag that anyone could set by
     // hand in the browser console. This checks a real server-issued session.
@@ -80,10 +98,7 @@ export default function TeacherDashboard() {
       try {
         await base44.auth.me();
         setAuthed(true);
-        loadAssignments();
-        loadCodingProblems();
-        loadProjects();
-        loadCourses();
+        loadAll();
       } catch {
         // Show the login form in place rather than redirecting. This page is
         // deliberately unlinked from the rest of the site, so bouncing to "/"
@@ -105,10 +120,7 @@ export default function TeacherDashboard() {
     }
     setAuthed(true);
     setLoading(true);
-    loadAssignments();
-    loadCodingProblems();
-    loadProjects();
-    loadCourses();
+    loadAll();
   };
 
   const loadCodingProblems = async () => {

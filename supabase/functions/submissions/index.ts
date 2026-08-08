@@ -124,9 +124,14 @@ Deno.serve(async (req) => {
       if (!student) return json({ result: null });
       let query = admin.from('submissions').select('*').eq('student_user_id', student.id).eq('submitted', false);
       query = assignment_id ? query.eq('assignment_id', assignment_id) : query.eq('coding_problem_id', coding_problem_id);
-      const { data, error } = await query.maybeSingle();
+      // Not maybeSingle(): that throws when more than one row comes back, which
+      // would lock a student out of their own work entirely. Two open rows
+      // shouldn't happen (this is checked before startFresh inserts) but a
+      // double-click can race one in - resuming the newest is a far better
+      // failure mode than an error page.
+      const { data, error } = await query.order('created_at', { ascending: false }).limit(1);
       if (error) return json({ error: error.message }, 500);
-      return json({ result: data });
+      return json({ result: data?.[0] ?? null });
     }
 
     if (action === 'myProjectSubmission') {
