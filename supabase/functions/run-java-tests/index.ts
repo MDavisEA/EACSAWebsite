@@ -33,6 +33,8 @@ interface CodingProblem {
   id: string;
   class_name: string;
   methods: Method[];
+  // How many practice runs a student gets. null = unlimited.
+  max_test_runs?: number | null;
 }
 
 // Piston's Java package doesn't run javac on multiple files - it renames
@@ -279,6 +281,28 @@ Deno.serve(async (req) => {
     if (probErr || !problems) return json({ error: 'CodingProblem not found' }, 404);
     const problem = problems as CodingProblem;
 
+    // Practice runs are capped so the visible test cases can't just be
+    // brute-forced. Enforced here rather than only by disabling the button,
+    // because the button is trivially bypassed by calling this endpoint
+    // directly. Only non-final runs count: a student who has used every
+    // practice run must still be able to turn the work in, or the cap would
+    // stop them submitting at all.
+    if (!final && problem.max_test_runs !== null && problem.max_test_runs !== undefined) {
+      const used = (submission.run_history || []).filter(
+        (h: Record<string, any>) => !h.final
+      ).length;
+      if (used >= problem.max_test_runs) {
+        return json(
+          {
+            error: `You have used all ${problem.max_test_runs} test runs for this problem. You can still submit your work when you are ready.`,
+            runs_used: used,
+            max_test_runs: problem.max_test_runs,
+          },
+          429
+        );
+      }
+    }
+
     const driverSource = buildDriver(problem);
     const { imports, body } = hoistImportsAndStripPackage(code);
     const importBlock = imports.length > 0 ? `${imports.join('\n')}\n\n` : '';
@@ -347,7 +371,12 @@ Deno.serve(async (req) => {
         .from('submissions')
         .update({ code, compile_error: compileError, test_results: [], run_history })
         .eq('id', submission_id);
-      return json({ compile_error: compileError, test_results: [] });
+      return json({
+        compile_error: compileError,
+        test_results: [],
+        runs_used: run_history.filter((h: Record<string, any>) => !h.final).length,
+        max_test_runs: problem.max_test_runs ?? null,
+      });
     }
 
     const results: {
@@ -503,6 +532,8 @@ Deno.serve(async (req) => {
       tests_passed,
       tests_total: results.length,
       autograde_score,
+      runs_used: run_history.filter((h: Record<string, any>) => !h.final).length,
+      max_test_runs: problem.max_test_runs ?? null,
     });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);

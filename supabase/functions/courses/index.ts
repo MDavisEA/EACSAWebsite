@@ -66,7 +66,25 @@ Deno.serve(async (req) => {
         .eq('course_id', body.course_id)
         .order('student_name', { ascending: true });
       if (error) return json({ error: error.message }, 500);
-      return json({ results: data || [] });
+
+      // Flag whoever has never actually turned anything in under their roster
+      // email. Usually that just means they have not started yet - but it is
+      // also how a typo in the CSV shows itself, since a mistyped address can
+      // never match the Google account the student signs in with.
+      const { data: seen } = await admin
+        .from('submissions')
+        .select('student_email')
+        .not('student_email', 'is', null);
+      const seenEmails = new Set(
+        (seen || []).map((s: Record<string, any>) => (s.student_email || '').toLowerCase())
+      );
+
+      return json({
+        results: (data || []).map((r: Record<string, any>) => ({
+          ...r,
+          has_signed_in: seenEmails.has((r.email || '').toLowerCase()),
+        })),
+      });
     }
 
     // Replaces the whole roster for a course rather than appending, so

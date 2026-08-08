@@ -33,6 +33,9 @@ export default function CodePracticePage() {
   const [runError, setRunError] = useState("");
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [finalized, setFinalized] = useState(false);
+  // Practice runs already spent. Seeded from the resumed submission so the
+  // count survives a reload, then kept in step with what the server reports.
+  const [runsUsed, setRunsUsed] = useState(0);
 
   const submissionRef = useRef(null); // { id, session_token }
 
@@ -68,6 +71,7 @@ export default function CodePracticePage() {
       sub = await base44.entities.Submission.create({ coding_problem_id: problemId });
     }
     submissionRef.current = { id: sub.id, session_token: sub.session_token };
+    setRunsUsed((sub.run_history || []).filter((h) => !h.final).length);
     setCode(draft || sub.code || p.starter_code || "");
     setLoading(false);
   };
@@ -95,8 +99,15 @@ export default function CodePracticePage() {
     try {
       const data = await runTests(false);
       setResults(data);
+      if (typeof data.runs_used === "number") setRunsUsed(data.runs_used);
     } catch (e) {
       setRunError(e.message || "Something went wrong running your code. Please try again.");
+      // Only the cap itself should disable the button - a network blip or a
+      // Piston outage must not cost a student their remaining runs. Matches on
+      // the message this app's own edge function returns for that one case.
+      if (problem?.max_test_runs != null && /used all \d+ test runs/.test(e.message || "")) {
+        setRunsUsed(problem.max_test_runs);
+      }
     } finally {
       setRunning(false);
     }
@@ -132,6 +143,10 @@ export default function CodePracticePage() {
       </div>
     );
   }
+
+  // null when the problem has no cap, so the counter stays hidden entirely.
+  const runsLeft =
+    problem.max_test_runs == null ? null : Math.max(0, problem.max_test_runs - runsUsed);
 
   const resultsByKey = {};
   (results?.test_results || []).forEach((r) => { resultsByKey[`${r.method_name}::${r.test_id}`] = r; });
@@ -272,10 +287,23 @@ export default function CodePracticePage() {
           )}
 
           <div className="border-t border-slate-700 bg-[#252526] px-4 py-3 flex items-center justify-end gap-3 flex-shrink-0">
+            {runsLeft !== null && (
+              <span
+                className={`text-xs mr-auto ${
+                  runsLeft === 0 ? "text-amber-400" : "text-slate-400"
+                }`}
+              >
+                {runsLeft === 0
+                  ? "No test runs left — you can still submit."
+                  : `${runsLeft} of ${problem.max_test_runs} test run${
+                      problem.max_test_runs === 1 ? "" : "s"
+                    } left`}
+              </span>
+            )}
             <Button
               variant="outline"
               onClick={handleRun}
-              disabled={running || submitting || finalized}
+              disabled={running || submitting || finalized || runsLeft === 0}
               className="border-slate-600 text-slate-100 bg-transparent hover:bg-slate-700 hover:text-slate-100"
             >
               {running ? (

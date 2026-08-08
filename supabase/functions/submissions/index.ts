@@ -324,6 +324,27 @@ Deno.serve(async (req) => {
       return json({ results: data || [] });
     }
 
+    // How much work is sitting there waiting on the teacher. Counted here
+    // rather than by shipping every submission to the browser and filtering
+    // client-side. Coding problems are deliberately absent: they are graded
+    // automatically, so they can never be waiting on a human.
+    if (action === 'gradingCounts') {
+      const { data, error } = await admin
+        .from('submissions')
+        .select('assignment_id, project_id, score')
+        .eq('submitted', true)
+        .is('score', null);
+      if (error) return json({ error: error.message }, 500);
+
+      const byAssignment: Record<string, number> = {};
+      const byProject: Record<string, number> = {};
+      for (const row of data || []) {
+        if (row.assignment_id) byAssignment[row.assignment_id] = (byAssignment[row.assignment_id] || 0) + 1;
+        else if (row.project_id) byProject[row.project_id] = (byProject[row.project_id] || 0) + 1;
+      }
+      return json({ result: { byAssignment, byProject } });
+    }
+
     if (action === 'saveGrade') {
       const update: Record<string, unknown> = {};
       if (body.score !== undefined) update.score = body.score;

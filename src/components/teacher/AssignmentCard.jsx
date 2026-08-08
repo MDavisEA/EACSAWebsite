@@ -4,12 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Copy, Pencil, Trash2, ChevronDown, ChevronUp, Link2, Users, Clock, Check, Star, CopyPlus, GripVertical } from "lucide-react";
+import { Copy, Pencil, Trash2, ChevronDown, ChevronUp, Link2, Users, Clock, Check, Star, CopyPlus, GripVertical, Eye } from "lucide-react";
 import SubmissionViewer from "./SubmissionViewer";
+import StudentPreviewDialog from "./StudentPreviewDialog";
 
-export default function AssignmentCard({ assignment, dragHandleProps, onEdit, onDelete, onToggleActive, onToggleFeatured, onDuplicate, onToggleShowAnswerKey }) {
+export default function AssignmentCard({ assignment, ungradedCount = 0, onGraded, dragHandleProps, onEdit, onDelete, onToggleActive, onToggleFeatured, onDuplicate, onToggleShowAnswerKey }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
 
   const studentLink = `${window.location.origin}/student?id=${assignment.id}`;
 
@@ -40,6 +42,11 @@ export default function AssignmentCard({ assignment, dragHandleProps, onEdit, on
                 <Badge variant={assignment.is_active ? "default" : "secondary"}>
                   {assignment.is_active ? "Active" : "Inactive"}
                 </Badge>
+                {ungradedCount > 0 && (
+                  <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
+                    {ungradedCount} to grade
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>{questionCount} question{questionCount !== 1 ? "s" : ""}</span>
@@ -75,6 +82,9 @@ export default function AssignmentCard({ assignment, dragHandleProps, onEdit, on
                 onCheckedChange={onToggleActive}
                 className="mr-2"
               />
+              <Button variant="ghost" size="sm" onClick={() => setPreviewing(true)} title="Preview as student">
+                <Eye className="w-4 h-4" />
+              </Button>
               <Button variant="ghost" size="sm" onClick={onDuplicate} title="Duplicate assignment">
                 <CopyPlus className="w-4 h-4" />
               </Button>
@@ -108,11 +118,19 @@ export default function AssignmentCard({ assignment, dragHandleProps, onEdit, on
           </button>
           {expanded && (
             <div className="px-5 pb-5 border-t">
-              <SubmissionViewer assignment={assignment} />
+              <SubmissionViewer assignment={assignment} onGraded={onGraded} />
             </div>
           )}
         </div>
       </CardContent>
+
+      <StudentPreviewDialog
+        open={previewing}
+        onOpenChange={setPreviewing}
+        kind="frq"
+        itemId={assignment.id}
+        title={assignment.title}
+      />
     </Card>
   );
 }

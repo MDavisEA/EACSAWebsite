@@ -15,6 +15,9 @@ function sanitizeForStudent(problem: Record<string, any>) {
     class_name: problem.class_name,
     starter_code: problem.starter_code,
     points_possible: problem.points_possible,
+    // Students need to see how many practice runs they get; the cap itself is
+    // enforced server-side in run-java-tests.
+    max_test_runs: problem.max_test_runs,
     methods: (problem.methods || []).map((m: Record<string, any>) => ({
       method_name: m.method_name,
       // Not sensitive - it only says how the work is checked, which the check
@@ -59,6 +62,20 @@ Deno.serve(async (req) => {
 
     const teacher = await getTeacherFromRequest(req, admin);
     if (!teacher) return json({ error: 'Unauthorized' }, 401);
+
+    // Same sanitizer the student endpoint uses, so what the teacher previews
+    // is byte-for-byte what a student would receive - including the hiding of
+    // expected outputs and hidden-test details. Unlike getActive this ignores
+    // is_active, because previewing is most useful before publishing.
+    if (action === 'previewAsStudent') {
+      const { data, error } = await admin
+        .from('coding_problems')
+        .select('*')
+        .eq('id', body.id)
+        .maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data ? sanitizeForStudent(data) : null });
+    }
 
     if (action === 'list') {
       const { data, error } = await admin

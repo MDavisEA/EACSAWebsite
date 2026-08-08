@@ -38,6 +38,7 @@ function defaultForm() {
     methods: [newMethod()],
     course_id: null,
     due_date: "",
+    max_test_runs: 5,
     is_active: true,
   };
 }
@@ -206,6 +207,23 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           />
           <p className="text-xs text-muted-foreground">Optional — shown to students.</p>
         </div>
+      </div>
+
+      <div className="space-y-2 max-w-xs">
+        <Label>Test Runs Allowed</Label>
+        <Input
+          type="number"
+          min="1"
+          value={form.max_test_runs ?? ""}
+          onChange={(e) =>
+            updateField("max_test_runs", e.target.value === "" ? null : parseInt(e.target.value))
+          }
+          placeholder="Unlimited"
+        />
+        <p className="text-xs text-muted-foreground">
+          How many times a student can hit &ldquo;Run My Tests&rdquo; before submitting. Leave blank
+          for unlimited. Submitting is never blocked, even at zero remaining.
+        </p>
       </div>
 
       <div className="space-y-2">

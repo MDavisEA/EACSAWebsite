@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Pencil, Trash2, CopyPlus, Link2, Users, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
 import ProjectSubmissionViewer from "./ProjectSubmissionViewer";
 
-export default function ProjectCard({ project, onEdit, onDelete, onToggleActive, onDuplicate }) {
+export default function ProjectCard({ project, ungradedCount = 0, onEdit, onDelete, onToggleActive, onDuplicate }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -30,6 +30,11 @@ export default function ProjectCard({ project, onEdit, onDelete, onToggleActive,
                 <Badge variant={project.is_active ? "default" : "secondary"}>
                   {project.is_active ? "Active" : "Inactive"}
                 </Badge>
+                {ungradedCount > 0 && (
+                  <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
+                    {ungradedCount} to review
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>{project.rubric_md ? "Rubric set" : "No rubric yet"}</span>

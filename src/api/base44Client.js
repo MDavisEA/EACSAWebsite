@@ -203,6 +203,13 @@ const Submission = {
     throw new Error(`Submission.filter: unsupported criteria shape {${keys}}`);
   },
 
+  // { byAssignment: {id: n}, byProject: {id: n} } - submitted work with no
+  // score yet, i.e. what is waiting on the teacher.
+  async gradingCounts() {
+    const data = await callFunction('submissions', { action: 'gradingCounts' });
+    return data.result;
+  },
+
   async update(id, fields) {
     if (await hasActiveTeacherSession()) {
       if ('access_code' in fields && Object.keys(fields).length === 1) {
@@ -295,6 +302,13 @@ const CodingProblem = {
   async list() {
     const data = await callFunction('coding-problems', { action: 'list' });
     return data.results;
+  },
+
+  // Exactly what a student would be served, for the teacher's preview -
+  // works on inactive problems too, unlike the student-facing fetch.
+  async previewAsStudent(id) {
+    const data = await callFunction('coding-problems', { action: 'previewAsStudent', id });
+    return data.result;
   },
 
   async create(fields) {

@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Pencil, Trash2, Users, ChevronDown, ChevronUp, Upload, Loader2, Mail, AlertTriangle } from "lucide-react";
+import { Pencil, Trash2, Users, ChevronDown, ChevronUp, Upload, Loader2, Mail, AlertTriangle, Check } from "lucide-react";
 import { parseRosterCsv } from "@/lib/rosterCsv";
 
 export default function CourseCard({ course, onEdit, onDelete, onRosterChange }) {
@@ -107,24 +107,43 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange })
                   No students on this roster yet.
                 </p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {roster.map((s) => (
-                      <TableRow key={s.id}>
-                        <TableCell className="font-medium">{s.student_name}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {s.email || <span className="italic">no email</span>}
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead className="text-right">Turned in work</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {roster.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="font-medium">{s.student_name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {s.email || <span className="italic">no email</span>}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {s.has_signed_in ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                <Check className="w-3.5 h-3.5" /> Yes
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Not yet</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {roster.some((s) => !s.has_signed_in) && (
+                    <p className="text-xs text-muted-foreground mt-3">
+                      &ldquo;Not yet&rdquo; usually just means they have not started. If it sticks
+                      around for someone who says they turned work in, check their email above for a
+                      typo — it has to match the Google account they sign in with.
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}

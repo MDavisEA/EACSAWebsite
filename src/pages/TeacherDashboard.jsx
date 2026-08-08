@@ -29,6 +29,10 @@ export default function TeacherDashboard() {
   const [backfilling, setBackfilling] = useState(false);
   const [backfillDone, setBackfillDone] = useState(null);
 
+  // { byAssignment: {id: n}, byProject: {id: n} } - submitted work with no
+  // score yet, so the teacher can see what is waiting without opening each one.
+  const [gradingCounts, setGradingCounts] = useState({ byAssignment: {}, byProject: {} });
+
   // Teacher sign-in lives on this page now that nothing links here.
   const [authed, setAuthed] = useState(false);
   const [email, setEmail] = useState("");
@@ -79,7 +83,13 @@ export default function TeacherDashboard() {
   // message beats leaving the page on a spinner forever.
   const loadAll = async () => {
     try {
-      await Promise.all([loadCodingProblems(), loadProjects(), loadCourses(), loadAssignments()]);
+      await Promise.all([
+        loadCodingProblems(),
+        loadProjects(),
+        loadCourses(),
+        loadGradingCounts(),
+        loadAssignments(),
+      ]);
     } catch {
       // Sign them back out rather than leaving a live session: the shim treats
       // any password-established session as a teacher session, so a dangling
@@ -136,6 +146,10 @@ export default function TeacherDashboard() {
   const loadCourses = async () => {
     const results = await base44.entities.Course.list();
     setCourses(results);
+  };
+
+  const loadGradingCounts = async () => {
+    setGradingCounts(await base44.entities.Submission.gradingCounts());
   };
 
   const loadAssignments = async () => {
@@ -341,6 +355,10 @@ export default function TeacherDashboard() {
     );
   }
 
+  const sumCounts = (map) => Object.values(map || {}).reduce((a, b) => a + b, 0);
+  const ungradedFrqTotal = sumCounts(gradingCounts.byAssignment);
+  const ungradedProjectTotal = sumCounts(gradingCounts.byProject);
+
   return (
     <div className="min-h-screen bg-slate-50/50">
       <header className="bg-white border-b sticky top-0 z-10">
@@ -386,9 +404,23 @@ export default function TeacherDashboard() {
       <main className="max-w-5xl mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
-            <TabsTrigger value="assignments">FRQ Assignments</TabsTrigger>
-            <TabsTrigger value="coding">Coding Problems</TabsTrigger>
-            <TabsTrigger value="projects">Projects</TabsTrigger>
+            <TabsTrigger value="assignments">
+              FRQ Assignments
+              {ungradedFrqTotal > 0 && (
+                <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white">
+                  {ungradedFrqTotal}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="coding">Code Practice</TabsTrigger>
+            <TabsTrigger value="projects">
+              Projects
+              {ungradedProjectTotal > 0 && (
+                <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white">
+                  {ungradedProjectTotal}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="courses">Courses</TabsTrigger>
           </TabsList>
 
@@ -417,6 +449,8 @@ export default function TeacherDashboard() {
                             >
                               <AssignmentCard
                                 assignment={a}
+                                ungradedCount={gradingCounts.byAssignment?.[a.id] || 0}
+                                onGraded={loadGradingCounts}
                                 dragHandleProps={provided.dragHandleProps}
                                 onEdit={() => { setEditing(a); setShowForm(true); }}
                                 onDelete={() => setDeleting(a)}
@@ -481,6 +515,7 @@ export default function TeacherDashboard() {
                   <ProjectCard
                     key={p.id}
                     project={p}
+                    ungradedCount={gradingCounts.byProject?.[p.id] || 0}
                     onEdit={() => { setEditingProject(p); setShowProjectForm(true); }}
                     onDelete={() => setDeletingProject(p)}
                     onToggleActive={() => handleToggleProjectActive(p)}

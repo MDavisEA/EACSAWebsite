@@ -3,12 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Pencil, Trash2, CopyPlus, Code2, EyeOff, Link2, Users, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
+import { Pencil, Trash2, CopyPlus, Code2, Eye, EyeOff, Link2, Users, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
 import CodingSubmissionViewer from "./CodingSubmissionViewer";
+import StudentPreviewDialog from "./StudentPreviewDialog";
 
 export default function CodingProblemCard({ problem, onEdit, onDelete, onToggleActive, onDuplicate }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
 
   const methods = problem.methods || [];
   const allTestCases = methods.flatMap((m) => m.test_cases || []);
@@ -55,6 +57,9 @@ export default function CodingProblemCard({ problem, onEdit, onDelete, onToggleA
             </div>
             <div className="flex items-center gap-1">
               <Switch checked={problem.is_active} onCheckedChange={onToggleActive} className="mr-2" />
+              <Button variant="ghost" size="sm" onClick={() => setPreviewing(true)} title="Preview as student">
+                <Eye className="w-4 h-4" />
+              </Button>
               <Button variant="ghost" size="sm" onClick={onDuplicate} title="Duplicate problem">
                 <CopyPlus className="w-4 h-4" />
               </Button>
@@ -93,6 +98,14 @@ export default function CodingProblemCard({ problem, onEdit, onDelete, onToggleA
           )}
         </div>
       </CardContent>
+
+      <StudentPreviewDialog
+        open={previewing}
+        onOpenChange={setPreviewing}
+        kind="code"
+        itemId={problem.id}
+        title={problem.title}
+      />
     </Card>
   );
 }

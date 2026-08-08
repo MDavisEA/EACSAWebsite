@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FileDown, Clock, User, Trash2, ArrowUpDown, GraduationCap, BookOpen, KeyRound, ExternalLink, ZoomIn, Save, CheckCircle2, Clipboard, ClipboardCheck, ChevronLeft, ChevronRight, Copy, Check, Link2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
-export default function SubmissionViewer({ assignment }) {
+export default function SubmissionViewer({ assignment, onGraded }) {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -108,6 +108,8 @@ export default function SubmissionViewer({ assignment }) {
       )
     );
     setSaving(false);
+    // Scoring this submission changes the "N to grade" badge on the card above.
+    onGraded?.();
     setSaved(true);
   };
 
