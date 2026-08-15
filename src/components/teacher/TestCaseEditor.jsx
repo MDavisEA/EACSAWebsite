@@ -48,6 +48,10 @@ export function newTestCase(harnessType, methodArgCount = 0) {
 // at once, and a caller reading test-case state from a prop (not local
 // React state) can't safely absorb two separate onUpdate calls in a row.
 export default function TestCaseEditor({ testCase, index, harnessType, methodArgTypes, onUpdate, onRemove, canRemove, idError }) {
+  // Whole-program checks compare either raw text or the value as a number.
+  // Case-insensitivity is meaningless for a number, so that toggle hides.
+  const isNumberCheck = testCase.check_kind === "output_contains_number";
+
   const handleLabelChange = (value) => {
     onUpdate(testCase.id ? { label: value } : { label: value, id: slugify(value) });
   };
@@ -130,24 +134,45 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-500">Output must contain</Label>
-            <Input
-              value={testCase.expected_output ?? ""}
-              onChange={(e) => onUpdate({ expected_output: e.target.value })}
-              placeholder="e.g. 7"
-              className="h-8 text-sm font-mono"
-            />
-            <p className="text-xs text-muted-foreground">
-              Passes as long as this appears somewhere in what they print, so they can word the rest
-              however they like.
-            </p>
-            <div className="flex items-center gap-1.5 pt-1">
-              <Switch
-                checked={!!testCase.ignore_case}
-                onCheckedChange={(v) => onUpdate({ ignore_case: v })}
-                className="scale-90"
+            <div className="flex gap-2">
+              <Select
+                value={testCase.check_kind === "output_contains_number" ? "number" : "text"}
+                onValueChange={(v) =>
+                  onUpdate({
+                    check_kind: v === "number" ? "output_contains_number" : "output_contains",
+                  })
+                }
+              >
+                <SelectTrigger className="h-8 text-sm w-[112px] flex-shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">this text</SelectItem>
+                  <SelectItem value="number">this number</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                value={testCase.expected_output ?? ""}
+                onChange={(e) => onUpdate({ expected_output: e.target.value })}
+                placeholder={isNumberCheck ? "e.g. 1500.00" : "e.g. Total"}
+                className="h-8 text-sm font-mono"
               />
-              <Label className="text-xs text-slate-500">Ignore capitalization</Label>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {isNumberCheck
+                ? "Compared as a number, so 1500, 1500.0, 1500.00 and $1,500.00 all count. Use this for any answer they calculate — it stops correct work failing over formatting."
+                : "Passes as long as this appears somewhere in what they print, so they can word the rest however they like."}
+            </p>
+            {!isNumberCheck && (
+              <div className="flex items-center gap-1.5 pt-1">
+                <Switch
+                  checked={!!testCase.ignore_case}
+                  onCheckedChange={(v) => onUpdate({ ignore_case: v })}
+                  className="scale-90"
+                />
+                <Label className="text-xs text-slate-500">Ignore capitalization</Label>
+              </div>
+            )}
           </div>
         </div>
       ) : harnessType === "exact_match" ? (

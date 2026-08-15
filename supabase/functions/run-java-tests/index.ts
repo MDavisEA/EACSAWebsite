@@ -68,55 +68,124 @@ function hoistImportsAndStripPackage(code: string): { imports: string[]; body: s
   return { imports, body };
 }
 
-// One problem can test several methods (e.g. a 3-method assignment). Each
-// method's driver code is wrapped in its own block (braces) so local
-// variable names never collide across methods even though everything
-// ends up concatenated into one main(). Every marker line is tagged with
-// the method name so results can be attributed back to the right method.
-// Escapes a string for embedding in Java source as a double-quoted literal.
+// Comparing money as text punishes students for formatting rather than for
+// being wrong: `System.out.println(total)` prints 79.8 where printf prints
+// 79.80, and both are the correct answer. A "contains this number" check is
+// compared numerically instead, so 1500, 1500.0, 1500.00 and $1,500.00 are
+// all the same value. The matching itself runs in the generated Java (see
+// buildMethodDriver); this only parses what the teacher typed. Strips
+// currency symbols and thousands separators, keeps a leading minus.
+function parseLooseNumber(raw: string): number | null {
+  const cleaned = String(raw ?? '').replace(/[$\s,]/g, '');
+  if (!/^-?\d*\.?\d+$/.test(cleaned)) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
 function javaStringLiteral(s: string): string {
   return JSON.stringify(String(s ?? ''));
 }
 
+// One problem can test several methods. Each method's driver code is wrapped
+// in its own block so local variable names never collide even though it all
+// ends up concatenated into one main(). Every marker line is tagged with the
+// method name so results can be attributed back to the right method.
 function buildMethodDriver(className: string, method: Method): string {
   const { method_name, harness_type, method_arg_types = [], trial_count = 30, test_cases } = method;
 
-  // Runs the student's whole program once per test case: feeds the test's
-  // input to stdin, runs main(), and captures everything it printed.
-  //
-  // Two details that matter:
-  //  - Output is captured into a buffer and emitted Base64-encoded on ONE
-  //    line. Printing it raw would interleave multi-line student output with
-  //    the __MARKER__ lines the grader parses, and a student printing
-  //    something marker-shaped could forge a result.
-  //  - System.out/System.in are restored in a finally, so one test blowing up
-  //    cannot swallow the output of the tests after it.
+  // Runs the student's whole program with the test's input on stdin and
+  // captures what it printed. System.out/System.in are restored in a finally,
+  // so a program that blows up cannot swallow the runs after it.
   if (harness_type === 'program_output') {
-    const runs = test_cases
-      .map((tc, idx) => {
-        const stdinLiteral = javaStringLiteral(tc.stdin ?? '');
+    // Checks are grouped by the input they feed in, and each distinct input
+    // runs the student's program exactly ONCE. Running it per check instead
+    // got the whole submission SIGKILLed by the sandbox on a program that
+    // prints a banner and a few rounds of output - and in the usual case a
+    // teacher asks several questions about the same run anyway (feed it one
+    // purchase, then check the subtotal, the tax and the total), so this is
+    // both cheaper and closer to how the checks are actually written.
+    const groups = new Map<string, TestCase[]>();
+    for (const tc of test_cases) {
+      const key = String(tc.stdin ?? '');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(tc);
+    }
+
+    const runs = [...groups.entries()]
+      .map(([stdin, cases], g) => {
+        const stdinLiteral = javaStringLiteral(stdin);
+
+        // Each check is decided HERE, in Java, against the captured text.
+        // Only a verdict and a short excerpt cross back, so a chatty program
+        // cannot overrun the runner's output limit.
+        const checks = cases
+          .map((tc, i) => {
+            const expected = String(tc.expected_output ?? '');
+            const asNumber = tc.check_kind === 'output_contains_number';
+            const target = asNumber ? parseLooseNumber(expected) : null;
+            const v = `${g}_${i}`;
+
+            const evaluate =
+              asNumber && target !== null
+                ? `boolean __ok${v} = false;
+      java.util.regex.Matcher __m${v} = java.util.regex.Pattern
+        .compile("-?\\\\$?\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?").matcher(__text${g});
+      while (__m${v}.find()) {
+        try {
+          if (Math.abs(Double.parseDouble(__m${v}.group().replaceAll("[$,]", "")) - ${target}) <= 0.005) {
+            __ok${v} = true; break;
+          }
+        } catch (Exception __ignored${v}) { }
+      }`
+                : asNumber || expected === ''
+                ? `boolean __ok${v} = false;`
+                : tc.ignore_case
+                ? `boolean __ok${v} = __text${g}.toLowerCase().contains(${javaStringLiteral(
+                    expected.toLowerCase()
+                  )});`
+                : `boolean __ok${v} = __text${g}.contains(${javaStringLiteral(expected)});`;
+
+            return `      ${evaluate}
+      System.out.println("__CHK__:${method_name}:${tc.id}:" + (__ok${v} ? "1" : "0"));`;
+          })
+          .join('\n');
+
         return `
     {
-      java.io.ByteArrayOutputStream __buf${idx} = new java.io.ByteArrayOutputStream();
-      java.io.PrintStream __origOut${idx} = System.out;
-      java.io.InputStream __origIn${idx} = System.in;
+      java.io.ByteArrayOutputStream __buf${g} = new java.io.ByteArrayOutputStream();
+      java.io.PrintStream __origOut${g} = System.out;
+      java.io.InputStream __origIn${g} = System.in;
+      boolean __crashed${g} = false;
+      String __err${g} = "";
       try {
         System.setIn(new java.io.ByteArrayInputStream(${stdinLiteral}.getBytes("UTF-8")));
-        System.setOut(new java.io.PrintStream(__buf${idx}, true, "UTF-8"));
+        System.setOut(new java.io.PrintStream(__buf${g}, true, "UTF-8"));
         ${className}.main(new String[]{});
-      } catch (Throwable __t${idx}) {
-        System.setOut(__origOut${idx});
-        System.setIn(__origIn${idx});
-        System.out.println("__ERROR__:${method_name}:${tc.id}:" + __t${idx}.toString());
+      } catch (Throwable __t${g}) {
+        __crashed${g} = true;
+        __err${g} = __t${g}.toString();
       } finally {
-        System.setOut(__origOut${idx});
-        System.setIn(__origIn${idx});
+        System.setOut(__origOut${g});
+        System.setIn(__origIn${g});
       }
-      System.out.println("__OUTB64__:${method_name}:${tc.id}:"
-        + java.util.Base64.getEncoder().encodeToString(__buf${idx}.toByteArray()));
+      String __text${g} = new String(__buf${g}.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+${checks}
+      // Excerpt and crash report are emitted ONCE per run, not per check.
+      // This runner truncates stdout at roughly 1KB, and repeating a Base64
+      // excerpt on every check silently cut off the last check's verdict -
+      // which surfaced as "the program did not run for this test".
+      String __excerpt${g} = __text${g}.length() > 160
+        ? __text${g}.substring(0, 160) + "\\u2026" : __text${g};
+      System.out.println("__EXC__:${method_name}:${g}:"
+        + java.util.Base64.getEncoder().encodeToString(
+            __excerpt${g}.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+      if (__crashed${g}) {
+        System.out.println("__ERROR__:${method_name}:${g}:" + __err${g});
+      }
     }`;
       })
       .join('\n');
+
     return `
     {
 ${runs}
@@ -344,7 +413,7 @@ Deno.serve(async (req) => {
         // program_output tests emit only this marker on a clean run, so
         // leaving it out here would report every passing whole-program
         // submission as a compile error.
-        l.startsWith('__OUTB64__:')
+        l.startsWith('__CHK__:')
     );
     const compileError: string | undefined =
       runResult?.compile?.stderr ||
@@ -394,17 +463,33 @@ Deno.serve(async (req) => {
       const { method_name, harness_type, test_cases } = method;
 
       if (harness_type === 'program_output') {
+        // Mirrors the grouping in buildMethodDriver: checks sharing an input
+        // share one run, and the excerpt/crash for that run is reported once
+        // against the group index rather than per check.
+        const groupOf = new Map<string, number>();
+        const seenStdin = new Map<string, number>();
         for (const tc of test_cases) {
-          const outPrefix = `__OUTB64__:${method_name}:${tc.id}:`;
-          const errPrefix = `__ERROR__:${method_name}:${tc.id}:`;
-          const outLine = lines.find((l) => l.startsWith(outPrefix));
+          const key = String(tc.stdin ?? '');
+          if (!seenStdin.has(key)) seenStdin.set(key, seenStdin.size);
+          groupOf.set(tc.id, seenStdin.get(key)!);
+        }
+
+        for (const tc of test_cases) {
+          const g = groupOf.get(tc.id);
+          const chkPrefix = `__CHK__:${method_name}:${tc.id}:`;
+          const excPrefix = `__EXC__:${method_name}:${g}:`;
+          const errPrefix = `__ERROR__:${method_name}:${g}:`;
+          const chkLine = lines.find((l) => l.startsWith(chkPrefix));
+          const excLine = lines.find((l) => l.startsWith(excPrefix));
           const errLine = lines.find((l) => l.startsWith(errPrefix));
 
+          // The verdict was decided in Java; this only unpacks it.
+          const passed = !!chkLine && chkLine.slice(chkPrefix.length).startsWith('1');
           let output = '';
-          if (outLine) {
+          if (excLine) {
             try {
               output = new TextDecoder().decode(
-                Uint8Array.from(atob(outLine.slice(outPrefix.length)), (c) => c.charCodeAt(0))
+                Uint8Array.from(atob(excLine.slice(excPrefix.length)), (c) => c.charCodeAt(0))
               );
             } catch {
               output = '';
@@ -412,26 +497,21 @@ Deno.serve(async (req) => {
           }
 
           const expected = String(tc.expected_output ?? '');
-          const haystack = tc.ignore_case ? output.toLowerCase() : output;
-          const needle = tc.ignore_case ? expected.toLowerCase() : expected;
-          // Deliberately a substring check, not equality: the teacher is
-          // checking that the right answer appears, and students are free to
-          // word the surrounding text however they like.
-          const passed = expected !== '' && haystack.includes(needle);
+          const asNumber = tc.check_kind === 'output_contains_number';
+          const wanted = asNumber ? `the number ${expected}` : `"${expected}"`;
 
           let detail: string;
           if (errLine) {
             const crashed = errLine.slice(errPrefix.length);
             detail = `Program crashed: ${crashed}`;
-          } else if (!outLine) {
+          } else if (!chkLine) {
             detail = 'The program did not run for this test.';
           } else if (passed) {
-            detail = `Found "${expected}" in the output`;
+            detail = asNumber ? `Found ${expected} in the output` : `Found "${expected}" in the output`;
           } else if (output.trim() === '') {
-            detail = `Expected the output to contain "${expected}", but the program printed nothing`;
+            detail = `Expected the output to contain ${wanted}, but the program printed nothing`;
           } else {
-            const shown = output.trim().length > 300 ? output.trim().slice(0, 300) + '…' : output.trim();
-            detail = `Expected the output to contain "${expected}", but got: ${shown}`;
+            detail = `Expected the output to contain ${wanted}, but got: ${output.trim()}`;
           }
 
           results.push({
