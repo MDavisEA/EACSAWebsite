@@ -6,14 +6,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, X, Trash2 } from "lucide-react";
 import TestCaseEditor, { newTestCase, generateKey } from "./TestCaseEditor";
 
-export function newMethod() {
+export function newMethod(harnessType = "property_check") {
   return {
     _uid: generateKey(),
     method_name: "",
-    harness_type: "program_output",
+    harness_type: harnessType,
     method_arg_types: [],
     trial_count: 30,
-    test_cases: [newTestCase("program_output")],
+    test_cases: [newTestCase(harnessType)],
   };
 }
 
@@ -111,8 +111,10 @@ export default function MethodEditor({ method, index, onUpdate, onRemove, canRem
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
+              {/* Whole-program checking is chosen at the top of the problem
+                  form, not per method - offering it here too would let a
+                  problem end up half in one mode and half in the other. */}
               <SelectContent>
-                <SelectItem value="program_output">Whole program (no methods needed)</SelectItem>
                 <SelectItem value="exact_match">Exact output match</SelectItem>
                 <SelectItem value="property_check">Randomized property check</SelectItem>
               </SelectContent>

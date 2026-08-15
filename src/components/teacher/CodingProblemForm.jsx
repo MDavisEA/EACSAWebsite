@@ -11,7 +11,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { a11yLightEditorTheme } from "@/lib/codeEditorThemes";
 import MethodEditor, { newMethod } from "./MethodEditor";
-import { generateKey } from "./TestCaseEditor";
+import TestCaseEditor, { newTestCase, generateKey } from "./TestCaseEditor";
 
 // Defined once at module scope, not inline in JSX - a new array reference
 // on every render makes @uiw/react-codemirror tear down and rebuild the
@@ -36,7 +36,18 @@ function defaultForm() {
     description_html: "",
     class_name: "Solution",
     starter_code: "",
-    methods: [newMethod()],
+    // New problems start in "check the output" mode: it is the one that works
+    // before students are writing methods at all.
+    methods: [
+      {
+        _uid: generateKey(),
+        method_name: "Program output",
+        harness_type: "program_output",
+        method_arg_types: [],
+        trial_count: 30,
+        test_cases: [newTestCase("program_output")],
+      },
+    ],
     course_id: null,
     due_date: "",
     max_test_runs: 5,
@@ -108,7 +119,85 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
     if (nameCounts[m.method_name.trim()] > 1) return "Duplicate name — each method needs a unique name.";
     return null;
   };
-  const hasMethodNameErrors = form.methods.some((m) => nameErrorFor(m));
+  // Two ways to grade, chosen at the top of the form. Underneath, both still
+  // store `methods[]` - "check the output" is just a single group the teacher
+  // never sees, so the word "method" never appears for a problem that has
+  // none. Derived rather than stored so existing problems classify correctly
+  // without a migration.
+  const gradingMode =
+    form.methods.length > 0 && form.methods.every((m) => m.harness_type === "program_output")
+      ? "output"
+      : "methods";
+
+  const OUTPUT_GROUP_NAME = "Program output";
+  const outputTestCases = gradingMode === "output" ? form.methods[0]?.test_cases || [] : [];
+
+  const handleGradingModeChange = (mode) => {
+    if (mode === gradingMode) return;
+    // Only warn if there is something real to lose. A brand-new problem starts
+    // with one blank check, and prompting about that just trains people to
+    // click through the warning that actually matters.
+    const hasWork = form.methods.some(
+      (m) =>
+        m.method_name?.trim() && m.method_name.trim() !== OUTPUT_GROUP_NAME
+          ? true
+          : (m.test_cases || []).some(
+              (tc) =>
+                tc.label?.trim() ||
+                tc.id?.trim() ||
+                tc.stdin?.trim() ||
+                tc.expected_output?.trim()
+            )
+    );
+    if (hasWork) {
+      const ok = window.confirm(
+        "Switching how this is graded will clear the checks you have set up, since they work differently. Continue?"
+      );
+      if (!ok) return;
+    }
+    if (mode === "output") {
+      updateField("methods", [
+        {
+          _uid: generateKey(),
+          method_name: OUTPUT_GROUP_NAME,
+          harness_type: "program_output",
+          method_arg_types: [],
+          trial_count: 30,
+          test_cases: [newTestCase("program_output")],
+        },
+      ]);
+    } else {
+      updateField("methods", [newMethod("property_check")]);
+    }
+  };
+
+  const setOutputTestCases = (next) =>
+    updateField("methods", [
+      { ...form.methods[0], method_name: OUTPUT_GROUP_NAME, test_cases: next },
+    ]);
+
+  const addOutputCheck = () => setOutputTestCases([...outputTestCases, newTestCase("program_output")]);
+  const removeOutputCheck = (idx) => {
+    if (outputTestCases.length <= 1) return;
+    setOutputTestCases(outputTestCases.filter((_, i) => i !== idx));
+  };
+  const updateOutputCheck = (idx, patch) =>
+    setOutputTestCases(outputTestCases.map((tc, i) => (i === idx ? { ...tc, ...patch } : tc)));
+
+  const outputIdCounts = outputTestCases.reduce((acc, tc) => {
+    acc[tc.id] = (acc[tc.id] || 0) + 1;
+    return acc;
+  }, {});
+  const outputIdErrorFor = (tc) => {
+    if (!tc.id) return "Required — used to match results back to this check.";
+    if (outputIdCounts[tc.id] > 1) return "Duplicate ID — each check needs a unique ID.";
+    return null;
+  };
+
+  // A problem graded on its output has no method names to validate, and the
+  // one group name is set by this form rather than typed.
+  const hasMethodNameErrors =
+    gradingMode === "methods" && form.methods.some((m) => nameErrorFor(m));
 
   const hasTestCaseIdErrors = form.methods.some((m) => {
     const idCounts = m.test_cases.reduce((acc, tc) => {
@@ -257,32 +346,85 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
       </div>
 
       <div className="border-t pt-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold">Methods</h3>
-            <p className="text-xs text-muted-foreground">
-              {pointsPossible} point{pointsPossible !== 1 ? "s" : ""} possible across {form.methods.length} method
-              {form.methods.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={addMethod}>
-            <Plus className="w-4 h-4 mr-1" /> Add Method
-          </Button>
+        <div className="space-y-2">
+          <Label>How should this be graded? *</Label>
+          <Select value={gradingMode} onValueChange={handleGradingModeChange}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="output">Check what the program prints</SelectItem>
+              <SelectItem value="methods">Test specific methods</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {gradingMode === "output"
+              ? "You give the program some input, and say what has to show up in what it prints. Use this when students write everything in main() — no methods required."
+              : "You call methods the student wrote and check what they return. Use this once students are writing their own methods."}
+          </p>
         </div>
 
-        <div className="space-y-4">
-          {form.methods.map((m, i) => (
-            <MethodEditor
-              key={m._uid}
-              method={m}
-              index={i}
-              onUpdate={(patch) => updateMethod(i, patch)}
-              onRemove={() => removeMethod(i)}
-              canRemove={form.methods.length > 1}
-              nameError={nameErrorFor(m)}
-            />
-          ))}
-        </div>
+        {gradingMode === "output" ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">What to check</h3>
+                <p className="text-xs text-muted-foreground">
+                  {pointsPossible} point{pointsPossible !== 1 ? "s" : ""} possible across{" "}
+                  {outputTestCases.length} check{outputTestCases.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={addOutputCheck}>
+                <Plus className="w-4 h-4 mr-1" /> Add Check
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {outputTestCases.map((tc, i) => (
+                <TestCaseEditor
+                  key={tc._uid}
+                  testCase={tc}
+                  index={i}
+                  harnessType="program_output"
+                  methodArgTypes={[]}
+                  onUpdate={(patch) => updateOutputCheck(i, patch)}
+                  onRemove={() => removeOutputCheck(i)}
+                  canRemove={outputTestCases.length > 1}
+                  idError={outputIdErrorFor(tc)}
+                />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">Methods</h3>
+                <p className="text-xs text-muted-foreground">
+                  {pointsPossible} point{pointsPossible !== 1 ? "s" : ""} possible across {form.methods.length} method
+                  {form.methods.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={addMethod}>
+                <Plus className="w-4 h-4 mr-1" /> Add Method
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {form.methods.map((m, i) => (
+                <MethodEditor
+                  key={m._uid}
+                  method={m}
+                  index={i}
+                  onUpdate={(patch) => updateMethod(i, patch)}
+                  onRemove={() => removeMethod(i)}
+                  canRemove={form.methods.length > 1}
+                  nameError={nameErrorFor(m)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-3 pt-2 border-t pt-4">
