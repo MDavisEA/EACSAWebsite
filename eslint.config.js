@@ -49,6 +49,11 @@ export default [
       // reports every imported component in the codebase as unused.
       "react/jsx-uses-vars": "error",
       "react/jsx-uses-react": "error",
+      // Using a component without importing it is a blank white screen at
+      // runtime, not a build failure - Vite bundles it happily and it only
+      // dies when that component renders. Plain `no-undef` does not cover
+      // JSX identifiers, so this rule is the only thing that catches it.
+      "react/jsx-no-undef": "error",
       "react/jsx-key": "error", // missing keys cause wrong re-render behavior
       "react/no-children-prop": "error",
       "no-unused-vars": "off", // superseded by unused-imports below
