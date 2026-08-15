@@ -59,6 +59,7 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
   // Relation checks compare two numbers found in the output to each other, so
   // there is no single expected value to type.
   const isRelationCheck = testCase.check_kind === "output_number_relation";
+  const isCountCheck = testCase.check_kind === "output_repeat_count";
 
   // Legacy checks predate generated ids; fill one in on first edit so an old
   // problem cannot be saved with a blank id.
@@ -141,6 +142,8 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
                     ? "number"
                     : testCase.check_kind === "output_number_relation"
                     ? "relation"
+                    : testCase.check_kind === "output_repeat_count"
+                    ? "count"
                     : "text"
                 }
                 onValueChange={(v) =>
@@ -150,9 +153,15 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
                         ? "output_contains_number"
                         : v === "relation"
                         ? "output_number_relation"
+                        : v === "count"
+                        ? "output_repeat_count"
                         : "output_contains",
-                    ...(v === "relation"
-                      ? { relation_op: testCase.relation_op || "times" }
+                    ...(v === "relation" ? { relation_op: testCase.relation_op || "times" } : {}),
+                    ...(v === "count"
+                      ? {
+                          count_op: testCase.count_op || "exactly",
+                          count_value: testCase.count_value ?? "",
+                        }
                       : {}),
                   })
                 }
@@ -163,6 +172,7 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
                 <SelectContent>
                   <SelectItem value="text">this text</SelectItem>
                   <SelectItem value="number">this number</SelectItem>
+                  <SelectItem value="count">this text, N times</SelectItem>
                   <SelectItem value="relation">math that checks out</SelectItem>
                 </SelectContent>
               </Select>
@@ -223,8 +233,37 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
               </div>
             ) : (
               <>
+                {isCountCheck && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-muted-foreground">appears</span>
+                    <Select
+                      value={testCase.count_op || "exactly"}
+                      onValueChange={(v) => onUpdate({ count_op: v })}
+                    >
+                      <SelectTrigger className="h-8 text-sm w-[104px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="exactly">exactly</SelectItem>
+                        <SelectItem value="at_least">at least</SelectItem>
+                        <SelectItem value="at_most">at most</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={testCase.count_value ?? ""}
+                      onChange={(e) => onUpdate({ count_value: e.target.value })}
+                      placeholder="5"
+                      className="h-8 text-sm w-20 text-center"
+                    />
+                    <span className="text-muted-foreground">times</span>
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
-                  {isNumberCheck
+                  {isCountCheck
+                    ? "Counts how many times this shows up. Good for checking a loop ran the right number of times — if they enter 5 days, a line from inside the loop should appear 5 times."
+                    : isNumberCheck
                     ? "Compared as a number, so 1500, 1500.0, 1500.00 and $1,500.00 all count. Use this for any answer they calculate — it stops correct work failing over formatting."
                     : "Passes as long as this appears somewhere in what they print, so they can word the rest however they like."}
                 </p>
@@ -306,6 +345,20 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
           )}
         </div>
       )}
+
+      <div className="space-y-1.5 pt-1 border-t">
+        <Label className="text-xs text-slate-500">If they fail this, tell them (optional)</Label>
+        <Input
+          value={testCase.fail_message ?? ""}
+          onChange={(e) => onUpdate({ fail_message: e.target.value })}
+          placeholder="e.g. Check that your loop runs once for each day they asked for."
+          className="h-8 text-sm"
+        />
+        <p className="text-xs text-muted-foreground">
+          Shown to the student only when this check fails — including on hidden checks, so point
+          them at the mistake without giving away the answer.
+        </p>
+      </div>
     </div>
   );
 }

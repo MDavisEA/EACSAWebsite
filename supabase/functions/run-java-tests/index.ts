@@ -24,6 +24,13 @@ interface TestCase {
   relation_b?: string;
   relation_op?: 'times' | 'divided' | 'plus' | 'minus';
   relation_value?: string;
+  // output_repeat_count only: how many times expected_output must appear.
+  // Checks that a loop ran the right number of times.
+  count_op?: 'exactly' | 'at_least' | 'at_most';
+  count_value?: string | number;
+  // Teacher-written note shown to the student only when this check fails -
+  // a nudge toward the mistake rather than the answer.
+  fail_message?: string;
 }
 
 interface Method {
@@ -152,7 +159,32 @@ function buildMethodDriver(className: string, method: Method): string {
                 ? `__a${v} - ${relValue}`
                 : `__a${v} * ${relValue}`;
 
-            const evaluate = isRelation
+            // Counting occurrences: the direct way to ask "did the loop run
+            // the right number of times". The count is reported back so a
+            // failure can say what it actually found, which is the difference
+            // between "your loop is wrong" and "your loop ran 1 time, not 5".
+            const isCount = tc.check_kind === 'output_repeat_count';
+            const countTarget = isCount ? parseLooseNumber(String(tc.count_value ?? '')) : null;
+            const countCmp =
+              tc.count_op === 'at_least' ? '>=' : tc.count_op === 'at_most' ? '<=' : '==';
+
+            const evaluate = isCount
+              ? countTarget === null || expected === ''
+                ? `boolean __ok${v} = false; int __n${v} = 0;`
+                : `int __n${v} = 0;
+      {
+        String __hay${v} = ${tc.ignore_case ? `__text${g}.toLowerCase()` : `__text${g}`};
+        String __ndl${v} = ${javaStringLiteral(tc.ignore_case ? expected.toLowerCase() : expected)};
+        int __from${v} = 0;
+        while (true) {
+          int __at${v} = __hay${v}.indexOf(__ndl${v}, __from${v});
+          if (__at${v} < 0) break;
+          __n${v}++;
+          __from${v} = __at${v} + __ndl${v}.length();
+        }
+      }
+      boolean __ok${v} = __n${v} ${countCmp} ${countTarget};`
+              : isRelation
               ? !relOk
                 ? `boolean __ok${v} = false;`
                 : `boolean __ok${v} = false;
@@ -194,7 +226,9 @@ function buildMethodDriver(className: string, method: Method): string {
                 : `boolean __ok${v} = __text${g}.contains(${javaStringLiteral(expected)});`;
 
             return `      ${evaluate}
-      System.out.println("__CHK__:${method_name}:${tc.id}:" + (__ok${v} ? "1" : "0"));`;
+      System.out.println("__CHK__:${method_name}:${tc.id}:" + (__ok${v} ? "1" : "0")${
+              isCount ? ` + ":" + __n${v}` : ''
+            });`;
           })
           .join('\n');
 
@@ -533,6 +567,10 @@ Deno.serve(async (req) => {
       points_earned: number;
       points_possible: number;
       detail: string;
+      // The teacher's own message for this check, shown only on failure.
+      // Kept separate from `detail` so a hidden test can show the hint
+      // without also revealing the machine-generated reason.
+      hint?: string;
     }[] = [];
 
     for (const method of problem.methods) {
@@ -559,8 +597,11 @@ Deno.serve(async (req) => {
           const excLine = lines.find((l) => l.startsWith(excPrefix));
           const errLine = lines.find((l) => l.startsWith(errPrefix));
 
-          // The verdict was decided in Java; this only unpacks it.
-          const passed = !!chkLine && chkLine.slice(chkPrefix.length).startsWith('1');
+          // The verdict was decided in Java; this only unpacks it. Count
+          // checks append what they actually found, after the verdict.
+          const chkRest = chkLine ? chkLine.slice(chkPrefix.length) : '';
+          const passed = chkRest.startsWith('1');
+          const foundCount = chkRest.includes(':') ? chkRest.split(':')[1] : null;
           let output = '';
           if (excLine) {
             try {
@@ -575,11 +616,17 @@ Deno.serve(async (req) => {
           const expected = String(tc.expected_output ?? '');
           const asNumber = tc.check_kind === 'output_contains_number';
           const isRelation = tc.check_kind === 'output_number_relation';
+          const isCount = tc.check_kind === 'output_repeat_count';
           const OP_WORD: Record<string, string> = {
             times: '×',
             divided: '÷',
             plus: '+',
             minus: '−',
+          };
+          const COUNT_WORD: Record<string, string> = {
+            exactly: 'exactly',
+            at_least: 'at least',
+            at_most: 'at most',
           };
           const wanted = isRelation
             ? `the number after "${tc.relation_b}" to equal the number after "${tc.relation_a}" ${
@@ -596,11 +643,19 @@ Deno.serve(async (req) => {
           } else if (!chkLine) {
             detail = 'The program did not run for this test.';
           } else if (passed) {
-            detail = isRelation
+            detail = isCount
+              ? `Found "${expected}" ${foundCount} time${foundCount === '1' ? '' : 's'}`
+              : isRelation
               ? 'The numbers add up on every line'
               : asNumber
               ? `Found ${expected} in the output`
               : `Found "${expected}" in the output`;
+          } else if (isCount) {
+            detail = `Expected "${expected}" ${COUNT_WORD[tc.count_op || 'exactly']} ${
+              tc.count_value
+            } time${String(tc.count_value) === '1' ? '' : 's'}, but found it ${foundCount ?? 0} time${
+              foundCount === '1' ? '' : 's'
+            }`;
           } else if (output.trim() === '') {
             detail = isRelation
               ? 'The program printed nothing to check.'
@@ -619,6 +674,7 @@ Deno.serve(async (req) => {
             passed,
             points_earned: passed ? tc.points : 0,
             points_possible: tc.points,
+            hint: tc.fail_message || undefined,
             // A hidden test must not reveal the expected answer, the input, or
             // the student's own output for that input.
             detail: tc.hidden ? (passed ? 'Passed' : 'Failed') : detail,
@@ -637,6 +693,7 @@ Deno.serve(async (req) => {
             passed,
             points_earned: passed ? tc.points : 0,
             points_possible: tc.points,
+            hint: tc.fail_message || undefined,
             detail: tc.hidden ? (passed ? 'Passed' : 'Failed') : detail,
           });
         }
@@ -659,6 +716,7 @@ Deno.serve(async (req) => {
             passed,
             points_earned: passed ? tc.points : 0,
             points_possible: tc.points,
+            hint: tc.fail_message || undefined,
             detail: tc.hidden
               ? passed
                 ? 'Passed'
@@ -705,7 +763,16 @@ Deno.serve(async (req) => {
     await admin.from('submissions').update(update).eq('id', submission_id);
 
     return json({
-      test_results: results.map((r) => (r.hidden ? { ...r, detail: r.passed ? 'Passed' : 'Failed' } : r)),
+      // A hidden check still never reveals the machine-generated reason, but
+      // it does show the teacher's own message - that text is authored, not
+      // derived from the answer key, and a hint the student cannot see is
+      // no use to anyone.
+      test_results: results.map(({ hint, ...r }) => {
+        if (r.hidden) {
+          return { ...r, detail: r.passed ? 'Passed' : hint || 'Failed' };
+        }
+        return !r.passed && hint ? { ...r, detail: `${r.detail} — ${hint}` } : r;
+      }),
       tests_passed,
       tests_total: results.length,
       autograde_score,
