@@ -17,6 +17,13 @@ interface TestCase {
   // "must contain" comparison ignores capitalization.
   stdin?: string;
   ignore_case?: boolean;
+  // output_number_relation only: require the number after relation_b to equal
+  // the number after relation_a, combined with relation_value. Lets a program
+  // whose numbers are random still be checked for doing the right arithmetic.
+  relation_a?: string;
+  relation_b?: string;
+  relation_op?: 'times' | 'divided' | 'plus' | 'minus';
+  relation_value?: string;
 }
 
 interface Method {
@@ -125,8 +132,49 @@ function buildMethodDriver(className: string, method: Method): string {
             const target = asNumber ? parseLooseNumber(expected) : null;
             const v = `${g}_${i}`;
 
-            const evaluate =
-              asNumber && target !== null
+            // "math that checks out": pull every number that follows label A
+            // and every number that follows label B, pair them up in order,
+            // and require b = a <op> value for each pair. This is what makes a
+            // program with random numbers gradeable - the values differ every
+            // run, but the relationship between them must not. Also fails a
+            // student who prints a plausible total without computing it, since
+            // then the pair counts or the arithmetic won't line up.
+            const isRelation = tc.check_kind === 'output_number_relation';
+            const relValue = isRelation ? parseLooseNumber(String(tc.relation_value ?? '')) : null;
+            const relOk =
+              isRelation && relValue !== null && String(tc.relation_a ?? '') && String(tc.relation_b ?? '');
+            const opExpr =
+              tc.relation_op === 'divided'
+                ? `__a${v} / ${relValue}`
+                : tc.relation_op === 'plus'
+                ? `__a${v} + ${relValue}`
+                : tc.relation_op === 'minus'
+                ? `__a${v} - ${relValue}`
+                : `__a${v} * ${relValue}`;
+
+            const evaluate = isRelation
+              ? !relOk
+                ? `boolean __ok${v} = false;`
+                : `boolean __ok${v} = false;
+      {
+        java.util.List<Double> __as${v} = __numsAfter(__text${g}, ${javaStringLiteral(
+                    String(tc.relation_a)
+                  )});
+        java.util.List<Double> __bs${v} = __numsAfter(__text${g}, ${javaStringLiteral(
+                    String(tc.relation_b)
+                  )});
+        if (!__as${v}.isEmpty() && __as${v}.size() == __bs${v}.size()) {
+          __ok${v} = true;
+          for (int __i${v} = 0; __i${v} < __as${v}.size(); __i${v}++) {
+            double __a${v} = __as${v}.get(__i${v});
+            double __b${v} = __bs${v}.get(__i${v});
+            // A cent of slack: students round money in different ways, and
+            // failing them for 11.969999999999999 vs 11.97 would be noise.
+            if (Math.abs(__b${v} - (${opExpr})) > 0.011) { __ok${v} = false; break; }
+          }
+        }
+      }`
+              : asNumber && target !== null
                 ? `boolean __ok${v} = false;
       java.util.regex.Matcher __m${v} = java.util.regex.Pattern
         .compile("-?\\\\$?\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?").matcher(__text${g});
@@ -231,6 +279,34 @@ function buildDriver(problem: CodingProblem): string {
   const blocks = problem.methods.map((m) => buildMethodDriver(problem.class_name, m)).join('\n');
   return `
 public class Main {
+  // Every number that appears immediately after a given label, in order.
+  // Backs the "math that checks out" relation check: the label locates the
+  // number ("You made $" -> 79.8) so two series can be paired up across a
+  // program that repeats the same block many times.
+  static java.util.List<Double> __numsAfter(String text, String label) {
+    java.util.List<Double> out = new java.util.ArrayList<Double>();
+    if (label.isEmpty()) return out;
+    java.util.regex.Pattern num = java.util.regex.Pattern.compile("-?\\\\$?\\\\d[\\\\d,]*(?:\\\\.\\\\d+)?");
+    int from = 0;
+    while (true) {
+      int at = text.indexOf(label, from);
+      if (at < 0) break;
+      int after = at + label.length();
+      // Stop at the end of the line so a label never picks up a number from
+      // the line below it.
+      int eol = text.indexOf('\\n', after);
+      if (eol < 0) eol = text.length();
+      java.util.regex.Matcher m = num.matcher(text.substring(after, eol));
+      if (m.find()) {
+        try {
+          out.add(Double.parseDouble(m.group().replaceAll("[$,]", "")));
+        } catch (Exception ignored) { }
+      }
+      from = after;
+    }
+    return out;
+  }
+
   public static void main(String[] args) {
 ${blocks}
   }
@@ -498,7 +574,20 @@ Deno.serve(async (req) => {
 
           const expected = String(tc.expected_output ?? '');
           const asNumber = tc.check_kind === 'output_contains_number';
-          const wanted = asNumber ? `the number ${expected}` : `"${expected}"`;
+          const isRelation = tc.check_kind === 'output_number_relation';
+          const OP_WORD: Record<string, string> = {
+            times: '×',
+            divided: '÷',
+            plus: '+',
+            minus: '−',
+          };
+          const wanted = isRelation
+            ? `the number after "${tc.relation_b}" to equal the number after "${tc.relation_a}" ${
+                OP_WORD[tc.relation_op || 'times']
+              } ${tc.relation_value}`
+            : asNumber
+            ? `the number ${expected}`
+            : `"${expected}"`;
 
           let detail: string;
           if (errLine) {
@@ -507,9 +596,17 @@ Deno.serve(async (req) => {
           } else if (!chkLine) {
             detail = 'The program did not run for this test.';
           } else if (passed) {
-            detail = asNumber ? `Found ${expected} in the output` : `Found "${expected}" in the output`;
+            detail = isRelation
+              ? 'The numbers add up on every line'
+              : asNumber
+              ? `Found ${expected} in the output`
+              : `Found "${expected}" in the output`;
           } else if (output.trim() === '') {
-            detail = `Expected the output to contain ${wanted}, but the program printed nothing`;
+            detail = isRelation
+              ? 'The program printed nothing to check.'
+              : `Expected the output to contain ${wanted}, but the program printed nothing`;
+          } else if (isRelation) {
+            detail = `Expected ${wanted}, but that did not hold. Output began: ${output.trim()}`;
           } else {
             detail = `Expected the output to contain ${wanted}, but got: ${output.trim()}`;
           }

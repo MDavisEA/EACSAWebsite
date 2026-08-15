@@ -76,16 +76,6 @@ export default function MethodEditor({ method, index, onUpdate, onRemove, canRem
 
   const pointsPossible = method.test_cases.reduce((sum, tc) => sum + (Number(tc.points) || 0), 0);
 
-  const idCounts = method.test_cases.reduce((acc, tc) => {
-    acc[tc.id] = (acc[tc.id] || 0) + 1;
-    return acc;
-  }, {});
-  const idErrorFor = (tc) => {
-    if (!tc.id) return "Required — used to match results back to this test.";
-    if (idCounts[tc.id] > 1) return "Duplicate ID — each test case needs a unique ID.";
-    return null;
-  };
-
   return (
     <div className="border rounded-lg p-4 space-y-4 bg-slate-50/50">
       <div className="flex items-start justify-between gap-3">
@@ -196,7 +186,6 @@ export default function MethodEditor({ method, index, onUpdate, onRemove, canRem
               onUpdate={(patch) => updateTestCase(i, patch)}
               onRemove={() => removeTestCase(i)}
               canRemove={method.test_cases.length > 1}
-              idError={idErrorFor(tc)}
             />
           ))}
         </div>

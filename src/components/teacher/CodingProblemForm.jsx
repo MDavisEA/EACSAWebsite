@@ -65,11 +65,19 @@ function toLocalInputValue(iso) {
 }
 
 function hydrateMethod(m) {
+  // Ids are generated and never shown, so a problem written before that -
+  // or one with a duplicate id - is repaired quietly on open. Validating
+  // instead would be a dead end: there is no longer a field to fix it in.
+  const seen = new Set();
   return {
     ...m,
     _uid: m._uid || generateKey(),
     method_arg_types: m.method_arg_types || [],
-    test_cases: (m.test_cases || []).map((tc) => (tc._uid ? tc : { ...tc, _uid: generateKey() })),
+    test_cases: (m.test_cases || []).map((tc) => {
+      const id = tc.id && !seen.has(tc.id) ? tc.id : `chk_${generateKey()}`;
+      seen.add(id);
+      return { ...tc, id, _uid: tc._uid || generateKey() };
+    }),
   };
 }
 
@@ -184,28 +192,10 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
   const updateOutputCheck = (idx, patch) =>
     setOutputTestCases(outputTestCases.map((tc, i) => (i === idx ? { ...tc, ...patch } : tc)));
 
-  const outputIdCounts = outputTestCases.reduce((acc, tc) => {
-    acc[tc.id] = (acc[tc.id] || 0) + 1;
-    return acc;
-  }, {});
-  const outputIdErrorFor = (tc) => {
-    if (!tc.id) return "Required — used to match results back to this check.";
-    if (outputIdCounts[tc.id] > 1) return "Duplicate ID — each check needs a unique ID.";
-    return null;
-  };
-
   // A problem graded on its output has no method names to validate, and the
   // one group name is set by this form rather than typed.
   const hasMethodNameErrors =
     gradingMode === "methods" && form.methods.some((m) => nameErrorFor(m));
-
-  const hasTestCaseIdErrors = form.methods.some((m) => {
-    const idCounts = m.test_cases.reduce((acc, tc) => {
-      acc[tc.id] = (acc[tc.id] || 0) + 1;
-      return acc;
-    }, {});
-    return m.test_cases.some((tc) => !tc.id || idCounts[tc.id] > 1);
-  });
 
   // The grader wraps student code in its own `public class Main`, so a problem
   // named Main would put two classes of that name in one file and every
@@ -218,7 +208,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
       : null;
 
   const isValid =
-    form.title.trim() && form.class_name.trim() && !classNameError && !hasMethodNameErrors && !hasTestCaseIdErrors;
+    form.title.trim() && form.class_name.trim() && !classNameError && !hasMethodNameErrors;
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -390,7 +380,6 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
                   onUpdate={(patch) => updateOutputCheck(i, patch)}
                   onRemove={() => removeOutputCheck(i)}
                   canRemove={outputTestCases.length > 1}
-                  idError={outputIdErrorFor(tc)}
                 />
               ))}
             </div>

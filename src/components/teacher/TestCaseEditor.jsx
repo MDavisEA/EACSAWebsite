@@ -33,7 +33,12 @@ export function generateKey() {
 }
 
 export function newTestCase(harnessType, methodArgCount = 0) {
-  const base = { _uid: generateKey(), id: "", label: "", hidden: false, points: 1 };
+  // The id is generated, never typed. It only exists to match a result back
+  // to the check that produced it, so it carries no meaning for the teacher -
+  // asking them to invent a unique string was busywork with a validation
+  // error attached. Generated rather than slugified from the label so that
+  // renaming a check can never collide with another one.
+  const base = { _uid: generateKey(), id: `chk_${generateKey()}`, label: "", hidden: false, points: 1 };
   if (harnessType === "exact_match") {
     return { ...base, check_kind: "exact_output", method_args: Array(methodArgCount).fill(""), expected_output: "" };
   }
@@ -47,13 +52,18 @@ export function newTestCase(harnessType, methodArgCount = 0) {
 // field - some changes here (label+id, check_kind+param) touch two fields
 // at once, and a caller reading test-case state from a prop (not local
 // React state) can't safely absorb two separate onUpdate calls in a row.
-export default function TestCaseEditor({ testCase, index, harnessType, methodArgTypes, onUpdate, onRemove, canRemove, idError }) {
+export default function TestCaseEditor({ testCase, index, harnessType, methodArgTypes, onUpdate, onRemove, canRemove }) {
   // Whole-program checks compare either raw text or the value as a number.
   // Case-insensitivity is meaningless for a number, so that toggle hides.
   const isNumberCheck = testCase.check_kind === "output_contains_number";
+  // Relation checks compare two numbers found in the output to each other, so
+  // there is no single expected value to type.
+  const isRelationCheck = testCase.check_kind === "output_number_relation";
 
+  // Legacy checks predate generated ids; fill one in on first edit so an old
+  // problem cannot be saved with a blank id.
   const handleLabelChange = (value) => {
-    onUpdate(testCase.id ? { label: value } : { label: value, id: slugify(value) });
+    onUpdate(testCase.id ? { label: value } : { label: value, id: `chk_${generateKey()}` });
   };
 
   const handleCheckKindChange = (kind) => {
@@ -84,15 +94,6 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">Test ID</Label>
-            <Input
-              value={testCase.id}
-              onChange={(e) => onUpdate({ id: slugify(e.target.value) })}
-              placeholder="unique_id"
-              className={`h-8 text-sm w-36 font-mono ${idError ? "border-destructive" : ""}`}
-            />
-          </div>
-          <div className="space-y-1">
             <Label className="text-xs text-slate-500">Points</Label>
             <Input
               type="number"
@@ -116,7 +117,6 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
           </Button>
         )}
       </div>
-      {idError && <p className="text-xs text-destructive">{idError}</p>}
 
       {harnessType === "program_output" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
@@ -136,10 +136,24 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
             <Label className="text-xs text-slate-500">Output must contain</Label>
             <div className="flex gap-2">
               <Select
-                value={testCase.check_kind === "output_contains_number" ? "number" : "text"}
+                value={
+                  testCase.check_kind === "output_contains_number"
+                    ? "number"
+                    : testCase.check_kind === "output_number_relation"
+                    ? "relation"
+                    : "text"
+                }
                 onValueChange={(v) =>
                   onUpdate({
-                    check_kind: v === "number" ? "output_contains_number" : "output_contains",
+                    check_kind:
+                      v === "number"
+                        ? "output_contains_number"
+                        : v === "relation"
+                        ? "output_number_relation"
+                        : "output_contains",
+                    ...(v === "relation"
+                      ? { relation_op: testCase.relation_op || "times" }
+                      : {}),
                   })
                 }
               >
@@ -149,29 +163,82 @@ export default function TestCaseEditor({ testCase, index, harnessType, methodArg
                 <SelectContent>
                   <SelectItem value="text">this text</SelectItem>
                   <SelectItem value="number">this number</SelectItem>
+                  <SelectItem value="relation">math that checks out</SelectItem>
                 </SelectContent>
               </Select>
-              <Input
-                value={testCase.expected_output ?? ""}
-                onChange={(e) => onUpdate({ expected_output: e.target.value })}
-                placeholder={isNumberCheck ? "e.g. 1500.00" : "e.g. Total"}
-                className="h-8 text-sm font-mono"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {isNumberCheck
-                ? "Compared as a number, so 1500, 1500.0, 1500.00 and $1,500.00 all count. Use this for any answer they calculate — it stops correct work failing over formatting."
-                : "Passes as long as this appears somewhere in what they print, so they can word the rest however they like."}
-            </p>
-            {!isNumberCheck && (
-              <div className="flex items-center gap-1.5 pt-1">
-                <Switch
-                  checked={!!testCase.ignore_case}
-                  onCheckedChange={(v) => onUpdate({ ignore_case: v })}
-                  className="scale-90"
+              {!isRelationCheck && (
+                <Input
+                  value={testCase.expected_output ?? ""}
+                  onChange={(e) => onUpdate({ expected_output: e.target.value })}
+                  placeholder={isNumberCheck ? "e.g. 1500.00" : "e.g. Total"}
+                  className="h-8 text-sm font-mono"
                 />
-                <Label className="text-xs text-slate-500">Ignore capitalization</Label>
+              )}
+            </div>
+
+            {isRelationCheck ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                  <span className="text-muted-foreground">the number after</span>
+                  <Input
+                    value={testCase.relation_b ?? ""}
+                    onChange={(e) => onUpdate({ relation_b: e.target.value })}
+                    placeholder="You made $"
+                    className="h-8 text-sm font-mono w-40"
+                  />
+                  <span className="text-muted-foreground">=</span>
+                  <span className="text-muted-foreground">the number after</span>
+                  <Input
+                    value={testCase.relation_a ?? ""}
+                    onChange={(e) => onUpdate({ relation_a: e.target.value })}
+                    placeholder="Today you sold"
+                    className="h-8 text-sm font-mono w-40"
+                  />
+                  <Select
+                    value={testCase.relation_op || "times"}
+                    onValueChange={(v) => onUpdate({ relation_op: v })}
+                  >
+                    <SelectTrigger className="h-8 text-sm w-[92px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="times">×</SelectItem>
+                      <SelectItem value="divided">÷</SelectItem>
+                      <SelectItem value="plus">+</SelectItem>
+                      <SelectItem value="minus">−</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={testCase.relation_value ?? ""}
+                    onChange={(e) => onUpdate({ relation_value: e.target.value })}
+                    placeholder="3.99"
+                    className="h-8 text-sm font-mono w-24"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  For programs with random numbers in them. It doesn&rsquo;t care what the numbers
+                  are — only that they add up, on every line. A student who prints a total without
+                  actually computing it fails this.
+                </p>
               </div>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  {isNumberCheck
+                    ? "Compared as a number, so 1500, 1500.0, 1500.00 and $1,500.00 all count. Use this for any answer they calculate — it stops correct work failing over formatting."
+                    : "Passes as long as this appears somewhere in what they print, so they can word the rest however they like."}
+                </p>
+                {!isNumberCheck && (
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <Switch
+                      checked={!!testCase.ignore_case}
+                      onCheckedChange={(v) => onUpdate({ ignore_case: v })}
+                      className="scale-90"
+                    />
+                    <Label className="text-xs text-slate-500">Ignore capitalization</Label>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
