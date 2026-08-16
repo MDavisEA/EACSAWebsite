@@ -42,6 +42,7 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
           ...initial,
           due_date: toLocalInputValue(initial.due_date),
           course_id: initial.course_id ?? null,
+          unit_id: initial.unit_id ?? null,
           questions: initial.questions.map((q) => ({
             ...q,
             prompt_images: q.prompt_images || [],
@@ -56,6 +57,7 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
           time_limit_minutes: null,
           due_date: "",
           course_id: null,
+    unit_id: null,
           is_active: true,
           reference_sheet_url: "",
         }
@@ -93,11 +95,14 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
     e.target.value = "";
   };
 
+  const canSave = form.title.trim() && form.course_id;
+
   const handleSubmit = () => {
-    if (!form.title.trim()) return;
+    if (!canSave) return;
     const normalized = {
       ...form,
       course_id: form.course_id || null,
+      unit_id: form.unit_id || null,
       due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
       questions: form.questions.map((q) => ({
         ...q,
@@ -153,16 +158,15 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Course</Label>
+          <Label>Course *</Label>
           <Select
-            value={form.course_id || "none"}
-            onValueChange={(v) => updateField("course_id", v === "none" ? null : v)}
+            value={form.course_id || ""}
+            onValueChange={(v) => updateField("course_id", v)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="No course" />
+              <SelectValue placeholder="Choose a course" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">No course</SelectItem>
               {courses.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.name}
@@ -171,7 +175,29 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Leave as No course to show this to every student.
+            Which class this belongs to. Only students on that roster will see it.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Unit *</Label>
+          <Select
+            value={form.unit_id || ""}
+            onValueChange={(v) => updateField("unit_id", v)}
+            disabled={!form.course_id}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={form.course_id ? "Choose a unit" : "Pick a course first"} />
+            </SelectTrigger>
+            <SelectContent>
+              {(courses.find((c) => c.id === form.course_id)?.units || []).map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Change this later to move it to another unit.
           </p>
         </div>
         <div className="space-y-2">
@@ -219,7 +245,7 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button onClick={handleSubmit} disabled={!form.title.trim()}>
+        <Button onClick={handleSubmit} disabled={!canSave}>
           {initial ? "Save Changes" : "Create Assignment"}
         </Button>
       </div>

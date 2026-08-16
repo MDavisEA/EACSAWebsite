@@ -49,6 +49,7 @@ function defaultForm() {
       },
     ],
     course_id: null,
+    unit_id: null,
     due_date: "",
     max_test_runs: 5,
     is_active: true,
@@ -208,7 +209,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
       : null;
 
   const isValid =
-    form.title.trim() && form.class_name.trim() && !classNameError && !hasMethodNameErrors;
+    form.title.trim() && form.class_name.trim() && form.course_id && !classNameError && !hasMethodNameErrors;
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -216,6 +217,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
       ...form,
       language: "java",
       course_id: form.course_id || null,
+      unit_id: form.unit_id || null,
       due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
       methods: form.methods.map(({ _uid, ...m }) => ({
         ...m,
@@ -257,16 +259,15 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Course</Label>
+          <Label>Course *</Label>
           <Select
-            value={form.course_id || "none"}
-            onValueChange={(v) => updateField("course_id", v === "none" ? null : v)}
+            value={form.course_id || ""}
+            onValueChange={(v) => updateField("course_id", v)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="No course" />
+              <SelectValue placeholder="Choose a course" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">No course</SelectItem>
               {courses.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.name}
@@ -275,7 +276,29 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Leave as No course to show this to every student.
+            Which class this belongs to. Only students on that roster will see it.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Unit *</Label>
+          <Select
+            value={form.unit_id || ""}
+            onValueChange={(v) => updateField("unit_id", v)}
+            disabled={!form.course_id}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={form.course_id ? "Choose a unit" : "Pick a course first"} />
+            </SelectTrigger>
+            <SelectContent>
+              {(courses.find((c) => c.id === form.course_id)?.units || []).map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Change this later to move it to another unit.
           </p>
         </div>
         <div className="space-y-2">

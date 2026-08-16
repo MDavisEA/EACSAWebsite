@@ -48,6 +48,7 @@ function defaultForm() {
     starter_files: [],
     google_doc_url: "",
     course_id: null,
+    unit_id: null,
     due_date: "",
     review_prompt: DEFAULT_REVIEW_PROMPT,
     is_active: true,
@@ -91,7 +92,7 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
 
   const updateField = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
-  const isValid = form.title.trim();
+  const isValid = form.title.trim() && form.course_id;
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -100,6 +101,7 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
       ...form,
       due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
       course_id: form.course_id || null,
+      unit_id: form.unit_id || null,
     });
   };
 
@@ -155,16 +157,15 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Course</Label>
+          <Label>Course *</Label>
           <Select
-            value={form.course_id || "none"}
-            onValueChange={(v) => updateField("course_id", v === "none" ? null : v)}
+            value={form.course_id || ""}
+            onValueChange={(v) => updateField("course_id", v)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="No course" />
+              <SelectValue placeholder="Choose a course" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">No course</SelectItem>
               {courses.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.name}
@@ -173,9 +174,29 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            {courses.length === 0
-              ? "Add a course under the Courses tab to track who has not turned in."
-              : "Needed to see who has not turned in."}
+            Which class this belongs to. Only students on that roster will see it.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Unit *</Label>
+          <Select
+            value={form.unit_id || ""}
+            onValueChange={(v) => updateField("unit_id", v)}
+            disabled={!form.course_id}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={form.course_id ? "Choose a unit" : "Pick a course first"} />
+            </SelectTrigger>
+            <SelectContent>
+              {(courses.find((c) => c.id === form.course_id)?.units || []).map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Change this later to move it to another unit.
           </p>
         </div>
         <div className="space-y-2">

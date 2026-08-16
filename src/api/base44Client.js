@@ -415,6 +415,27 @@ const Course = {
     const data = await callFunction('courses', { action: 'replaceRoster', course_id, students });
     return data.results;
   },
+
+  // Units group work inside a course; sections record which period a student
+  // is in. Both come back on Course.list(), so these are only the writes.
+  async createUnit(course_id, name) {
+    return (await callFunction('courses', { action: 'createUnit', course_id, name })).result;
+  },
+  async renameUnit(id, name) {
+    return (await callFunction('courses', { action: 'updateUnit', id, name })).result;
+  },
+  async deleteUnit(id) {
+    await callFunction('courses', { action: 'deleteUnit', id });
+  },
+  async createSection(course_id, name) {
+    return (await callFunction('courses', { action: 'createSection', course_id, name })).result;
+  },
+  async renameSection(id, name) {
+    return (await callFunction('courses', { action: 'updateSection', id, name })).result;
+  },
+  async deleteSection(id) {
+    await callFunction('courses', { action: 'deleteSection', id });
+  },
 };
 
 // ============================================================================
