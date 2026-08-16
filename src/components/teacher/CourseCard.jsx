@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Pencil, Trash2, Users, ChevronDown, ChevronUp, Upload, Loader2, Mail, AlertTriangle, Check } from "lucide-react";
 import { parseRosterCsv } from "@/lib/rosterCsv";
+import NamedListEditor from "./NamedListEditor";
 
 export default function CourseCard({ course, onEdit, onDelete, onRosterChange }) {
   const [expanded, setExpanded] = useState(false);
@@ -95,11 +96,32 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange })
             className="w-full flex items-center justify-center gap-1 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-slate-50/50 transition-colors"
           >
             <Users className="w-4 h-4" />
-            View Roster
+            Units, Sections &amp; Roster
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
           {expanded && (
-            <div className="px-5 pb-5 border-t pt-4">
+            <div className="px-5 pb-5 border-t pt-4 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <NamedListEditor
+                  title="Units"
+                  hint="How work is grouped in this course."
+                  items={course.units || []}
+                  emptyText="No units yet — add one before filing work."
+                  onCreate={async (name) => { await base44.entities.Course.createUnit(course.id, name); onRosterChange?.(); }}
+                  onRename={async (id, name) => { await base44.entities.Course.renameUnit(id, name); onRosterChange?.(); }}
+                  onDelete={async (id) => { await base44.entities.Course.deleteUnit(id); onRosterChange?.(); }}
+                />
+                <NamedListEditor
+                  title="Sections"
+                  hint="Which period a student is in. Every section gets the same work."
+                  items={course.sections || []}
+                  emptyText="No sections yet — optional unless you want to tell your periods apart."
+                  onCreate={async (name) => { await base44.entities.Course.createSection(course.id, name); onRosterChange?.(); }}
+                  onRename={async (id, name) => { await base44.entities.Course.renameSection(id, name); onRosterChange?.(); }}
+                  onDelete={async (id) => { await base44.entities.Course.deleteSection(id); onRosterChange?.(); }}
+                />
+              </div>
+
               {loadingRoster ? (
                 <p className="text-sm text-muted-foreground text-center py-4">Loading roster...</p>
               ) : roster.length === 0 ? (
