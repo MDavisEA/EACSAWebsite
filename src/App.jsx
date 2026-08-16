@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
 import StudentDashboard from '@/pages/StudentDashboard';
+import SetPassword from '@/pages/SetPassword';
 import StudentEntry from '@/pages/StudentEntry';
 import ExamPage from '@/pages/ExamPage';
 import SubmittedPage from '@/pages/SubmittedPage';
@@ -46,6 +47,8 @@ const AuthenticatedApp = () => {
       <Route path="/exam" element={<ExamPage />} />
       <Route path="/submitted" element={<SubmittedPage />} />
       <Route path="/teacher" element={<TeacherDashboard />} />
+      {/* Where an invited teacher lands from their email to choose a password. */}
+      <Route path="/set-password" element={<SetPassword />} />
       <Route path="/my-score" element={<MyScore />} />
       {/* Kept as a redirect: the dashboard now shows status and scores
           inline, so My Work no longer needs its own page - but students may

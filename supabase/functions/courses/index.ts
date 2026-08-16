@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
     // re-uploading a corrected CSV is the obvious way to fix a typo instead
     // of leaving a duplicate behind.
     if (action === 'replaceRoster') {
-      const { course_id, students } = body;
+      const { course_id, students, section_id } = body;
       if (!course_id || !Array.isArray(students)) {
         return json({ error: 'course_id and students are required' }, 400);
       }
@@ -172,13 +172,20 @@ Deno.serve(async (req) => {
           course_id,
           student_name: (s.student_name || '').trim(),
           email: (s.email || '').trim() || null,
-          section_id: s.section_id || null,
+          section_id: section_id || s.section_id || null,
         }))
         .filter((s) => s.student_name);
 
       if (rows.length === 0) return json({ error: 'No usable rows found - every line needs at least a name.' }, 400);
 
-      const { error: delErr } = await admin.from('roster_students').delete().eq('course_id', course_id);
+      // Replacing rather than appending is what makes re-uploading a corrected
+      // CSV the obvious fix for a typo. But when a section is named, only THAT
+      // section is replaced - otherwise uploading period 2 would silently
+      // delete period 1, which is exactly what a teacher doing one class at a
+      // time would least expect.
+      let del = admin.from('roster_students').delete().eq('course_id', course_id);
+      del = section_id ? del.eq('section_id', section_id) : del;
+      const { error: delErr } = await del;
       if (delErr) return json({ error: delErr.message }, 500);
 
       const { data, error } = await admin.from('roster_students').insert(rows).select();

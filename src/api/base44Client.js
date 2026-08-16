@@ -411,8 +411,15 @@ const Course = {
 
   // Replaces the whole roster rather than appending, so re-uploading a
   // corrected CSV is the natural way to fix a mistake.
-  async replaceRoster(course_id, students) {
-    const data = await callFunction('courses', { action: 'replaceRoster', course_id, students });
+  // section_id scopes the replace to one period; without it the whole roster
+  // is replaced.
+  async replaceRoster(course_id, students, section_id = null) {
+    const data = await callFunction('courses', {
+      action: 'replaceRoster',
+      course_id,
+      students,
+      section_id,
+    });
     return data.results;
   },
 
@@ -435,6 +442,27 @@ const Course = {
   },
   async deleteSection(id) {
     await callFunction('courses', { action: 'deleteSection', id });
+  },
+};
+
+// ============================================================================
+// entities.Teacher - colleagues on this site. Inviting one is how a second
+// teacher gets an account; they set their own password from the emailed link.
+// ============================================================================
+
+const Teacher = {
+  async list() {
+    return (await callFunction('teachers', { action: 'list' })).results;
+  },
+
+  async invite({ email, display_name, redirect_to }) {
+    const data = await callFunction('teachers', {
+      action: 'invite',
+      email,
+      display_name,
+      redirect_to,
+    });
+    return data.result;
   },
 };
 
@@ -524,7 +552,7 @@ const functions = {
 };
 
 export const base44 = {
-  entities: { Assignment, Submission, CodingProblem, Project, Course, StudentWork },
+  entities: { Assignment, Submission, CodingProblem, Project, Course, StudentWork, Teacher },
   auth,
   integrations,
   functions,

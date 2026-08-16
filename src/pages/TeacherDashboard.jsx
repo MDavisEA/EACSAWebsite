@@ -17,6 +17,7 @@ import ProjectForm from "@/components/teacher/ProjectForm";
 import ProjectCard from "@/components/teacher/ProjectCard";
 import CourseForm from "@/components/teacher/CourseForm";
 import CourseCard from "@/components/teacher/CourseCard";
+import TeachersPanel from "@/components/teacher/TeachersPanel";
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
@@ -422,6 +423,7 @@ export default function TeacherDashboard() {
               )}
             </TabsTrigger>
             <TabsTrigger value="courses">Courses</TabsTrigger>
+            <TabsTrigger value="teachers">Teachers</TabsTrigger>
           </TabsList>
 
           <TabsContent value="assignments">
@@ -552,6 +554,10 @@ export default function TeacherDashboard() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="teachers">
+            <TeachersPanel />
           </TabsContent>
         </Tabs>
       </main>

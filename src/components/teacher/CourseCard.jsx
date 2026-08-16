@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Pencil, Trash2, Users, ChevronDown, ChevronUp, Upload, Loader2, Mail, AlertTriangle, Check } from "lucide-react";
 import { parseRosterCsv } from "@/lib/rosterCsv";
 import NamedListEditor from "./NamedListEditor";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function CourseCard({ course, onEdit, onDelete, onRosterChange }) {
   const [expanded, setExpanded] = useState(false);
@@ -19,6 +21,7 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange })
   const [csvText, setCsvText] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [uploadSectionId, setUploadSectionId] = useState("none");
   const csvFileInputRef = useRef(null);
 
   useEffect(() => {
@@ -48,7 +51,11 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange })
     setUploading(true);
     setUploadError("");
     try {
-      await base44.entities.Course.replaceRoster(course.id, parsed);
+      await base44.entities.Course.replaceRoster(
+        course.id,
+        parsed,
+        uploadSectionId === "none" ? null : uploadSectionId
+      );
       setShowUpload(false);
       setCsvText("");
       loadRoster();
@@ -195,6 +202,29 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange })
               </Button>
               <input ref={csvFileInputRef} type="file" accept=".csv" className="hidden" onChange={handleCsvFile} />
             </div>
+
+            {(course.sections || []).length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Put these students in</Label>
+                <Select value={uploadSectionId} onValueChange={setUploadSectionId}>
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="No section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No section</SelectItem>
+                    {(course.sections || []).map((sec) => (
+                      <SelectItem key={sec.id} value={sec.id}>
+                        {sec.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Choosing a section replaces just that period, so you can upload one class at a
+                  time. Leaving it on No section replaces the entire roster.
+                </p>
+              </div>
+            )}
 
             {parsed.length > 0 && (
               <div className="text-xs space-y-1 border rounded-lg p-3 bg-slate-50/50">
