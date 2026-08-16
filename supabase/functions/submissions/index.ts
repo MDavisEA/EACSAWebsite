@@ -1,5 +1,5 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
-import { createAdminClient, getTeacherFromRequest } from '../_shared/teacherAuth.ts';
+import { createAdminClient, getTeacherFromRequest, teacherCourseIds, teacherOwnsRow } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { extractGistId, fetchGistJavaFiles, fetchGistUpdatedAt } from '../_shared/gist.ts';
 
@@ -305,7 +305,47 @@ Deno.serve(async (req) => {
     const teacher = await getTeacherFromRequest(req, admin);
     if (!teacher) return json({ error: 'Unauthorized' }, 401);
 
+    // Submissions are owned transitively: a submission belongs to a piece of
+    // work, which belongs to a course, which belongs to a teacher. These two
+    // resolve that chain so no action below can touch another teacher's
+    // students. `myWorkIds` is one round trip and gets reused by every action.
+    const myCourses = await teacherCourseIds(admin, teacher.id);
+    const myWorkIds = async () => {
+      if (myCourses.length === 0) return { assignments: [], coding: [], projects: [] };
+      const [a, c, p] = await Promise.all([
+        admin.from('assignments').select('id').in('course_id', myCourses),
+        admin.from('coding_problems').select('id').in('course_id', myCourses),
+        admin.from('projects').select('id').in('course_id', myCourses),
+      ]);
+      return {
+        assignments: (a.data || []).map((r: Record<string, any>) => r.id),
+        coding: (c.data || []).map((r: Record<string, any>) => r.id),
+        projects: (p.data || []).map((r: Record<string, any>) => r.id),
+      };
+    };
+    const ownsSubmissionRow = (s: Record<string, any>, ids: Awaited<ReturnType<typeof myWorkIds>>) =>
+      (s.assignment_id && ids.assignments.includes(s.assignment_id)) ||
+      (s.coding_problem_id && ids.coding.includes(s.coding_problem_id)) ||
+      (s.project_id && ids.projects.includes(s.project_id));
+    const ownsSubmissionId = async (submissionId: string) => {
+      const { data } = await admin
+        .from('submissions')
+        .select('assignment_id, coding_problem_id, project_id')
+        .eq('id', submissionId)
+        .maybeSingle();
+      if (!data) return false;
+      return !!ownsSubmissionRow(data, await myWorkIds());
+    };
+
     if (action === 'listForAssignment') {
+      const ids = await myWorkIds();
+      const requested = body.assignment_id || body.coding_problem_id || body.project_id;
+      const allowed =
+        (body.assignment_id && ids.assignments.includes(body.assignment_id)) ||
+        (body.coding_problem_id && ids.coding.includes(body.coding_problem_id)) ||
+        (body.project_id && ids.projects.includes(body.project_id));
+      if (!requested || !allowed) return json({ results: [] });
+
       const column = body.sort?.column || 'submitted_at';
       const ascending = body.sort?.ascending ?? false;
       let query = admin.from('submissions').select('*').eq('submitted', true);
@@ -319,9 +359,10 @@ Deno.serve(async (req) => {
 
     if (action === 'listAllSubmitted') {
       // used for the "generate missing access codes" backfill
+      const ids = await myWorkIds();
       const { data, error } = await admin.from('submissions').select('*').eq('submitted', true);
       if (error) return json({ error: error.message }, 500);
-      return json({ results: data || [] });
+      return json({ results: (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids)) });
     }
 
     // How much work is sitting there waiting on the teacher. Counted here
@@ -329,16 +370,18 @@ Deno.serve(async (req) => {
     // client-side. Coding problems are deliberately absent: they are graded
     // automatically, so they can never be waiting on a human.
     if (action === 'gradingCounts') {
+      const ids = await myWorkIds();
       const { data, error } = await admin
         .from('submissions')
         .select('assignment_id, project_id, score')
         .eq('submitted', true)
         .is('score', null);
       if (error) return json({ error: error.message }, 500);
+      const owned = (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids));
 
       const byAssignment: Record<string, number> = {};
       const byProject: Record<string, number> = {};
-      for (const row of data || []) {
+      for (const row of owned) {
         if (row.assignment_id) byAssignment[row.assignment_id] = (byAssignment[row.assignment_id] || 0) + 1;
         else if (row.project_id) byProject[row.project_id] = (byProject[row.project_id] || 0) + 1;
       }
@@ -346,6 +389,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'saveGrade') {
+      if (!(await ownsSubmissionId(body.id))) return json({ error: 'Not found' }, 404);
       const update: Record<string, unknown> = {};
       if (body.score !== undefined) update.score = body.score;
       if (body.question_scores !== undefined) update.question_scores = body.question_scores;
@@ -365,6 +409,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'setAccessCode') {
+      if (!(await ownsSubmissionId(body.id))) return json({ error: 'Not found' }, 404);
       const { data, error } = await admin
         .from('submissions')
         .update({ access_code: body.access_code })
@@ -376,6 +421,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'delete') {
+      if (!(await ownsSubmissionId(body.id))) return json({ error: 'Not found' }, 404);
       const { error } = await admin.from('submissions').delete().eq('id', body.submission_id);
       if (error) return json({ error: error.message }, 500);
       return json({ success: true });
@@ -389,6 +435,9 @@ Deno.serve(async (req) => {
     if (action === 'recheckGists') {
       const { project_id } = body;
       if (!project_id) return json({ error: 'project_id is required' }, 400);
+      if (!(await teacherOwnsRow(admin, teacher.id, 'projects', project_id))) {
+        return json({ error: 'Not found' }, 404);
+      }
 
       const { data: subs, error } = await admin
         .from('submissions')
@@ -449,6 +498,9 @@ Deno.serve(async (req) => {
       const { project_id, rows } = body;
       if (!project_id || !Array.isArray(rows)) {
         return json({ error: 'project_id and rows are required' }, 400);
+      }
+      if (!(await teacherOwnsRow(admin, teacher.id, 'projects', project_id))) {
+        return json({ error: 'Not found' }, 404);
       }
       const results: { student_name: string; status: 'ok' | 'error'; error?: string }[] = [];
       for (const row of rows) {

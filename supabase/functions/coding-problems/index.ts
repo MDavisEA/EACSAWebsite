@@ -1,5 +1,11 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
-import { createAdminClient, getTeacherFromRequest } from '../_shared/teacherAuth.ts';
+import {
+  createAdminClient,
+  getTeacherFromRequest,
+  teacherCourseIds,
+  teacherOwnsCourse,
+  teacherOwnsRow,
+} from '../_shared/teacherAuth.ts';
 
 // Students get starter code, description, and the LABELS of test cases
 // (so they know what's being checked) but never expected_output, method_args,
@@ -67,7 +73,13 @@ Deno.serve(async (req) => {
     // is byte-for-byte what a student would receive - including the hiding of
     // expected outputs and hidden-test details. Unlike getActive this ignores
     // is_active, because previewing is most useful before publishing.
+    // Previewing is read-only and leaks nothing an enrolled student could not
+    // already see, but it is still scoped: a teacher has no business reading
+    // another teacher's unpublished problem.
     if (action === 'previewAsStudent') {
+      if (!(await teacherOwnsRow(admin, teacher.id, 'coding_problems', body.id))) {
+        return json({ error: 'Not found' }, 404);
+      }
       const { data, error } = await admin
         .from('coding_problems')
         .select('*')
@@ -78,21 +90,81 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'list') {
+      const mine = await teacherCourseIds(admin, teacher.id);
+      if (mine.length === 0) return json({ results: [] });
       const { data, error } = await admin
         .from('coding_problems')
         .select('*')
+        .in('course_id', mine)
         .order('created_at', { ascending: false });
       if (error) return json({ error: error.message }, 500);
       return json({ results: data || [] });
     }
 
+    // Read-only view of what colleagues have built, for copying. Deliberately
+    // not filtered to the caller's own courses - that is the point - but it
+    // returns no student data and nothing here can be edited in place.
+    if (action === 'listShared') {
+      const mine = await teacherCourseIds(admin, teacher.id);
+      const { data, error } = await admin
+        .from('coding_problems')
+        .select('id, title, description_html, points_possible, course_id, courses(name, teacher_id)')
+        .order('created_at', { ascending: false });
+      if (error) return json({ error: error.message }, 500);
+      const others = (data || []).filter((p: Record<string, any>) => !mine.includes(p.course_id));
+      return json({ results: others });
+    }
+
+    // Copies someone else's problem into one of MY units. The copy is a new
+    // row I own; the original is untouched and stays theirs.
+    if (action === 'copyToMyCourse') {
+      if (!(await teacherOwnsCourse(admin, teacher.id, body.course_id))) {
+        return json({ error: 'That course is not yours' }, 403);
+      }
+      const { data: src, error: srcErr } = await admin
+        .from('coding_problems')
+        .select('*')
+        .eq('id', body.id)
+        .maybeSingle();
+      if (srcErr || !src) return json({ error: 'Not found' }, 404);
+      const { id, created_at, ...rest } = src;
+      const { data, error } = await admin
+        .from('coding_problems')
+        .insert({
+          ...rest,
+          title: `${src.title} (copy)`,
+          course_id: body.course_id,
+          unit_id: body.unit_id ?? null,
+          is_active: false,
+        })
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
     if (action === 'create') {
+      if (!(await teacherOwnsCourse(admin, teacher.id, body.data?.course_id))) {
+        return json({ error: 'Pick one of your own courses for this problem.' }, 403);
+      }
       const { data, error } = await admin.from('coding_problems').insert(body.data).select().single();
       if (error) return json({ error: error.message }, 500);
       return json({ result: data });
     }
 
     if (action === 'update') {
+      // Checked twice on purpose: that the row is currently mine, and that
+      // wherever it is being moved to is also mine - otherwise "move to
+      // course" would be a way to hand work to someone else's class.
+      if (!(await teacherOwnsRow(admin, teacher.id, 'coding_problems', body.id))) {
+        return json({ error: 'Not found' }, 404);
+      }
+      if (
+        body.data?.course_id &&
+        !(await teacherOwnsCourse(admin, teacher.id, body.data.course_id))
+      ) {
+        return json({ error: 'Pick one of your own courses for this problem.' }, 403);
+      }
       const { data, error } = await admin
         .from('coding_problems')
         .update(body.data)
@@ -104,6 +176,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'delete') {
+      if (!(await teacherOwnsRow(admin, teacher.id, 'coding_problems', body.id))) {
+        return json({ error: 'Not found' }, 404);
+      }
       const { error } = await admin.from('coding_problems').delete().eq('id', body.id);
       if (error) return json({ error: error.message }, 500);
       return json({ success: true });

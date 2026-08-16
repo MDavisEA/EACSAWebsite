@@ -1,5 +1,11 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
-import { createAdminClient, getTeacherFromRequest } from '../_shared/teacherAuth.ts';
+import {
+  createAdminClient,
+  getTeacherFromRequest,
+  teacherCourseIds,
+  teacherOwnsCourse,
+  teacherOwnsRow,
+} from '../_shared/teacherAuth.ts';
 
 // Fields that must NEVER be sent to a student who is actively taking an exam -
 // showing these would just be handing out the answers.
@@ -74,15 +80,21 @@ Deno.serve(async (req) => {
     if (action === 'list') {
       const column = body.sort?.column || 'created_at';
       const ascending = body.sort?.ascending ?? false;
+      const mine = await teacherCourseIds(admin, teacher.id);
+      if (mine.length === 0) return json({ results: [] });
       const { data, error } = await admin
         .from('assignments')
         .select('*')
+        .in('course_id', mine)
         .order(column, { ascending });
       if (error) return json({ error: error.message }, 500);
       return json({ results: data || [] });
     }
 
     if (action === 'create') {
+      if (!(await teacherOwnsCourse(admin, teacher.id, body.data?.course_id))) {
+        return json({ error: 'Pick one of your own courses for this assignment.' }, 403);
+      }
       const { data, error } = await admin
         .from('assignments')
         .insert(body.data)
@@ -93,6 +105,12 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'update') {
+      if (!(await teacherOwnsRow(admin, teacher.id, 'assignments', body.id))) {
+        return json({ error: 'Not found' }, 404);
+      }
+      if (body.data?.course_id && !(await teacherOwnsCourse(admin, teacher.id, body.data.course_id))) {
+        return json({ error: 'Pick one of your own courses for this assignment.' }, 403);
+      }
       const { data, error } = await admin
         .from('assignments')
         .update(body.data)
@@ -104,6 +122,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'delete') {
+      if (!(await teacherOwnsRow(admin, teacher.id, 'assignments', body.id))) {
+        return json({ error: 'Not found' }, 404);
+      }
       const { error } = await admin.from('assignments').delete().eq('id', body.id);
       if (error) return json({ error: error.message }, 500);
       return json({ success: true });

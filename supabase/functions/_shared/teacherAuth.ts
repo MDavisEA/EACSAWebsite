@@ -44,3 +44,46 @@ export async function getTeacherFromRequest(
   if (!profile) return null;
   return { id: profile.id, email: profile.email };
 }
+
+/**
+ * Ownership is derived, never stored twice: a course has a teacher, work
+ * belongs to a course, so these two helpers are the only thing standing
+ * between one teacher and another's classes.
+ *
+ * Being a teacher is NOT the same as owning something. Every read must be
+ * filtered with `.in('course_id', await teacherCourseIds(...))` and every
+ * write to an existing row must first pass `teacherOwnsCourse(...)` - a
+ * handler that checks only `getTeacherFromRequest` will happily let one
+ * teacher edit another's assignment.
+ */
+export async function teacherCourseIds(admin: SupabaseClient, teacherId: string): Promise<string[]> {
+  const { data } = await admin.from('courses').select('id').eq('teacher_id', teacherId);
+  return (data || []).map((c: Record<string, any>) => c.id);
+}
+
+export async function teacherOwnsCourse(
+  admin: SupabaseClient,
+  teacherId: string,
+  courseId: string | null | undefined
+): Promise<boolean> {
+  if (!courseId) return false;
+  const { data } = await admin
+    .from('courses')
+    .select('id')
+    .eq('id', courseId)
+    .eq('teacher_id', teacherId)
+    .maybeSingle();
+  return !!data;
+}
+
+/** True when the given work row exists AND sits in a course this teacher owns. */
+export async function teacherOwnsRow(
+  admin: SupabaseClient,
+  teacherId: string,
+  table: 'assignments' | 'coding_problems' | 'projects',
+  rowId: string
+): Promise<boolean> {
+  const { data } = await admin.from(table).select('course_id').eq('id', rowId).maybeSingle();
+  if (!data) return false;
+  return teacherOwnsCourse(admin, teacherId, data.course_id);
+}
