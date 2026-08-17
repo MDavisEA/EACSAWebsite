@@ -3,7 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Pencil, Trash2, Check, X, Layers, Library } from "lucide-react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { Plus, Pencil, Trash2, Check, X, Layers, Library, ArrowUpDown } from "lucide-react";
+import ReorderUnitsDialog from "./ReorderUnitsDialog";
 import AssignmentCard from "./AssignmentCard";
 import CodingProblemCard from "./CodingProblemCard";
 import ProjectCard from "./ProjectCard";
@@ -29,12 +31,15 @@ export default function CourseUnitsView({
   onUnitRename,
   onUnitDelete,
   onBrowseShared,
+  onReorderUnits,
+  onReorderWork,
   handlers,
 }) {
   const [addingUnit, setAddingUnit] = useState("");
   const [editingUnitId, setEditingUnitId] = useState(null);
   const [editingUnitName, setEditingUnitName] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [reorderingUnits, setReorderingUnits] = useState(false);
 
   const allInCourse = [
     ...assignments.filter((a) => a.course_id === course.id).map((x) => ({ kind: "frq", item: x })),
@@ -46,13 +51,59 @@ export default function CourseUnitsView({
 
   const units = course.units || [];
   const unfiled = inCourse.filter((w) => !w.item.unit_id || !units.some((u) => u.id === w.item.unit_id));
+  const bySortOrder = (a, b) =>
+    (a.item.sort_order ?? 9999) - (b.item.sort_order ?? 9999) ||
+    (a.item.title || "").localeCompare(b.item.title || "");
   const allGroups = [
-    ...units.map((u) => ({ unit: u, items: inCourse.filter((w) => w.item.unit_id === u.id) })),
-    ...(unfiled.length > 0 ? [{ unit: { id: null, name: "Unfiled" }, items: unfiled }] : []),
+    ...units.map((u) => ({
+      unit: u,
+      items: inCourse.filter((w) => w.item.unit_id === u.id).sort(bySortOrder),
+    })),
+    ...(unfiled.length > 0
+      ? [{ unit: { id: null, name: "Unfiled" }, items: [...unfiled].sort(bySortOrder) }]
+      : []),
   ];
   // With a type selected, a unit holding none of that type is just noise -
   // but on All an empty unit still needs to show so it can be added to.
   const groups = typeFilter === "all" ? allGroups : allGroups.filter((g) => g.items.length > 0);
+
+  // Reordering is only offered on All. On a filtered view the positions the
+  // teacher can see are a subset, so writing them back would scramble the
+  // items currently hidden.
+  const dragEnabled = typeFilter === "all";
+
+  const handleDragEnd = (result) => {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+
+    // Work: dropping into a different unit's list moves it there as well as
+    // repositioning it, which is the obvious meaning of the gesture.
+    const unitKey = (id) => (id === "unfiled" ? null : id);
+    const listFor = (key) =>
+      allGroups.find((g) => (g.unit.id || "unfiled") === key)?.items.slice() || [];
+
+    const from = listFor(source.droppableId);
+    const to = source.droppableId === destination.droppableId ? from : listFor(destination.droppableId);
+    const idx = from.findIndex((w) => `${w.kind}-${w.item.id}` === draggableId);
+    if (idx < 0) return;
+    const [moved] = from.splice(idx, 1);
+    to.splice(destination.index, 0, moved);
+
+    const targetUnit = unitKey(destination.droppableId);
+    const payload = [
+      ...(source.droppableId === destination.droppableId
+        ? []
+        : from.map((w, i) => ({
+            kind: w.kind,
+            id: w.item.id,
+            unit_id: unitKey(source.droppableId),
+            sort_order: i,
+          }))),
+      ...to.map((w, i) => ({ kind: w.kind, id: w.item.id, unit_id: targetUnit, sort_order: i })),
+    ];
+    onReorderWork(payload);
+  };
 
   const addUnit = async () => {
     const name = addingUnit.trim();
@@ -68,15 +119,15 @@ export default function CourseUnitsView({
     setEditingUnitId(null);
   };
 
-  const renderCard = ({ kind, item }) => {
+  const renderCard = ({ kind, item }, dragHandleProps) => {
     if (kind === "frq") {
       return (
         <AssignmentCard
           key={`frq-${item.id}`}
           assignment={item}
+          dragHandleProps={dragHandleProps}
           ungradedCount={gradingCounts.byAssignment?.[item.id] || 0}
           onGraded={handlers.onGraded}
-          dragHandleProps={{}}
           onEdit={() => handlers.editAssignment(item)}
           onDelete={() => handlers.deleteAssignment(item)}
           onToggleActive={() => handlers.toggleAssignmentActive(item)}
@@ -91,6 +142,7 @@ export default function CourseUnitsView({
         <CodingProblemCard
           key={`code-${item.id}`}
           problem={item}
+          dragHandleProps={dragHandleProps}
           onEdit={() => handlers.editCoding(item)}
           onDelete={() => handlers.deleteCoding(item)}
           onToggleActive={() => handlers.toggleCodingActive(item)}
@@ -102,6 +154,7 @@ export default function CourseUnitsView({
       <ProjectCard
         key={`project-${item.id}`}
         project={item}
+        dragHandleProps={dragHandleProps}
         ungradedCount={gradingCounts.byProject?.[item.id] || 0}
         onEdit={() => handlers.editProject(item)}
         onDelete={() => handlers.deleteProject(item)}
@@ -123,11 +176,18 @@ export default function CourseUnitsView({
             ))}
           </TabsList>
         </Tabs>
-        {onBrowseShared && (
-          <Button variant="outline" size="sm" onClick={onBrowseShared}>
-            <Library className="w-4 h-4 mr-1.5" /> Browse shared
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {dragEnabled && units.length > 1 && (
+            <Button variant="outline" size="sm" onClick={() => setReorderingUnits(true)}>
+              <ArrowUpDown className="w-4 h-4 mr-1.5" /> Reorder units
+            </Button>
+          )}
+          {onBrowseShared && (
+            <Button variant="outline" size="sm" onClick={onBrowseShared}>
+              <Library className="w-4 h-4 mr-1.5" /> Browse shared
+            </Button>
+          )}
+        </div>
       </div>
 
       {typeFilter !== "all" && groups.length === 0 && allInCourse.length > 0 && (
@@ -147,6 +207,8 @@ export default function CourseUnitsView({
         </div>
       )}
 
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div className="space-y-8">
       {groups.map(({ unit, items }) => (
         <section key={unit.id || "unfiled"}>
           <div className="flex items-center justify-between mb-3 gap-2">
@@ -205,13 +267,47 @@ export default function CourseUnitsView({
             )}
           </div>
 
-          {items.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic px-1">Nothing in this unit yet.</p>
-          ) : (
-            <div className="space-y-4">{items.map(renderCard)}</div>
-          )}
+          <Droppable droppableId={unit.id || "unfiled"} type="work" isDropDisabled={!dragEnabled}>
+            {(workDrop) => (
+              <div ref={workDrop.innerRef} {...workDrop.droppableProps} className="space-y-4">
+                {items.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic px-1">
+                    Nothing in this unit yet.
+                  </p>
+                )}
+                {items.map((w, i) => (
+                  <Draggable
+                    key={`${w.kind}-${w.item.id}`}
+                    draggableId={`${w.kind}-${w.item.id}`}
+                    index={i}
+                    isDragDisabled={!dragEnabled}
+                  >
+                    {(drag, snap) => (
+                      <div
+                        ref={drag.innerRef}
+                        {...drag.draggableProps}
+                        className={snap.isDragging ? "opacity-80 shadow-xl" : ""}
+                      >
+                        {renderCard(w, drag.dragHandleProps)}
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {workDrop.placeholder}
+              </div>
+            )}
+          </Droppable>
         </section>
       ))}
+        </div>
+      </DragDropContext>
+
+      <ReorderUnitsDialog
+        open={reorderingUnits}
+        onOpenChange={setReorderingUnits}
+        units={units}
+        onSave={onReorderUnits}
+      />
 
       {typeFilter === "all" && (
       <div className="flex items-center gap-2 pt-2 border-t max-w-md">

@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Pencil, Trash2, CopyPlus, Link2, Users, ChevronDown, ChevronUp, Copy, Check } from "lucide-react";
+import { Pencil, Trash2, CopyPlus, Link2, Users, ChevronDown, ChevronUp, Copy, Check , GripVertical } from "lucide-react";
 import ProjectSubmissionViewer from "./ProjectSubmissionViewer";
 
-export default function ProjectCard({ project, ungradedCount = 0, onEdit, onDelete, onToggleActive, onDuplicate }) {
+export default function ProjectCard({ project, dragHandleProps, ungradedCount = 0, onEdit, onDelete, onToggleActive, onDuplicate }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -24,7 +24,17 @@ export default function ProjectCard({ project, ungradedCount = 0, onEdit, onDele
       <CardContent className="p-0">
         <div className="p-5">
           <div className="flex items-start justify-between mb-3">
-            <div>
+            <div className="flex items-start gap-2">
+              {dragHandleProps && (
+                <div
+                  {...dragHandleProps}
+                  className="flex items-center self-center cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors flex-shrink-0"
+                  title="Drag to reorder"
+                >
+                  <GripVertical className="w-5 h-5" />
+                </div>
+              )}
+              <div>
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="text-lg font-semibold">{project.title}</h3>
                 <Badge variant={project.is_active ? "default" : "secondary"}>
@@ -47,6 +57,7 @@ export default function ProjectCard({ project, ungradedCount = 0, onEdit, onDele
                     {project.starter_files.length !== 1 ? "s" : ""}
                   </span>
                 )}
+              </div>
               </div>
             </div>
             <div className="flex items-center gap-1">

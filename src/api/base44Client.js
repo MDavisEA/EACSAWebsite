@@ -459,6 +459,17 @@ const Course = {
   async deleteSection(id) {
     await callFunction('courses', { action: 'deleteSection', id });
   },
+
+  // Both reorders send the whole new order, not the one thing that moved, so
+  // the stored order cannot drift from what the teacher just saw.
+  async reorderUnits(course_id, unit_ids) {
+    await callFunction('courses', { action: 'reorderUnits', course_id, unit_ids });
+  },
+
+  // items: [{ kind: 'frq'|'code'|'project', id, unit_id, sort_order }]
+  async reorderWork(course_id, items) {
+    await callFunction('courses', { action: 'reorderWork', course_id, items });
+  },
 };
 
 // ============================================================================

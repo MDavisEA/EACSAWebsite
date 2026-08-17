@@ -128,6 +128,67 @@ Deno.serve(async (req) => {
       return json({ success: true });
     }
 
+    // Reordering is sent as the whole new order rather than one moved item,
+    // so the result cannot drift if two updates race or one fails halfway.
+
+    if (action === 'reorderUnits') {
+      if (!(await owns(body.course_id))) return json({ error: 'Not found' }, 404);
+      const ids: string[] = Array.isArray(body.unit_ids) ? body.unit_ids : [];
+      // Only units actually in this course, so a stray id cannot be used to
+      // reposition something in someone else's class.
+      const { data: mine } = await admin.from('units').select('id').eq('course_id', body.course_id);
+      const allowed = new Set((mine || []).map((u: Record<string, any>) => u.id));
+      const updates = ids
+        .filter((id) => allowed.has(id))
+        .map((id, i) => admin.from('units').update({ position: i }).eq('id', id));
+      const results = await Promise.all(updates);
+      const failed = results.find((r) => r.error);
+      if (failed?.error) return json({ error: failed.error.message }, 500);
+      return json({ success: true });
+    }
+
+    if (action === 'reorderWork') {
+      if (!(await owns(body.course_id))) return json({ error: 'Not found' }, 404);
+      const items: { kind: string; id: string; unit_id: string | null; sort_order: number }[] =
+        Array.isArray(body.items) ? body.items : [];
+      const TABLES: Record<string, string> = {
+        frq: 'assignments',
+        code: 'coding_problems',
+        project: 'projects',
+      };
+
+      // Each row must already belong to this course - that is what stops a
+      // reorder from being a way to drag another teacher's work into a unit.
+      const [a, c, p] = await Promise.all([
+        admin.from('assignments').select('id').eq('course_id', body.course_id),
+        admin.from('coding_problems').select('id').eq('course_id', body.course_id),
+        admin.from('projects').select('id').eq('course_id', body.course_id),
+      ]);
+      const owned: Record<string, Set<string>> = {
+        frq: new Set((a.data || []).map((r: Record<string, any>) => r.id)),
+        code: new Set((c.data || []).map((r: Record<string, any>) => r.id)),
+        project: new Set((p.data || []).map((r: Record<string, any>) => r.id)),
+      };
+
+      // A unit must be one of this course's, or null for unfiled.
+      const { data: units } = await admin.from('units').select('id').eq('course_id', body.course_id);
+      const unitIds = new Set((units || []).map((u: Record<string, any>) => u.id));
+
+      const updates = items
+        .filter((it) => TABLES[it.kind] && owned[it.kind]?.has(it.id))
+        .filter((it) => it.unit_id === null || unitIds.has(it.unit_id))
+        .map((it) =>
+          admin
+            .from(TABLES[it.kind])
+            .update({ sort_order: it.sort_order, unit_id: it.unit_id })
+            .eq('id', it.id)
+        );
+      const results = await Promise.all(updates);
+      const failed = results.find((r) => r.error);
+      if (failed?.error) return json({ error: failed.error.message }, 500);
+      return json({ success: true });
+    }
+
     if (action === 'listRoster') {
       if (!(await owns(body.course_id))) return json({ error: 'Not found' }, 404);
       const { data, error } = await admin

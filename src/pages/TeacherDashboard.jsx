@@ -477,6 +477,14 @@ export default function TeacherDashboard() {
                   }}
                   onUnitDelete={(unit) => setDeletingUnit(unit)}
                   onBrowseShared={() => setShowShared(true)}
+                  onReorderUnits={async (unitIds) => {
+                    await base44.entities.Course.reorderUnits(openCourse.id, unitIds);
+                    loadCourses();
+                  }}
+                  onReorderWork={async (items) => {
+                    await base44.entities.Course.reorderWork(openCourse.id, items);
+                    await Promise.all([loadAssignments(), loadCodingProblems(), loadProjects()]);
+                  }}
                   handlers={workHandlers}
                 />
               </TabsContent>
