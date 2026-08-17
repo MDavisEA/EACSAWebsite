@@ -170,9 +170,16 @@ Deno.serve(async (req) => {
       const sub = await verifyOwnership(admin, body.submission_id, body.session_token, student);
       if (!sub) return json({ error: 'Unauthorized' }, 401);
       if (sub.submitted) return json({ error: 'Already submitted' }, 409);
+      // Only write what the caller actually sent. An FRQ autosave carries
+      // responses and a coding autosave carries code; writing the absent one
+      // as undefined/null would wipe the other kind of work.
+      const draft: Record<string, unknown> = {};
+      if (body.responses !== undefined) draft.responses = body.responses;
+      if (typeof body.code === 'string') draft.code = body.code;
+      if (Object.keys(draft).length === 0) return json({ result: sub });
       const { data, error } = await admin
         .from('submissions')
-        .update({ responses: body.responses })
+        .update(draft)
         .eq('id', body.submission_id)
         .select()
         .single();
@@ -184,14 +191,56 @@ Deno.serve(async (req) => {
       const sub = await verifyOwnership(admin, body.submission_id, body.session_token, student);
       if (!sub) return json({ error: 'Unauthorized' }, 401);
       if (sub.submitted) return json({ result: sub }); // idempotent - already submitted
+      // `code` is what a hand-graded Coding Assignment turns in, and it was
+      // simply missing here: this handler was written when the only thing a
+      // student submitted was FRQ responses, and autograded problems get their
+      // code written by run-java-tests instead. So a Coding Assignment's code
+      // never reached the database from any path, and the teacher opened an
+      // empty submission every time.
+      const patch: Record<string, unknown> = {
+        submitted: true,
+        submitted_at: new Date().toISOString(),
+        time_spent_seconds: body.time_spent_seconds ?? null,
+      };
+      if (body.responses !== undefined) patch.responses = body.responses;
+      if (typeof body.code === 'string') patch.code = body.code;
       const { data, error } = await admin
         .from('submissions')
-        .update({
-          responses: body.responses,
-          submitted: true,
-          submitted_at: new Date().toISOString(),
-          time_spent_seconds: body.time_spent_seconds ?? null,
-        })
+        .update(patch)
+        .eq('id', body.submission_id)
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
+    // Turning the same work in again, before anyone has graded it. Flips the
+    // student's own row back to open and leaves the code in place, so the
+    // editor reopens with what they had rather than a blank page.
+    //
+    // Refused once a grade or feedback exists, and not for the teacher's
+    // convenience: line comments are pinned to line NUMBERS in a frozen
+    // snapshot, so letting the code change underneath them would silently move
+    // every comment onto the wrong line. Reopening a graded submission has to
+    // be a deliberate teacher action, not something a student can do.
+    if (action === 'reopenMine') {
+      const sub = await verifyOwnership(admin, body.submission_id, body.session_token, student);
+      if (!sub) return json({ error: 'Unauthorized' }, 401);
+      if (!sub.submitted) return json({ result: sub });
+      const graded =
+        sub.score !== null ||
+        sub.autograde_score !== null ||
+        !!(sub.teacher_comments || '').trim() ||
+        (sub.line_comments || []).length > 0;
+      if (graded) {
+        return json(
+          { error: 'This has already been graded. Ask your teacher if you need to turn it in again.' },
+          409
+        );
+      }
+      const { data, error } = await admin
+        .from('submissions')
+        .update({ submitted: false, submitted_at: null })
         .eq('id', body.submission_id)
         .select()
         .single();

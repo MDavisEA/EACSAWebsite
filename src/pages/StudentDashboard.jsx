@@ -4,10 +4,12 @@ import { base44 } from "@/api/base44Client";
 import { useGoogleSession, ALLOWED_STUDENT_DOMAIN } from "@/lib/useGoogleSession";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import SubmissionDetail from "@/components/SubmissionDetail";
 import { format, isPast } from "date-fns";
 import {
   BookOpen, Code2, FolderGit2, LogIn, LogOut, ChevronRight,
-  CheckCircle2, Clock, CircleDashed, Star,
+  CheckCircle2, Clock, CircleDashed, Star, Loader2, RotateCcw,
 } from "lucide-react";
 
 // The three kinds of work, in the order a student sees them. `route` is where
@@ -48,11 +50,68 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
+  // Looking at something already turned in. Fetched on demand rather than with
+  // the dashboard: these rows carry the full code and every response, which is
+  // a lot to pull for a list that only needs titles and statuses.
+  const [detail, setDetail] = useState(null); // { item, submission }
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const [reopening, setReopening] = useState(false);
+
+  const FIELD_FOR = { frq: "assignment_id", code: "coding_problem_id", project: "project_id" };
+
   useEffect(() => {
     if (sessionLoading) return;
     if (!session) { setLoading(false); return; }
     load();
   }, [sessionLoading, session]);
+
+  // Clicking work you have finished should show you what you handed in, not
+  // silently start it over - which is what navigating to the work route did.
+  const openItem = async (item, route) => {
+    if (item.status !== "submitted" && item.status !== "graded") {
+      navigate(route(item.id));
+      return;
+    }
+    setDetail({ item, submission: null });
+    setDetailLoading(true);
+    setDetailError("");
+    try {
+      const rows = await base44.entities.Submission.myScores();
+      const field = FIELD_FOR[item.kind];
+      const mine = rows
+        .filter((r) => r[field] === item.id)
+        .sort((a, b) => new Date(b.submitted_at ?? 0) - new Date(a.submitted_at ?? 0))[0];
+      if (!mine) {
+        setDetailError("Couldn't find that submission.");
+      } else {
+        setDetail({ item, submission: mine });
+      }
+    } catch (e) {
+      setDetailError(e.message || "Couldn't load your submission.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  // Reopens the same row and drops straight back into the editor with their
+  // code still in it. The server refuses once a grade or any feedback exists,
+  // so this cannot quietly replace work a teacher has already commented on.
+  const resubmit = async () => {
+    if (!detail?.submission) return;
+    setReopening(true);
+    setDetailError("");
+    try {
+      await base44.entities.Submission.reopenMine(detail.submission.id);
+      const route = GROUPS.find((g) => g.kind === detail.item.kind)?.route;
+      setDetail(null);
+      if (route) navigate(route(detail.item.id));
+    } catch (e) {
+      setDetailError(e.message || "Couldn't reopen that.");
+    } finally {
+      setReopening(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -170,7 +229,7 @@ export default function StudentDashboard() {
                       return (
                         <button
                           key={`${item.kind}-${item.id}`}
-                          onClick={() => navigate(route(item.id))}
+                          onClick={() => openItem(item, route)}
                           className="w-full text-left bg-white border rounded-xl p-4 hover:shadow-md hover:border-primary/30 transition-all group flex items-center gap-4"
                         >
                           <div className={`flex-shrink-0 w-9 h-9 rounded-lg ${chip} flex items-center justify-center`}>
@@ -221,6 +280,65 @@ export default function StudentDashboard() {
           </button>
         </p>
       </main>
+
+      {/* What you turned in, and a way to turn it in again. */}
+      <Dialog open={!!detail} onOpenChange={(v) => { if (!v) setDetail(null); }}>
+        <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{detail?.item?.title}</DialogTitle>
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="py-12 flex justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : detailError ? (
+            <p className="text-sm text-destructive py-4">{detailError}</p>
+          ) : detail?.submission ? (
+            <div className="space-y-4">
+              <SubmissionDetail
+                result={detail.submission}
+                codingProblem={
+                  detail.item.kind === "code"
+                    ? { title: detail.item.title, points_possible: detail.item.points_possible }
+                    : undefined
+                }
+              />
+
+              {detail.item.kind === "frq" && (
+                <p className="text-xs text-muted-foreground border-t pt-3">
+                  Want the question-by-question breakdown?{" "}
+                  <button
+                    onClick={() => { setDetail(null); navigate("/my-score"); }}
+                    className="underline hover:text-foreground"
+                  >
+                    Look it up with your access code
+                  </button>
+                  .
+                </p>
+              )}
+
+              {/* Only offered while nothing has been graded - see reopenMine on
+                  the server, which is what actually enforces it. */}
+              {detail.item.kind !== "project" && detail.item.status === "submitted" && (
+                <div className="border-t pt-3 flex items-center gap-3 flex-wrap">
+                  <Button variant="outline" onClick={resubmit} disabled={reopening}>
+                    {reopening ? (
+                      <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Reopening...</>
+                    ) : (
+                      <><RotateCcw className="w-4 h-4 mr-1.5" /> Turn it in again</>
+                    )}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Reopens this with your work still in it. Once your teacher has graded it you
+                    will need to ask them.
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

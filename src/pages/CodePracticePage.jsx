@@ -42,6 +42,9 @@ export default function CodePracticePage() {
   const [showRunner, setShowRunner] = useState(false);
 
   const submissionRef = useRef(null); // { id, session_token }
+  const draftTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(draftTimer.current), []);
 
   useEffect(() => {
     if (sessionLoading) return;
@@ -83,6 +86,18 @@ export default function CodePracticePage() {
   const handleCodeChange = (value) => {
     setCode(value);
     if (draftKey) localStorage.setItem(draftKey, value);
+    // localStorage alone means the work only exists on this one machine, in
+    // this one browser profile - a school laptop that gets reimaged, or a
+    // student who moves rooms, loses everything. Push the draft to the server
+    // too, debounced so it is one write per pause rather than per keystroke.
+    if (!submissionRef.current) return;
+    clearTimeout(draftTimer.current);
+    draftTimer.current = setTimeout(() => {
+      base44.entities.Submission.update(submissionRef.current.id, { code: value }).catch(() => {
+        // A failed autosave is not worth interrupting typing over - the local
+        // copy still has it, and Submit Final sends the code itself.
+      });
+    }, 3000);
   };
 
   const runTests = async (final) => {

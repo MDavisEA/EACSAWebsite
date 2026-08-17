@@ -233,6 +233,10 @@ const Submission = {
         submission_id: id,
         session_token: sessionToken,
         responses: fields.responses,
+        // A hand-graded Coding Assignment turns in code, not responses. This
+        // was missing, so the code never left the browser and every such
+        // submission reached the teacher empty.
+        code: fields.code,
         time_spent_seconds: fields.time_spent_seconds,
       });
       return data.result;
@@ -242,6 +246,19 @@ const Submission = {
       submission_id: id,
       session_token: sessionToken,
       responses: fields.responses,
+      code: fields.code,
+    });
+    return data.result;
+  },
+
+  // Turn the same work in again before it has been graded. The row goes back to
+  // open with the code still on it, so the editor reopens where they left off.
+  async reopenMine(id) {
+    const cached = readCachedTokenById(id);
+    const data = await callFunction('submissions', {
+      action: 'reopenMine',
+      submission_id: id,
+      session_token: cached?.session_token || '',
     });
     return data.result;
   },
