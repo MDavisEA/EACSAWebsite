@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import { highlightJava, ONE_DARK } from "@/lib/javaHighlight";
 import { Star, MessageSquare, KeyRound, CheckCircle2, XCircle, EyeOff } from "lucide-react";
 
 // Renders one graded submission - code + checks for a coding problem, or a
@@ -56,6 +57,13 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
     : isProject
     ? (projectFeedbackVisible ? result.score : null)
     : result.score;
+
+  // Same colours the teacher reads it in, so a student comparing their code
+  // against a line comment is looking at the same thing their teacher was.
+  const codeLines = (result.code || "").split("\n");
+  const codeTokens = useMemo(() => highlightJava(result.code || ""), [result.code]);
+  const hasCode = !!(result.code || "").trim();
+  const lineNote = (n) => (result.line_comments || []).find((c) => c.line === n);
 
   return (
     <div className="space-y-4">
@@ -126,27 +134,47 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
         <div className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Your Code</p>
-            {(result.line_comments || []).length > 0 ? (
-              <div className="bg-slate-50 border rounded-lg overflow-hidden text-sm font-mono">
-                {(result.code || "").split("\n").map((text, i) => {
+            {/* One rendering whether or not there are line comments: the
+                numbered gutter is what makes "see line 12" mean anything, and
+                it should not appear only for the students who got comments. */}
+            {hasCode ? (
+              <div
+                className="rounded-lg overflow-hidden text-xs font-mono"
+                style={{ background: ONE_DARK.bg, color: ONE_DARK.plain }}
+              >
+                {codeLines.map((text, i) => {
                   const n = i + 1;
-                  const note = (result.line_comments || []).find((c) => c.line === n);
+                  const note = lineNote(n);
                   return (
                     <div key={n}>
-                      <div className={`flex ${note ? "bg-amber-50" : ""}`}>
+                      <div className={`flex ${note ? "bg-amber-500/10" : ""}`}>
                         <span
-                          className={`w-10 flex-shrink-0 text-right pr-2 select-none border-r ${
-                            note ? "text-amber-600 font-semibold" : "text-slate-400"
+                          className={`w-10 flex-shrink-0 text-right pr-2 select-none border-r border-slate-700 ${
+                            note ? "text-amber-400 font-semibold" : "text-slate-500"
                           }`}
                         >
                           {n}
                         </span>
-                        <pre className="px-3 whitespace-pre flex-1 overflow-x-auto">{text || " "}</pre>
+                        <pre className="px-3 whitespace-pre flex-1">
+                          {(codeTokens[i] || []).length === 0
+                            ? text || " "
+                            : codeTokens[i].map((t, ti) => (
+                                <span
+                                  key={ti}
+                                  style={{
+                                    color: t.color,
+                                    fontStyle: t.italic ? "italic" : undefined,
+                                  }}
+                                >
+                                  {t.text}
+                                </span>
+                              ))}
+                        </pre>
                       </div>
                       {note && (
-                        <div className="flex items-start gap-1.5 bg-amber-100/70 border-l-2 border-amber-400 pl-11 pr-3 py-1.5">
-                          <MessageSquare className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
-                          <span className="text-xs text-amber-900 font-sans">{note.body}</span>
+                        <div className="flex items-start gap-1.5 bg-amber-500/15 border-l-2 border-amber-400 pl-11 pr-3 py-1.5">
+                          <MessageSquare className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+                          <span className="text-xs text-amber-100 font-sans">{note.body}</span>
                         </div>
                       )}
                     </div>
@@ -154,9 +182,9 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
                 })}
               </div>
             ) : (
-              <pre className="bg-slate-50 border rounded-lg p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto">
-                {result.code || "(no code)"}
-              </pre>
+              <p className="text-sm text-muted-foreground">
+                This was turned in without any code in the editor.
+              </p>
             )}
           </div>
           {result.teacher_comments && (
