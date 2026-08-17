@@ -36,6 +36,9 @@ export default function CodePracticePage() {
   // Practice runs already spent. Seeded from the resumed submission so the
   // count survives a reload, then kept in step with what the server reports.
   const [runsUsed, setRunsUsed] = useState(0);
+  // Code Review problems only: what to type in, and what the program printed.
+  const [plainStdin, setPlainStdin] = useState("");
+  const [plainOutput, setPlainOutput] = useState(null);
 
   const submissionRef = useRef(null); // { id, session_token }
 
@@ -93,6 +96,28 @@ export default function CodePracticePage() {
     return res.data;
   };
 
+  // A Code Review problem has no tests, so Run just executes the program and
+  // shows what it printed. Letting students do this before submitting is the
+  // cheapest way to stop code that does not compile from reaching grading.
+  const handlePlainRun = async () => {
+    const sub = submissionRef.current;
+    setRunning(true);
+    setRunError("");
+    try {
+      const data = await base44.entities.CodingProblem.runPlain({
+        submission_id: sub.id,
+        session_token: sub.session_token,
+        code,
+        stdin: plainStdin,
+      });
+      setPlainOutput(data);
+    } catch (e) {
+      setRunError(e.message || "Something went wrong running your code. Please try again.");
+    } finally {
+      setRunning(false);
+    }
+  };
+
   const handleRun = async () => {
     setRunning(true);
     setRunError("");
@@ -118,6 +143,19 @@ export default function CodePracticePage() {
     setSubmitting(true);
     setRunError("");
     try {
+      // A Code Review problem has no harness to run, so submitting is just
+      // handing the code in - there is no score to compute.
+      if (problem.grading_kind === "review") {
+        await base44.entities.Submission.update(submissionRef.current.id, {
+          code,
+          submitted: true,
+          submitted_at: new Date().toISOString(),
+        });
+        if (draftKey) localStorage.removeItem(draftKey);
+        setFinalized(true);
+        navigate("/submitted");
+        return;
+      }
       const data = await runTests(true);
       setResults(data);
       if (!data.compile_error) {
@@ -143,6 +181,8 @@ export default function CodePracticePage() {
       </div>
     );
   }
+
+  const isReviewKind = problem.grading_kind === "review";
 
   // null when the problem has no cap, so the counter stays hidden entirely.
   const runsLeft =
@@ -188,8 +228,54 @@ export default function CodePracticePage() {
             dangerouslySetInnerHTML={{ __html: problem.description_html || "" }}
           />
 
+          {isReviewKind && (
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-xs font-semibold text-amber-400/90 uppercase tracking-wide mb-1">
+                  Input for your program
+                </h3>
+                <textarea
+                  value={plainStdin}
+                  onChange={(e) => setPlainStdin(e.target.value)}
+                  placeholder={"Anything your program reads with Scanner,\none value per line."}
+                  className="w-full text-xs font-mono bg-[#1e1e1e] border border-slate-700 rounded p-2 min-h-[70px] text-slate-200"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Run your code as often as you like — this is just for you, and nothing is graded
+                  until you submit.
+                </p>
+              </div>
+
+              {plainOutput && (
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                    Output
+                  </h3>
+                  {plainOutput.timed_out && (
+                    <p className="text-xs text-amber-400 mb-1">
+                      Your program was stopped for taking too long — check for a loop that never ends.
+                    </p>
+                  )}
+                  {plainOutput.stdout && (
+                    <pre className="text-xs font-mono bg-[#1e1e1e] border border-slate-700 rounded p-2 whitespace-pre-wrap text-slate-200 max-h-56 overflow-y-auto">
+                      {plainOutput.stdout}
+                    </pre>
+                  )}
+                  {plainOutput.stderr && (
+                    <pre className="text-xs font-mono bg-red-950/40 border border-red-900/60 rounded p-2 whitespace-pre-wrap text-red-300 mt-1 max-h-56 overflow-y-auto">
+                      {plainOutput.stderr}
+                    </pre>
+                  )}
+                  {!plainOutput.stdout && !plainOutput.stderr && (
+                    <p className="text-xs text-slate-500">Your program did not print anything.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="space-y-5">
-            {methodChecklists.map((mc) => (
+            {!isReviewKind && methodChecklists.map((mc) => (
               <div key={mc.method_name}>
                 <h3 className="text-xs font-mono font-semibold text-emerald-400/90 mb-2">{mc.method_name}()</h3>
                 <div className="space-y-2">
@@ -287,7 +373,7 @@ export default function CodePracticePage() {
           )}
 
           <div className="border-t border-slate-700 bg-[#252526] px-4 py-3 flex items-center justify-end gap-3 flex-shrink-0">
-            {runsLeft !== null && (
+            {!isReviewKind && runsLeft !== null && (
               <span
                 className={`text-xs mr-auto ${
                   runsLeft === 0 ? "text-amber-400" : "text-slate-400"
@@ -302,14 +388,14 @@ export default function CodePracticePage() {
             )}
             <Button
               variant="outline"
-              onClick={handleRun}
-              disabled={running || submitting || finalized || runsLeft === 0}
+              onClick={isReviewKind ? handlePlainRun : handleRun}
+              disabled={running || submitting || finalized || (!isReviewKind && runsLeft === 0)}
               className="border-slate-600 text-slate-100 bg-transparent hover:bg-slate-700 hover:text-slate-100"
             >
               {running ? (
                 <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Running...</>
               ) : (
-                <><Play className="w-4 h-4 mr-1.5" /> Run My Tests</>
+                <><Play className="w-4 h-4 mr-1.5" /> {isReviewKind ? "Run My Code" : "Run My Tests"}</>
               )}
             </Button>
             <Button onClick={() => setShowSubmitConfirm(true)} disabled={running || submitting || finalized}>

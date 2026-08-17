@@ -50,6 +50,8 @@ function defaultForm() {
     ],
     course_id: null,
     unit_id: null,
+    grading_kind: "auto",
+    manual_points: 10,
     due_date: "",
     max_test_runs: 5,
     is_active: true,
@@ -96,6 +98,11 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
         }
       : { ...defaultForm(), course_id: initial?.course_id ?? null, unit_id: initial?.unit_id ?? null }
   );
+
+  // A Code Review is the same row as a Mini Problem with grading_kind
+  // 'review': no test cases, the teacher marks it by hand. Branching here
+  // keeps one form instead of a near-duplicate of it.
+  const isReview = form.grading_kind === "review";
 
   const updateField = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -199,7 +206,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
   // A problem graded on its output has no method names to validate, and the
   // one group name is set by this form rather than typed.
   const hasMethodNameErrors =
-    gradingMode === "methods" && form.methods.some((m) => nameErrorFor(m));
+    !isReview && gradingMode === "methods" && form.methods.some((m) => nameErrorFor(m));
 
   // The grader wraps student code in its own `public class Main`, so a problem
   // named Main would put two classes of that name in one file and every
@@ -227,7 +234,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
         method_arg_types: m.method_arg_types.map((t) => t.trim()).filter(Boolean),
         test_cases: m.test_cases.map(({ _uid, ...tc }) => tc),
       })),
-      points_possible: pointsPossible,
+      points_possible: isReview ? Number(form.manual_points) || 0 : pointsPossible,
     });
   };
 
@@ -315,6 +322,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
         </div>
       </div>
 
+      {!isReview && (
       <div className="space-y-2 max-w-xs">
         <Label>Test Runs Allowed</Label>
         <Input
@@ -331,6 +339,25 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           for unlimited. Submitting is never blocked, even at zero remaining.
         </p>
       </div>
+      )}
+
+      {isReview && (
+      <div className="space-y-2 max-w-xs">
+        <Label>Points *</Label>
+        <Input
+          type="number"
+          min="0"
+          value={form.manual_points ?? ""}
+          onChange={(e) =>
+            updateField("manual_points", e.target.value === "" ? "" : parseInt(e.target.value))
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          What this is out of. There are no automatic checks — you score it yourself while reading
+          the code.
+        </p>
+      </div>
+      )}
 
       <div className="space-y-2">
         <Label>Problem Description</Label>
@@ -361,6 +388,15 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
         </div>
       </div>
 
+      {isReview ? (
+        <div className="border-t pt-6">
+          <p className="text-sm font-medium mb-1">Graded by hand</p>
+          <p className="text-xs text-muted-foreground">
+            Students write and submit code; nothing is checked automatically. When you open a
+            submission you can run it, see its output, and leave comments on specific lines.
+          </p>
+        </div>
+      ) : (
       <div className="border-t pt-6 space-y-4">
         <div className="space-y-2">
           <Label>How should this be graded? *</Label>
@@ -441,6 +477,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           </div>
         )}
       </div>
+      )}
 
       <div className="flex items-center gap-3 pt-2 border-t pt-4">
         <Switch checked={form.is_active} onCheckedChange={(v) => updateField("is_active", v)} />
@@ -452,7 +489,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           Cancel
         </Button>
         <Button onClick={handleSubmit} disabled={!isValid}>
-          {initial ? "Save Changes" : "Create Problem"}
+          {isEdit ? "Save Changes" : isReview ? "Create Code Review" : "Create Problem"}
         </Button>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
-import { createAdminClient } from '../_shared/teacherAuth.ts';
+import { createAdminClient, getTeacherFromRequest, teacherOwnsRow } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 
 const PISTON_URL = 'https://emkc.org/api/v2/piston/execute';
@@ -418,7 +418,76 @@ Deno.serve(async (req) => {
 
   try {
     const admin = createAdminClient();
-    const { submission_id, session_token, coding_problem_id, code, final } = await req.json();
+    const payload = await req.json();
+    const { submission_id, session_token, coding_problem_id, code, final } = payload;
+
+    // ---- Plain run: compile and run the code as-is and hand back what it
+    // printed. No driver, no test cases, no scoring, nothing written to the
+    // submission. This is what makes a hand-graded problem quick to mark -
+    // the teacher reads the code and runs it in the same window - and it also
+    // lets a student check their own work before submitting, which is the
+    // cheapest way to stop uncompilable code arriving in the first place.
+    if (payload.action === 'runPlain') {
+      if (typeof payload.code !== 'string' || !payload.code.trim()) {
+        return json({ error: 'There is no code to run.' }, 400);
+      }
+
+      // Either the student who owns this submission, or a teacher who owns the
+      // course it belongs to. Anyone else gets nothing - otherwise this would
+      // be a way to run arbitrary code against the runner using its API key.
+      let allowed = false;
+      if (payload.submission_id) {
+        const { data: sub } = await admin
+          .from('submissions')
+          .select('student_user_id, session_token, coding_problem_id')
+          .eq('id', payload.submission_id)
+          .maybeSingle();
+        if (sub) {
+          const student = await getStudentFromRequest(req, admin);
+          const isOwner = sub.student_user_id
+            ? !!student && sub.student_user_id === student.id
+            : sub.session_token === payload.session_token;
+          if (isOwner) allowed = true;
+          if (!allowed) {
+            const teacher = await getTeacherFromRequest(req, admin);
+            if (teacher && sub.coding_problem_id) {
+              allowed = await teacherOwnsRow(admin, teacher.id, 'coding_problems', sub.coding_problem_id);
+            }
+          }
+        }
+      }
+      if (!allowed) return json({ error: 'Unauthorized' }, 401);
+
+      const { imports: plainImports, body: plainBody } = hoistImportsAndStripPackage(payload.code);
+      // Run the student's class directly, so whatever they named their entry
+      // point still works: the file is theirs, not wrapped in a driver.
+      const plainSource = `${plainImports.join('\n')}${plainImports.length ? '\n\n' : ''}${plainBody}`;
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const key = Deno.env.get('PISTON_API_KEY');
+      if (key) headers['Authorization'] = key;
+
+      const resp = await fetch(PISTON_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          language: 'java',
+          version: '*',
+          files: [{ name: 'Main', content: plainSource }],
+          stdin: String(payload.stdin ?? ''),
+        }),
+      });
+      if (!resp.ok) return json({ error: `Execution service error: ${resp.status}` }, 502);
+
+      const result = await resp.json();
+      return json({
+        stdout: result?.run?.stdout || '',
+        stderr: result?.run?.stderr || result?.compile?.stderr || '',
+        // Piston reports a kill as a signal rather than an exit code, which is
+        // how an infinite loop in student code shows up.
+        timed_out: result?.run?.signal === 'SIGKILL',
+      });
+    }
 
     if (!submission_id || !session_token || !coding_problem_id || typeof code !== 'string') {
       return json(

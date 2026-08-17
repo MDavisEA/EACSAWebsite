@@ -136,7 +136,8 @@ export default function TeacherDashboard() {
     setShowNewWork(false);
     const seed = { course_id: openCourseId, unit_id: newWorkUnitId };
     if (kind === "frq") { setEditing(seed); setShowForm(true); }
-    else if (kind === "code") { setEditingCoding(seed); setShowCodingForm(true); }
+    else if (kind === "code") { setEditingCoding({ ...seed, grading_kind: "auto" }); setShowCodingForm(true); }
+    else if (kind === "review") { setEditingCoding({ ...seed, grading_kind: "review" }); setShowCodingForm(true); }
     else { setEditingProject(seed); setShowProjectForm(true); }
   };
 
@@ -600,7 +601,11 @@ export default function TeacherDashboard() {
       <Dialog open={showCodingForm} onOpenChange={setShowCodingForm}>
         <DialogContent className="max-w-5xl w-[90vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingCoding?.id ? "Edit Mini Problem" : "New Mini Problem"}</DialogTitle>
+            <DialogTitle>
+              {editingCoding?.id
+                ? editingCoding.grading_kind === "review" ? "Edit Code Review" : "Edit Mini Problem"
+                : editingCoding?.grading_kind === "review" ? "New Code Review" : "New Mini Problem"}
+            </DialogTitle>
           </DialogHeader>
           <CodingProblemForm
             initial={editingCoding}

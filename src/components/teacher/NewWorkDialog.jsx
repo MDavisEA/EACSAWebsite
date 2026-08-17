@@ -1,8 +1,8 @@
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { BookOpen, Code2, FolderGit2, ChevronRight } from "lucide-react";
+import { BookOpen, Code2, FileCode, FolderGit2, ChevronRight } from "lucide-react";
 
-// The three kinds of work, described by what the teacher gets rather than by
+// The four kinds of work, described by what the teacher gets rather than by
 // how the grader is implemented - "mini problem" means more to someone
 // planning a week than "program_output harness" does.
 const KINDS = [
@@ -21,6 +21,15 @@ const KINDS = [
     blurb: "Java that gets checked automatically. Either whole-program output or specific methods.",
     accent: "text-emerald-600",
     chip: "bg-emerald-50",
+  },
+  {
+    kind: "review",
+    icon: FileCode,
+    title: "Code Review",
+    blurb:
+      "Java you mark by hand. You read the code, run it right there to see the output, and comment on specific lines.",
+    accent: "text-amber-600",
+    chip: "bg-amber-50",
   },
   {
     kind: "project",

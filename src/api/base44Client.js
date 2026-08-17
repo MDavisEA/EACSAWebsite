@@ -317,6 +317,18 @@ const CodingProblem = {
     return (await callFunction('coding-problems', { action: 'listShared' })).results;
   },
 
+  // Compile and run a submission's code as-is and hand back what it printed.
+  // Nothing is scored or stored - this is for reading code, not grading it.
+  async runPlain({ submission_id, session_token, code, stdin }) {
+    return await callFunction('run-java-tests', {
+      action: 'runPlain',
+      submission_id,
+      session_token,
+      code,
+      stdin,
+    });
+  },
+
   async copyToMyCourse(id, course_id, unit_id) {
     const data = await callFunction('coding-problems', {
       action: 'copyToMyCourse',

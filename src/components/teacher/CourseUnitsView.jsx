@@ -14,6 +14,7 @@ const TYPE_TABS = [
   { value: "all", label: "All" },
   { value: "frq", label: "FRQ" },
   { value: "code", label: "Mini Problem" },
+  { value: "review", label: "Code Review" },
   { value: "project", label: "Projects" },
 ];
 
@@ -43,7 +44,12 @@ export default function CourseUnitsView({
 
   const allInCourse = [
     ...assignments.filter((a) => a.course_id === course.id).map((x) => ({ kind: "frq", item: x })),
-    ...codingProblems.filter((p) => p.course_id === course.id).map((x) => ({ kind: "code", item: x })),
+    // Mini Problems and Code Reviews are the same table with a different
+    // grading_kind, but they are different things to the teacher, so they are
+    // separated back out here.
+    ...codingProblems
+      .filter((p) => p.course_id === course.id)
+      .map((x) => ({ kind: x.grading_kind === "review" ? "review" : "code", item: x })),
     ...projects.filter((p) => p.course_id === course.id).map((x) => ({ kind: "project", item: x })),
   ];
   const inCourse =
@@ -137,7 +143,7 @@ export default function CourseUnitsView({
         />
       );
     }
-    if (kind === "code") {
+    if (kind === "code" || kind === "review") {
       return (
         <CodingProblemCard
           key={`code-${item.id}`}

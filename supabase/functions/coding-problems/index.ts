@@ -21,6 +21,9 @@ function sanitizeForStudent(problem: Record<string, any>) {
     class_name: problem.class_name,
     starter_code: problem.starter_code,
     points_possible: problem.points_possible,
+    // The student page needs to know there are no tests to run, so it can
+    // offer a plain Run instead of "Run My Tests".
+    grading_kind: problem.grading_kind || 'auto',
     // Students need to see how many practice runs they get; the cap itself is
     // enforced server-side in run-java-tests.
     max_test_runs: problem.max_test_runs,
