@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CommentBank from "./CommentBank";
 import InteractiveRunner from "@/components/InteractiveRunner";
+import { highlightJava, ONE_DARK } from "@/lib/javaHighlight";
 import {
   Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, User,
   FileCode, Terminal, Info, ChevronRight as Arrow,
@@ -30,7 +31,8 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const [loading, setLoading] = useState(true);
 
   const [open, setOpen] = useState(false);
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(0); // which student
+  const [attemptIndex, setAttemptIndex] = useState(0); // 0 = their most recent
   const [tab, setTab] = useState("feedback");
 
   const [score, setScore] = useState("");
@@ -83,22 +85,59 @@ export default function CodeReviewGrader({ problem, onGraded }) {
     setError("");
   };
 
+  // One row per STUDENT, not per row in the table. A student can end up with
+  // several submissions - reopening a finished problem inserts a fresh row
+  // rather than reusing the old one - and a list of repeated names is worse
+  // than useless when you are working out who still needs marking. Keyed on
+  // the signed-in user where there is one, falling back to email and then name
+  // for rows created before sign-in was required.
+  const groups = useMemo(() => {
+    const byStudent = new Map();
+    for (const s of submissions) {
+      const key =
+        s.student_user_id || (s.student_email || "").toLowerCase() || s.student_name || s.id;
+      if (!byStudent.has(key)) byStudent.set(key, []);
+      byStudent.get(key).push(s);
+    }
+    return [...byStudent.values()]
+      .map((all) => {
+        // Newest first, so [0] is the attempt that counts.
+        const sorted = [...all].sort(
+          (a, b) => new Date(b.submitted_at ?? 0) - new Date(a.submitted_at ?? 0)
+        );
+        return { name: sorted[0].student_name, latest: sorted[0], all: sorted };
+      })
+      // Alphabetical: this is a class list being worked through, so finding a
+      // particular person matters more than who happened to submit last.
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }, [submissions]);
+
   const openAt = (i) => {
     setIndex(i);
-    hydrate(submissions[i]);
+    setAttemptIndex(0);
+    hydrate(groups[i].all[0]);
     setTab("feedback");
     setOpen(true);
   };
 
   const go = (delta) => {
     const next = index + delta;
-    if (next < 0 || next >= submissions.length) return;
+    if (next < 0 || next >= groups.length) return;
     setIndex(next);
-    hydrate(submissions[next]);
+    setAttemptIndex(0);
+    hydrate(groups[next].all[0]);
     setTab("feedback");
   };
 
-  const current = submissions[index];
+  const pickAttempt = (j) => {
+    setAttemptIndex(j);
+    hydrate(groups[index].all[j]);
+    setTab("feedback");
+  };
+
+  const group = groups[index];
+  const current = group?.all[attemptIndex];
+  const viewingOlder = attemptIndex > 0;
 
   const save = async () => {
     setSaving(true);
@@ -110,9 +149,11 @@ export default function CodeReviewGrader({ problem, onGraded }) {
         teacher_comments: comments,
         line_comments: lineComments,
       });
+      // Matched on id, not position: the list is grouped by student now, so an
+      // index into `groups` is not an index into `submissions`.
       setSubmissions((prev) =>
-        prev.map((s, i) =>
-          i === index
+        prev.map((s) =>
+          s.id === current.id
             ? { ...s, score: parsed, teacher_comments: comments, line_comments: lineComments }
             : s
         )
@@ -134,7 +175,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const saveAndNext = async () => {
     const ok = await save();
     if (!ok) return;
-    if (index < submissions.length - 1) go(1);
+    if (index < groups.length - 1) go(1);
     else setOpen(false);
   };
 
@@ -162,10 +203,11 @@ export default function CodeReviewGrader({ problem, onGraded }) {
     );
   }
 
-  const gradedCount = submissions.filter((s) => s.score != null).length;
+  const gradedCount = groups.filter((g) => g.latest.score != null).length;
   const maxPoints = problem.manual_points ?? problem.points_possible ?? null;
 
   const lines = (current?.code || "").split("\n");
+  const highlighted = highlightJava(current?.code || "");
   const commentFor = (n) => lineComments.find((c) => c.line === n);
   const hasCode = !!(current?.code || "").trim();
 
@@ -174,23 +216,25 @@ export default function CodeReviewGrader({ problem, onGraded }) {
       {/* Who turned in. Grading happens in the window, not in here. */}
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs text-muted-foreground">
-          {submissions.length} turned in &middot; {gradedCount} graded
-          {gradedCount < submissions.length && `, ${submissions.length - gradedCount} to go`}
+          {groups.length} turned in &middot; {gradedCount} graded
+          {gradedCount < groups.length && `, ${groups.length - gradedCount} to go`}
         </p>
       </div>
 
       <div className="border rounded-lg divide-y overflow-hidden">
-        {submissions.map((s, i) => {
+        {groups.map((g, i) => {
+          const s = g.latest;
           const late = problem.due_date && s.submitted_at && new Date(s.submitted_at) > new Date(problem.due_date);
           const noCode = !(s.code || "").trim();
+          const attempts = g.all.length;
           return (
             <button
-              key={s.id}
+              key={g.name + i}
               onClick={() => openAt(i)}
               className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 transition-colors"
             >
               <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              <span className="font-medium truncate">{s.student_name}</span>
+              <span className="font-medium truncate">{g.name}</span>
 
               {s.submitted_at && (
                 <span className="text-xs text-muted-foreground">
@@ -200,6 +244,11 @@ export default function CodeReviewGrader({ problem, onGraded }) {
               {late && <Badge variant="outline" className="text-amber-700 border-amber-300">Late</Badge>}
               {noCode && (
                 <Badge variant="outline" className="text-slate-500">No code</Badge>
+              )}
+              {attempts > 1 && (
+                <Badge variant="outline" className="text-slate-500">
+                  {attempts} attempts
+                </Badge>
               )}
 
               <span className="ml-auto flex items-center gap-2 flex-shrink-0">
@@ -249,13 +298,13 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                     <ChevronLeft className="w-4 h-4" />
                   </Button>
                   <span className="text-xs text-muted-foreground px-1">
-                    {index + 1} of {submissions.length}
+                    {index + 1} of {groups.length}
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => go(1)}
-                    disabled={index === submissions.length - 1}
+                    disabled={index === groups.length - 1}
                   >
                     <ChevronRight className="w-4 h-4" />
                   </Button>
@@ -303,9 +352,39 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                   )}
                 </Button>
                 <Button onClick={saveAndNext} disabled={saving}>
-                  {index < submissions.length - 1 ? "Save & next" : "Save & close"}
+                  {index < groups.length - 1 ? "Save & next" : "Save & close"}
                 </Button>
               </div>
+
+              {/* Only when they turned it in more than once. Their most recent
+                  attempt opens by default, which is the one that counts. */}
+              {group.all.length > 1 && (
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  <span className="text-muted-foreground">Attempts:</span>
+                  {group.all.map((s, j) => (
+                    <button
+                      key={s.id}
+                      onClick={() => pickAttempt(j)}
+                      className={`rounded-full border px-2.5 py-1 transition-colors ${
+                        j === attemptIndex
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "hover:bg-slate-50 text-slate-600"
+                      }`}
+                    >
+                      {j === 0 ? "Most recent" : `#${group.all.length - j}`}
+                      {s.submitted_at && ` · ${format(new Date(s.submitted_at), "MMM d, h:mm a")}`}
+                      {s.score != null && ` · ${s.score}`}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {viewingOlder && (
+                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+                  This is an earlier attempt. A grade saved here is not the one the student sees —
+                  their dashboard shows the grade on their most recent attempt.
+                </p>
+              )}
 
               {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -345,7 +424,10 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                       {hasCode ? "Click any line to comment on it" : "Nothing was turned in"}
                     </div>
                     {hasCode ? (
-                      <div className="bg-slate-900 text-slate-100 text-xs font-mono overflow-x-auto max-h-[60vh] overflow-y-auto">
+                      <div
+                        className="text-xs font-mono overflow-x-auto max-h-[60vh] overflow-y-auto"
+                        style={{ background: ONE_DARK.bg, color: ONE_DARK.plain }}
+                      >
                         {lines.map((text, i) => {
                           const n = i + 1;
                           const c = commentFor(n);
@@ -371,7 +453,21 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                                 >
                                   {n}
                                 </span>
-                                <pre className="px-2 whitespace-pre flex-1">{text || " "}</pre>
+                                <pre className="px-2 whitespace-pre flex-1">
+                                  {(highlighted[i] || []).length === 0
+                                    ? text || " "
+                                    : highlighted[i].map((t, ti) => (
+                                        <span
+                                          key={ti}
+                                          style={{
+                                            color: t.color,
+                                            fontStyle: t.italic ? "italic" : undefined,
+                                          }}
+                                        >
+                                          {t.text}
+                                        </span>
+                                      ))}
+                                </pre>
                                 {!c && activeLine !== n && (
                                   <MessageSquare className="w-3 h-3 mr-2 self-center flex-shrink-0 text-slate-500 opacity-0 group-hover:opacity-100" />
                                 )}

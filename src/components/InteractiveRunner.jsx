@@ -23,31 +23,36 @@ export default function InteractiveRunner({
   resetKey,
 }) {
   const frameRef = useRef(null);
+  const sent = useRef(false);
 
+  // Sending the code is tied to the frame's own load event rather than to a
+  // timer, and happens ONCE. An earlier version retried on a schedule for the
+  // first few seconds to survive a slow frame, which had a nasty side effect:
+  // populateCode resets the editor, so a retry landing after someone pressed
+  // Run wiped the run out from under them. That is what "I have to click Run
+  // three times" was - the first two presses were being cancelled by our own
+  // retries, and the third worked only because the retries had finished.
+  const populate = () => {
+    if (sent.current || !code) return;
+    sent.current = true;
+    // Targeted origin rather than "*" - the code being sent is a student's
+    // work, and "*" would hand it to whatever origin happened to occupy the
+    // frame if the embed ever redirected.
+    frameRef.current?.contentWindow?.postMessage(
+      {
+        eventType: "populateCode",
+        language: "java",
+        files: [{ name: fileName, content: code }],
+      },
+      EMBED_ORIGIN
+    );
+  };
+
+  // A remount (new student, or reopening the dialog) is a fresh frame, so it
+  // gets to send again.
   useEffect(() => {
-    if (!code) return;
-    const send = () => {
-      // Targeted origin rather than "*" - the code being sent is a student's
-      // work, and "*" would hand it to whatever origin happened to occupy the
-      // frame if the embed ever redirected.
-      frameRef.current?.contentWindow?.postMessage(
-        {
-          eventType: "populateCode",
-          language: "java",
-          files: [{ name: fileName, content: code }],
-        },
-        EMBED_ORIGIN
-      );
-    };
-
-    // The embed sends no "ready" message back, so a single post races its
-    // startup and silently lands on nothing when the frame is slow. Retrying
-    // for the first few seconds is what makes the code reliably appear. The
-    // retries all finish long before anyone could have typed into the frame,
-    // so a late one cannot overwrite real edits.
-    const timers = [300, 900, 2000, 3500, 5500].map((ms) => setTimeout(send, ms));
-    return () => timers.forEach(clearTimeout);
-  }, [code, fileName, resetKey]);
+    sent.current = false;
+  }, [resetKey, code]);
 
   return (
     <iframe
@@ -59,6 +64,9 @@ export default function InteractiveRunner({
       src={EMBED_SRC}
       className="w-full bg-white"
       style={{ height, border: 0 }}
+      // The frame's editor is not necessarily mounted the instant its document
+      // loads, so give it a moment - but only this once.
+      onLoad={() => setTimeout(populate, 600)}
     />
   );
 }
