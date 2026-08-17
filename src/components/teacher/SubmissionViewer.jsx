@@ -7,7 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
-import { FileDown, Clock, User, Trash2, ArrowUpDown, GraduationCap, BookOpen, KeyRound, ExternalLink, ZoomIn, Save, CheckCircle2, Clipboard, ClipboardCheck, ChevronLeft, ChevronRight, Copy, Check, Link2 } from "lucide-react";
+import ByQuestionGrader from "./ByQuestionGrader";
+import { FileDown, Clock, User, Trash2, ArrowUpDown, GraduationCap, BookOpen, KeyRound, ExternalLink, ZoomIn, Save, CheckCircle2, Clipboard, ClipboardCheck, ChevronLeft, ChevronRight, Copy, Check, Link2, ListChecks } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 export default function SubmissionViewer({ assignment, onGraded }) {
@@ -19,6 +20,7 @@ export default function SubmissionViewer({ assignment, onGraded }) {
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [lightboxUrl, setLightboxUrl] = useState(null);
+  const [byQuestionOpen, setByQuestionOpen] = useState(false);
   const [questionScores, setQuestionScores] = useState({}); // { [questionId]: string }
   const [partComments, setPartComments] = useState({}); // { [key]: string }
 
@@ -217,6 +219,11 @@ export default function SubmissionViewer({ assignment, onGraded }) {
             <Button variant="outline" size="sm" onClick={exportCSV}>
               <FileDown className="w-4 h-4 mr-1" /> Export CSV
             </Button>
+            {(assignment.questions || []).length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setByQuestionOpen(true)}>
+                <ListChecks className="w-4 h-4 mr-1" /> Grade by Question
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -552,6 +559,17 @@ export default function SubmissionViewer({ assignment, onGraded }) {
           })()}
         </DialogContent>
       </Dialog>
+      <ByQuestionGrader
+        open={byQuestionOpen}
+        onOpenChange={setByQuestionOpen}
+        assignment={assignment}
+        submissions={sortedSubmissions}
+        onSubmissionUpdated={(id, patch) => {
+          setSubmissions((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+          onGraded?.();
+        }}
+      />
+
       {/* Image lightbox as a separate Dialog */}
       <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
         <DialogContent className="max-w-5xl max-h-[90vh] flex items-center justify-center bg-black/90 border-none p-2">
