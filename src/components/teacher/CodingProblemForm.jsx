@@ -85,8 +85,8 @@ function hydrateMethod(m) {
 }
 
 export default function CodingProblemForm({ initial, courses = [], onSave, onCancel }) {
-  // `initial` may be a seed carrying only course_id/unit_id for a new problem,
-  // so an id - not mere presence - is what marks an actual edit.
+  // `initial` may be a seed carrying only course_id/unit_id/grading_kind for a
+  // new problem, so an id - not mere presence - is what marks an actual edit.
   const isEdit = !!initial?.id;
   const [form, setForm] = useState(
     isEdit
@@ -96,7 +96,12 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           due_date: toLocalInputValue(initial.due_date),
           methods: initial.methods?.length ? initial.methods.map(hydrateMethod) : [newMethod()],
         }
-      : { ...defaultForm(), course_id: initial?.course_id ?? null, unit_id: initial?.unit_id ?? null }
+      // Spread the whole seed, not just course_id/unit_id - it used to drop
+      // grading_kind here, so every "New Coding Assignment" silently created
+      // an ordinary autograded problem instead (the dashboard's seed sets
+      // grading_kind: "review", but this branch threw it away before the
+      // form ever saw it).
+      : { ...defaultForm(), ...initial }
   );
 
   // A Coding Assignment is the same row as a Mini Problem with grading_kind
@@ -235,6 +240,10 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
         test_cases: m.test_cases.map(({ _uid, ...tc }) => tc),
       })),
       points_possible: isReview ? Number(form.manual_points) || 0 : pointsPossible,
+      // A Coding Assignment is graded by hand, not by test runs - the field
+      // is hidden from this form for that reason, so it must not silently
+      // carry over defaultForm's autograded default of 5.
+      max_test_runs: isReview ? null : form.max_test_runs,
     });
   };
 
