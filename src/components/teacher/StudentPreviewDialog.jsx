@@ -82,7 +82,7 @@ function CodePreview({ problem }) {
 
       {problem.description_html && (
         <div
-          className="prose prose-sm max-w-none"
+          className="prose prose-sm max-w-none quill-render"
           dangerouslySetInnerHTML={{ __html: problem.description_html }}
         />
       )}
@@ -145,7 +145,7 @@ function FrqPreview({ assignment }) {
           </div>
           {q.prompt_html ? (
             <div
-              className="prose prose-sm max-w-none"
+              className="prose prose-sm max-w-none quill-render"
               dangerouslySetInnerHTML={{ __html: q.prompt_html }}
             />
           ) : (
@@ -156,7 +156,7 @@ function FrqPreview({ assignment }) {
               <p className="text-sm font-medium">{p.label || `Part ${pi + 1}`}</p>
               {p.prompt_html ? (
                 <div
-                  className="prose prose-sm max-w-none"
+                  className="prose prose-sm max-w-none quill-render"
                   dangerouslySetInnerHTML={{ __html: p.prompt_html }}
                 />
               ) : (

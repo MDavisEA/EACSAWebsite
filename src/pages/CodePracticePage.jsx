@@ -208,9 +208,14 @@ export default function CodePracticePage() {
       <header className="bg-[#252526] border-b border-slate-700 flex-shrink-0 px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <h1 className="font-semibold truncate text-slate-100">{problem.title}</h1>
-          <Badge variant="outline" className="font-mono text-xs flex-shrink-0 border-slate-600 text-slate-300">
-            {problem.class_name}
-          </Badge>
+          {/* Displaying the class name here reads as a requirement, which it
+              is for an autograded problem but never was for a hand-graded
+              one - Piston runs whatever the student names their own class. */}
+          {problem.grading_kind !== "review" && (
+            <Badge variant="outline" className="font-mono text-xs flex-shrink-0 border-slate-600 text-slate-300">
+              {problem.class_name}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-400 flex-shrink-0">
           <span>{studentName}</span>
