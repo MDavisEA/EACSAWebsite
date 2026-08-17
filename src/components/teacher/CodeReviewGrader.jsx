@@ -224,7 +224,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
             comment gets pinned to it. */}
         <div className="border rounded-lg overflow-hidden">
           <div className="bg-slate-100 px-3 py-1.5 text-xs text-muted-foreground border-b">
-            Click a line number to comment on it
+            Click any line to comment on it
           </div>
           <div className="bg-slate-900 text-slate-100 text-xs font-mono overflow-x-auto max-h-[420px] overflow-y-auto">
             {lines.map((text, i) => {
@@ -232,17 +232,30 @@ export default function CodeReviewGrader({ problem, onGraded }) {
               const c = commentFor(n);
               return (
                 <div key={n}>
-                  <div className={`flex ${c ? "bg-amber-500/10" : ""}`}>
-                    <button
-                      onClick={() => { setActiveLine(n); setDraftLine(c?.body || ""); }}
-                      className={`w-10 flex-shrink-0 text-right pr-2 select-none border-r border-slate-700 hover:bg-slate-700 hover:text-white ${
-                        c ? "text-amber-400 font-semibold" : "text-slate-500"
+                  {/* The whole line is the target, not just the number in the
+                      gutter - reaching for the code you are commenting on is the
+                      instinct, and a 40px-wide gutter is a small thing to hit
+                      repeatedly across a class set. */}
+                  <div
+                    onClick={() => { setActiveLine(n); setDraftLine(c?.body || ""); }}
+                    className={`flex cursor-pointer group hover:bg-slate-800 ${
+                      c ? "bg-amber-500/10" : ""
+                    }`}
+                    title={c ? "Edit this comment" : "Comment on this line"}
+                  >
+                    <span
+                      className={`w-10 flex-shrink-0 text-right pr-2 select-none border-r border-slate-700 ${
+                        c ? "text-amber-400 font-semibold" : "text-slate-500 group-hover:text-slate-300"
                       }`}
-                      title={c ? "Edit this comment" : "Comment on this line"}
                     >
                       {n}
-                    </button>
+                    </span>
                     <pre className="px-2 whitespace-pre flex-1">{text || " "}</pre>
+                    {!c && activeLine !== n && (
+                      <MessageSquare
+                        className="w-3 h-3 mr-2 self-center flex-shrink-0 text-slate-500 opacity-0 group-hover:opacity-100"
+                      />
+                    )}
                   </div>
 
                   {c && (
