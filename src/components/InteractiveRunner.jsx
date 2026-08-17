@@ -3,8 +3,8 @@ import React, { useEffect, useRef } from "react";
 // A Java program running live in the page, with a console you can type into
 // while it is still running.
 //
-// Why this is an embed and not our own runner: our Piston-backed runner
-// (`runPlain`) is batch - it takes the whole stdin up front, runs to
+// Why this is an embed and not our own runner: the Piston API we use for
+// autograding is batch - it takes the whole stdin up front, runs to
 // completion, and hands back the output. That cannot work for a program that
 // prints a question and waits for the answer, which is most of the interesting
 // homework (menus, games, anything with a Scanner loop). Piston does have an

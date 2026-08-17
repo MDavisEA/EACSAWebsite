@@ -1,5 +1,5 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
-import { createAdminClient, getTeacherFromRequest, teacherOwnsRow } from '../_shared/teacherAuth.ts';
+import { createAdminClient } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 
 const PISTON_URL = 'https://emkc.org/api/v2/piston/execute';
@@ -65,16 +65,10 @@ function stripPublicModifier(code: string, className: string): string {
 
 // Java's single-file source-launch (`java Foo.java`) enforces the ordinary
 // javac rule that a PUBLIC top-level class's name must match the file it is
-// in - it just does the check in memory instead of on disk. Piston's `name`
-// field is that filename, so running a plain submission under a fixed name
-// like "Main" only compiles for the one student who happened to call their
-// class Main; everyone else gets "class X is public, should be declared in a
-// file named X.java" for a program that is otherwise completely correct.
-// Reading the student's own class name and naming the file after it is what
-// makes this harness-free case (no method name, no fixed class_name to
-// enforce) actually independent of what they called anything. A submission
-// with no public class has no such constraint - Java just runs the first
-// declared class - so any placeholder name works.
+// in - it just does the check in memory instead of on disk. That is why the
+// student's real class name matters here and cannot be assumed: get it wrong
+// and they get "class X is public, should be declared in a file named X.java"
+// for a program that is otherwise completely correct.
 function extractPublicClassName(code: string): string | null {
   const m = code.match(/public\s+(?:final\s+|abstract\s+|strictfp\s+)*class\s+([A-Za-z_$][A-Za-z0-9_$]*)/);
   return m ? m[1] : null;
@@ -85,8 +79,7 @@ function extractPublicClassName(code: string): string | null {
 // to be whatever the student actually called their class, not the value the
 // teacher typed into the problem's Class Name field. Otherwise a student who
 // renamed their class, or just didn't notice the field, would fail every
-// check through no fault in their actual logic - the exact same class of bug
-// extractPublicClassName exists to fix for the hand-graded runPlain path.
+// check through no fault in their actual logic.
 // Falls back to any top-level class if none is public (Java requires exactly
 // one public class per file, but a solo package-private class is common and
 // perfectly valid), and only falls back to the teacher's own class_name as a
@@ -453,78 +446,6 @@ Deno.serve(async (req) => {
     const admin = createAdminClient();
     const payload = await req.json();
     const { submission_id, session_token, coding_problem_id, code, final } = payload;
-
-    // ---- Plain run: compile and run the code as-is and hand back what it
-    // printed. No driver, no test cases, no scoring, nothing written to the
-    // submission. This is what makes a hand-graded problem quick to mark -
-    // the teacher reads the code and runs it in the same window - and it also
-    // lets a student check their own work before submitting, which is the
-    // cheapest way to stop uncompilable code arriving in the first place.
-    if (payload.action === 'runPlain') {
-      if (typeof payload.code !== 'string' || !payload.code.trim()) {
-        return json({ error: 'There is no code to run.' }, 400);
-      }
-
-      // Either the student who owns this submission, or a teacher who owns the
-      // course it belongs to. Anyone else gets nothing - otherwise this would
-      // be a way to run arbitrary code against the runner using its API key.
-      let allowed = false;
-      if (payload.submission_id) {
-        const { data: sub } = await admin
-          .from('submissions')
-          .select('student_user_id, session_token, coding_problem_id')
-          .eq('id', payload.submission_id)
-          .maybeSingle();
-        if (sub) {
-          const student = await getStudentFromRequest(req, admin);
-          const isOwner = sub.student_user_id
-            ? !!student && sub.student_user_id === student.id
-            : sub.session_token === payload.session_token;
-          if (isOwner) allowed = true;
-          if (!allowed) {
-            const teacher = await getTeacherFromRequest(req, admin);
-            if (teacher && sub.coding_problem_id) {
-              allowed = await teacherOwnsRow(admin, teacher.id, 'coding_problems', sub.coding_problem_id);
-            }
-          }
-        }
-      }
-      if (!allowed) return json({ error: 'Unauthorized' }, 401);
-
-      const { imports: plainImports, body: plainBody } = hoistImportsAndStripPackage(payload.code);
-      // Run the student's class directly, so whatever they named their entry
-      // point still works: the file is theirs, not wrapped in a driver.
-      const plainSource = `${plainImports.join('\n')}${plainImports.length ? '\n\n' : ''}${plainBody}`;
-      // The Piston filename has to match this exactly - see
-      // extractPublicClassName - or a submission with a public class named
-      // anything but "Main" fails to compile through no fault of the student.
-      const plainFileName = extractPublicClassName(plainBody) || 'Main';
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const key = Deno.env.get('PISTON_API_KEY');
-      if (key) headers['Authorization'] = key;
-
-      const resp = await fetch(PISTON_URL, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          language: 'java',
-          version: '*',
-          files: [{ name: plainFileName, content: plainSource }],
-          stdin: String(payload.stdin ?? ''),
-        }),
-      });
-      if (!resp.ok) return json({ error: `Execution service error: ${resp.status}` }, 502);
-
-      const result = await resp.json();
-      return json({
-        stdout: result?.run?.stdout || '',
-        stderr: result?.run?.stderr || result?.compile?.stderr || '',
-        // Piston reports a kill as a signal rather than an exit code, which is
-        // how an infinite loop in student code shows up.
-        timed_out: result?.run?.signal === 'SIGKILL',
-      });
-    }
 
     if (!submission_id || !session_token || !coding_problem_id || typeof code !== 'string') {
       return json(
