@@ -8,6 +8,8 @@ import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import InteractiveRunner from "@/components/InteractiveRunner";
 import { Play, Send, CheckCircle2, XCircle, EyeOff, Loader2, Trophy } from "lucide-react";
 
 // Defined once at module scope, not inline in JSX - a new array reference
@@ -36,9 +38,8 @@ export default function CodePracticePage() {
   // Practice runs already spent. Seeded from the resumed submission so the
   // count survives a reload, then kept in step with what the server reports.
   const [runsUsed, setRunsUsed] = useState(0);
-  // Coding Assignment problems only: what to type in, and what the program printed.
-  const [plainStdin, setPlainStdin] = useState("");
-  const [plainOutput, setPlainOutput] = useState(null);
+  // Coding Assignment problems only: the live runner, opened on demand.
+  const [showRunner, setShowRunner] = useState(false);
 
   const submissionRef = useRef(null); // { id, session_token }
 
@@ -96,26 +97,13 @@ export default function CodePracticePage() {
     return res.data;
   };
 
-  // A Coding Assignment problem has no tests, so Run just executes the program and
-  // shows what it printed. Letting students do this before submitting is the
-  // cheapest way to stop code that does not compile from reaching grading.
-  const handlePlainRun = async () => {
-    const sub = submissionRef.current;
-    setRunning(true);
+  // A Coding Assignment has no tests, so "run" means actually running the
+  // program and talking to it - which is the only way to check a Scanner-driven
+  // program does what it should. Unlimited: it is their own work, nothing is
+  // scored until they submit.
+  const handlePlainRun = () => {
     setRunError("");
-    try {
-      const data = await base44.entities.CodingProblem.runPlain({
-        submission_id: sub.id,
-        session_token: sub.session_token,
-        code,
-        stdin: plainStdin,
-      });
-      setPlainOutput(data);
-    } catch (e) {
-      setRunError(e.message || "Something went wrong running your code. Please try again.");
-    } finally {
-      setRunning(false);
-    }
+    setShowRunner(true);
   };
 
   const handleRun = async () => {
@@ -234,48 +222,15 @@ export default function CodePracticePage() {
           />
 
           {isReviewKind && (
-            <div className="space-y-3">
-              <div>
-                <h3 className="text-xs font-semibold text-amber-400/90 uppercase tracking-wide mb-1">
-                  Input for your program
-                </h3>
-                <textarea
-                  value={plainStdin}
-                  onChange={(e) => setPlainStdin(e.target.value)}
-                  placeholder={"Anything your program reads with Scanner,\none value per line."}
-                  className="w-full text-xs font-mono bg-[#1e1e1e] border border-slate-700 rounded p-2 min-h-[70px] text-slate-200"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Run your code as often as you like — this is just for you, and nothing is graded
-                  until you submit.
-                </p>
-              </div>
-
-              {plainOutput && (
-                <div>
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
-                    Output
-                  </h3>
-                  {plainOutput.timed_out && (
-                    <p className="text-xs text-amber-400 mb-1">
-                      Your program was stopped for taking too long — check for a loop that never ends.
-                    </p>
-                  )}
-                  {plainOutput.stdout && (
-                    <pre className="text-xs font-mono bg-[#1e1e1e] border border-slate-700 rounded p-2 whitespace-pre-wrap text-slate-200 max-h-56 overflow-y-auto">
-                      {plainOutput.stdout}
-                    </pre>
-                  )}
-                  {plainOutput.stderr && (
-                    <pre className="text-xs font-mono bg-red-950/40 border border-red-900/60 rounded p-2 whitespace-pre-wrap text-red-300 mt-1 max-h-56 overflow-y-auto">
-                      {plainOutput.stderr}
-                    </pre>
-                  )}
-                  {!plainOutput.stdout && !plainOutput.stderr && (
-                    <p className="text-xs text-slate-500">Your program did not print anything.</p>
-                  )}
-                </div>
-              )}
+            <div>
+              <h3 className="text-xs font-semibold text-amber-400/90 uppercase tracking-wide mb-1">
+                Trying it out
+              </h3>
+              <p className="text-xs text-slate-400">
+                Hit <span className="text-slate-200">Run My Code</span> to actually run your program
+                and type into it, the same as running it on your own computer. Do it as many times
+                as you like — nothing is graded until you press Submit Final.
+              </p>
             </div>
           )}
 
@@ -413,6 +368,29 @@ export default function CodePracticePage() {
           </div>
         </div>
       </div>
+
+      {/* The live runner. A copy of their draft, not the draft itself - the
+          editor behind this dialog stays the thing that gets autosaved and
+          submitted, so nothing typed in here can quietly become their
+          submission. */}
+      <Dialog open={showRunner} onOpenChange={setShowRunner}>
+        <DialogContent className="max-w-[92vw] w-[92vw]">
+          <DialogHeader>
+            <DialogTitle>Run your program</DialogTitle>
+            <DialogDescription>
+              Press Run, then type your answers right into the console. This is a scratch copy for
+              testing — keep editing in the editor behind this window, since that is what gets
+              submitted.
+            </DialogDescription>
+          </DialogHeader>
+          <InteractiveRunner
+            code={code}
+            fileName={`${problem.class_name || "Main"}.java`}
+            resetKey={showRunner ? "open" : "closed"}
+            height={560}
+          />
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={showSubmitConfirm} onOpenChange={setShowSubmitConfirm}>
         <AlertDialogContent className="bg-[#252526] border-slate-700 text-slate-100">

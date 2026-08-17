@@ -7,9 +7,19 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
+import InteractiveRunner from "@/components/InteractiveRunner";
 import {
-  Play, Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, User,
+  Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, User,
+  FileCode, Terminal, Info,
 } from "lucide-react";
+
+// Reading the code and running the code are two different jobs, and doing both
+// at once meant each got half the window. They are tabs instead, with a
+// shortcut, because grading a pile means flipping between them constantly.
+// Cmd/Ctrl+Shift+F rather than anything with Alt: Alt+letter types a special
+// character on a Mac, and the obvious browser combos are taken (Cmd+Shift+T
+// reopens a closed tab, Cmd+1/2 switch browser tabs).
+const TOGGLE_HINT = "⌘⇧F";
 
 // Grading a hand-marked coding problem, built around the thing that actually
 // costs time: reading code, finding out whether it works, and saying something
@@ -27,14 +37,26 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const [activeLine, setActiveLine] = useState(null);
   const [draftLine, setDraftLine] = useState("");
 
-  const [stdin, setStdin] = useState("");
-  const [output, setOutput] = useState(null);
-  const [running, setRunning] = useState(false);
+  const [tab, setTab] = useState("feedback");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => { load(); }, [problem.id]);
+
+  // Note this cannot fire while the cursor is inside the runner: browsers do
+  // not deliver keystrokes from a cross-origin frame to the page around it. The
+  // tab buttons stay clickable for exactly that case.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.metaKey || e.ctrlKey) || !e.shiftKey) return;
+      if (e.key.toLowerCase() !== "f") return;
+      e.preventDefault();
+      setTab((t) => (t === "feedback" ? "testing" : "feedback"));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -54,7 +76,6 @@ export default function CodeReviewGrader({ problem, onGraded }) {
     setScore(s.score != null ? String(s.score) : "");
     setComments(s.teacher_comments || "");
     setLineComments(s.line_comments || []);
-    setOutput(null);
     setActiveLine(null);
     setDraftLine("");
     setSaved(false);
@@ -69,24 +90,6 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   };
 
   const current = submissions[index];
-
-  const run = async () => {
-    setRunning(true);
-    setError("");
-    try {
-      setOutput(
-        await base44.entities.CodingProblem.runPlain({
-          submission_id: current.id,
-          code: current.code || "",
-          stdin,
-        })
-      );
-    } catch (e) {
-      setError(e.message || "Couldn't run that code.");
-    } finally {
-      setRunning(false);
-    }
-  };
 
   const save = async () => {
     setSaving(true);
@@ -174,7 +177,49 @@ export default function CodeReviewGrader({ problem, onGraded }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Reading vs running. */}
+      <div className="flex items-center gap-1 border rounded-lg p-1 w-fit bg-slate-50">
+        {[
+          { id: "feedback", label: "Feedback", Icon: FileCode },
+          { id: "testing", label: "Testing", Icon: Terminal },
+        ].map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md transition-colors ${
+              tab === id
+                ? "bg-white shadow-sm font-medium text-slate-900"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Icon className="w-4 h-4" /> {label}
+          </button>
+        ))}
+        <span className="text-xs text-muted-foreground px-2 select-none">{TOGGLE_HINT}</span>
+      </div>
+
+      {tab === "testing" ? (
+        <div className="border rounded-lg overflow-hidden">
+          <div className="bg-slate-100 px-3 py-1.5 border-b flex items-center gap-2">
+            <span className="text-xs font-medium">Running {current.student_name}&rsquo;s program</span>
+            <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1.5">
+              <Info className="w-3.5 h-3.5" />
+              Already loaded. Press Run, then type answers straight into the console.
+            </span>
+          </div>
+          <InteractiveRunner
+            code={current.code || ""}
+            fileName={`${problem.class_name || "Main"}.java`}
+            resetKey={current.id}
+            height={560}
+          />
+          <div className="bg-slate-50 border-t px-3 py-1.5 text-xs text-muted-foreground">
+            A scratch copy — editing here changes nothing about what they turned in, so poke at it
+            freely. Their saved submission is what you see on the Feedback tab.
+          </div>
+        </div>
+      ) : (
+      <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4">
         {/* The code, with a clickable gutter. Clicking a line number is how a
             comment gets pinned to it. */}
         <div className="border rounded-lg overflow-hidden">
@@ -248,49 +293,8 @@ export default function CodeReviewGrader({ problem, onGraded }) {
           </div>
         </div>
 
-        {/* Run it, then score it. */}
+        {/* Score it and say something about it. */}
         <div className="space-y-3">
-          <div className="border rounded-lg p-3 space-y-2">
-            <Label className="text-xs text-slate-500">Input to type in (optional)</Label>
-            <Textarea
-              value={stdin}
-              onChange={(e) => setStdin(e.target.value)}
-              placeholder={"One value per line, if their program reads any."}
-              rows={2}
-              className="text-xs font-mono"
-            />
-            <Button size="sm" variant="outline" onClick={run} disabled={running}>
-              {running ? (
-                <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Running...</>
-              ) : (
-                <><Play className="w-3.5 h-3.5 mr-1.5" /> Run their code</>
-              )}
-            </Button>
-
-            {output && (
-              <div className="space-y-1 pt-1">
-                {output.timed_out && (
-                  <p className="text-xs text-amber-600">
-                    Stopped for taking too long — probably a loop that never ends.
-                  </p>
-                )}
-                {output.stdout && (
-                  <pre className="text-xs font-mono bg-slate-900 text-slate-100 rounded p-2 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                    {output.stdout}
-                  </pre>
-                )}
-                {output.stderr && (
-                  <pre className="text-xs font-mono bg-red-50 text-red-700 border border-red-200 rounded p-2 whitespace-pre-wrap max-h-40 overflow-y-auto">
-                    {output.stderr}
-                  </pre>
-                )}
-                {!output.stdout && !output.stderr && (
-                  <p className="text-xs text-muted-foreground">It printed nothing.</p>
-                )}
-              </div>
-            )}
-          </div>
-
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-500">
               Score{maxPoints != null ? ` (out of ${maxPoints})` : ""}
@@ -333,6 +337,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 }
