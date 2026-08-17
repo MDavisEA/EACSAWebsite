@@ -80,6 +80,22 @@ function extractPublicClassName(code: string): string | null {
   return m ? m[1] : null;
 }
 
+// Autograded problems inject a driver that calls the student's class by name
+// (`${className}.method(...)`, `${className}.main(...)`) - so that name has
+// to be whatever the student actually called their class, not the value the
+// teacher typed into the problem's Class Name field. Otherwise a student who
+// renamed their class, or just didn't notice the field, would fail every
+// check through no fault in their actual logic - the exact same class of bug
+// extractPublicClassName exists to fix for the hand-graded runPlain path.
+// Falls back to any top-level class if none is public (Java requires exactly
+// one public class per file, but a solo package-private class is common and
+// perfectly valid), and only falls back to the teacher's own class_name as a
+// last resort for code with no discernible class at all - which will fail to
+// compile no matter what name is picked.
+function extractStudentClassName(code: string): string | null {
+  return extractPublicClassName(code) ?? (code.match(/\bclass\s+([A-Za-z_$][A-Za-z0-9_$]*)/)?.[1] ?? null);
+}
+
 // Java requires every import to appear before the first type declaration. The
 // driver class is concatenated ahead of the student's code, so a student
 // writing `import java.util.Scanner;` (or ArrayList, HashMap, ...) would put
@@ -326,8 +342,8 @@ ${calls}
     }`;
 }
 
-function buildDriver(problem: CodingProblem): string {
-  const blocks = problem.methods.map((m) => buildMethodDriver(problem.class_name, m)).join('\n');
+function buildDriver(problem: CodingProblem, className: string): string {
+  const blocks = problem.methods.map((m) => buildMethodDriver(className, m)).join('\n');
   return `
 public class Main {
   // Every number that appears immediately after a given label, in order.
@@ -572,10 +588,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    const driverSource = buildDriver(problem);
     const { imports, body } = hoistImportsAndStripPackage(code);
+    // What the student actually named their class - see extractStudentClassName
+    // - not problem.class_name, which is only ever a suggestion now.
+    const studentClassName = extractStudentClassName(body) || problem.class_name;
+    const driverSource = buildDriver(problem, studentClassName);
     const importBlock = imports.length > 0 ? `${imports.join('\n')}\n\n` : '';
-    const combinedSource = `${importBlock}${driverSource}\n\n${stripPublicModifier(body, problem.class_name)}`;
+    const combinedSource = `${importBlock}${driverSource}\n\n${stripPublicModifier(body, studentClassName)}`;
 
     const pistonHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
     const pistonApiKey = Deno.env.get('PISTON_API_KEY');
