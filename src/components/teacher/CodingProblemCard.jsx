@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Pencil, Trash2, CopyPlus, Code2, Eye, EyeOff, Link2, Users, ChevronDown, ChevronUp, Copy, Check , GripVertical } from "lucide-react";
 import CodingSubmissionViewer from "./CodingSubmissionViewer";
+import CodeReviewGrader from "./CodeReviewGrader";
 import StudentPreviewDialog from "./StudentPreviewDialog";
 
 export default function CodingProblemCard({ problem, dragHandleProps, onEdit, onDelete, onToggleActive, onDuplicate }) {
@@ -46,21 +47,30 @@ export default function CodingProblemCard({ problem, dragHandleProps, onEdit, on
                 <Badge variant={problem.is_active ? "default" : "secondary"}>
                   {problem.is_active ? "Active" : "Inactive"}
                 </Badge>
-                <Badge variant="outline">
-                  {methods.length} method{methods.length !== 1 ? "s" : ""}
-                </Badge>
+                {problem.grading_kind === "review" ? (
+                  <Badge variant="outline">Hand graded</Badge>
+                ) : (
+                  <Badge variant="outline">
+                    {methods.length} method{methods.length !== 1 ? "s" : ""}
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1 font-mono">
-                  <Code2 className="w-3 h-3" /> {problem.class_name}: {methodNames}
+                  <Code2 className="w-3 h-3" /> {problem.class_name}
+                  {problem.grading_kind !== "review" && `: ${methodNames}`}
                 </span>
-                <span>
-                  {testCount} test{testCount !== 1 ? "s" : ""}
-                </span>
-                {hiddenCount > 0 && (
-                  <span className="flex items-center gap-1">
-                    <EyeOff className="w-3 h-3" /> {hiddenCount} hidden
-                  </span>
+                {problem.grading_kind !== "review" && (
+                  <>
+                    <span>
+                      {testCount} test{testCount !== 1 ? "s" : ""}
+                    </span>
+                    {hiddenCount > 0 && (
+                      <span className="flex items-center gap-1">
+                        <EyeOff className="w-3 h-3" /> {hiddenCount} hidden
+                      </span>
+                    )}
+                  </>
                 )}
                 <span>{problem.points_possible ?? 0} pts</span>
               </div>
@@ -104,7 +114,11 @@ export default function CodingProblemCard({ problem, dragHandleProps, onEdit, on
           </button>
           {expanded && (
             <div className="px-5 pb-5 border-t">
-              <CodingSubmissionViewer problem={problem} />
+              {problem.grading_kind === "review" ? (
+                <CodeReviewGrader problem={problem} />
+              ) : (
+                <CodingSubmissionViewer problem={problem} />
+              )}
             </div>
           )}
         </div>

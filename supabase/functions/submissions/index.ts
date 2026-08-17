@@ -389,7 +389,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'saveGrade') {
-      if (!(await ownsSubmissionId(body.id))) return json({ error: 'Not found' }, 404);
+      if (!(await ownsSubmissionId(body.submission_id))) return json({ error: 'Not found' }, 404);
       const update: Record<string, unknown> = {};
       if (body.score !== undefined) update.score = body.score;
       if (body.question_scores !== undefined) update.question_scores = body.question_scores;
@@ -398,6 +398,8 @@ Deno.serve(async (req) => {
       if (body.style_comments !== undefined) update.style_comments = body.style_comments;
       if (body.teacher_comments !== undefined) update.teacher_comments = body.teacher_comments;
       if (body.feedback_released !== undefined) update.feedback_released = body.feedback_released;
+      // Written feedback pinned to specific lines of a hand-graded submission.
+      if (body.line_comments !== undefined) update.line_comments = body.line_comments;
       const { data, error } = await admin
         .from('submissions')
         .update(update)
@@ -409,7 +411,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'setAccessCode') {
-      if (!(await ownsSubmissionId(body.id))) return json({ error: 'Not found' }, 404);
+      if (!(await ownsSubmissionId(body.submission_id))) return json({ error: 'Not found' }, 404);
       const { data, error } = await admin
         .from('submissions')
         .update({ access_code: body.access_code })
@@ -421,7 +423,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'delete') {
-      if (!(await ownsSubmissionId(body.id))) return json({ error: 'Not found' }, 404);
+      if (!(await ownsSubmissionId(body.submission_id))) return json({ error: 'Not found' }, 404);
       const { error } = await admin.from('submissions').delete().eq('id', body.submission_id);
       if (error) return json({ error: error.message }, 500);
       return json({ success: true });
