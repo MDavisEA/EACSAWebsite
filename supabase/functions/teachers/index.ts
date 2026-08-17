@@ -87,6 +87,92 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ---- Comment bank ----
+    // Scoped to the teacher rather than to a course: the remarks worth saving
+    // ("check your loop bounds") are about how a teacher writes feedback, not
+    // about which class the student is in.
+
+    if (action === 'listComments') {
+      const { data, error } = await admin
+        .from('comment_bank')
+        .select('*')
+        .eq('teacher_id', teacher.id)
+        // Most-reached-for first, so the useful ones stay at the top instead
+        // of the teacher scanning an alphabetical list every time.
+        .order('use_count', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (error) return json({ error: error.message }, 500);
+      return json({ results: data || [] });
+    }
+
+    if (action === 'createComment') {
+      const bodyText = String(body.body || '').trim();
+      if (!bodyText) return json({ error: 'A saved comment needs some text.' }, 400);
+      // Saving the same remark twice is a slip, not an intent - hand back the
+      // existing one so the bank does not fill up with duplicates.
+      const { data: dupe } = await admin
+        .from('comment_bank')
+        .select('*')
+        .eq('teacher_id', teacher.id)
+        .eq('body', bodyText)
+        .maybeSingle();
+      if (dupe) return json({ result: dupe, already_existed: true });
+
+      const { data, error } = await admin
+        .from('comment_bank')
+        .insert({ teacher_id: teacher.id, body: bodyText })
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
+    if (action === 'updateComment') {
+      const { data: row } = await admin
+        .from('comment_bank')
+        .select('id')
+        .eq('id', body.id)
+        .eq('teacher_id', teacher.id)
+        .maybeSingle();
+      if (!row) return json({ error: 'Not found' }, 404);
+      const { data, error } = await admin
+        .from('comment_bank')
+        .update({ body: String(body.body || '').trim() })
+        .eq('id', body.id)
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
+    if (action === 'deleteComment') {
+      const { error } = await admin
+        .from('comment_bank')
+        .delete()
+        .eq('id', body.id)
+        .eq('teacher_id', teacher.id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ success: true });
+    }
+
+    // Bumped when a comment is actually inserted into feedback, which is what
+    // makes the ordering above reflect real use.
+    if (action === 'usedComment') {
+      const { data: row } = await admin
+        .from('comment_bank')
+        .select('use_count')
+        .eq('id', body.id)
+        .eq('teacher_id', teacher.id)
+        .maybeSingle();
+      if (!row) return json({ error: 'Not found' }, 404);
+      const { error } = await admin
+        .from('comment_bank')
+        .update({ use_count: (row.use_count || 0) + 1 })
+        .eq('id', body.id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ success: true });
+    }
+
     return json({ error: `Unknown action: ${action}` }, 400);
   } catch (error) {
     return json({ error: (error as Error).message }, 500);

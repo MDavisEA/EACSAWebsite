@@ -13,7 +13,7 @@ import ProjectCard from "./ProjectCard";
 const TYPE_TABS = [
   { value: "all", label: "All" },
   { value: "frq", label: "FRQ" },
-  { value: "code", label: "Short Problem" },
+  { value: "code", label: "Mini Problem" },
   { value: "project", label: "Projects" },
 ];
 

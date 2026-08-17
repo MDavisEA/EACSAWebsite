@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import CommentBank from "./CommentBank";
 import { FileDown, Clock, User, Trash2, ArrowUpDown, GraduationCap, BookOpen, KeyRound, ExternalLink, ZoomIn, Save, CheckCircle2, Clipboard, ClipboardCheck, ChevronLeft, ChevronRight, Copy, Check, Link2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -525,6 +526,13 @@ export default function SubmissionViewer({ assignment, onGraded }) {
                                   rows={5}
                                   className="text-sm w-full"
                                 />
+                                <div className="mt-1.5">
+                                  <CommentBank
+                                    compact
+                                    value={partComments[key] || ""}
+                                    onChange={(next) => updatePartComment(key, next)}
+                                  />
+                                </div>
                               </div>
                             </div>
                           ) : (

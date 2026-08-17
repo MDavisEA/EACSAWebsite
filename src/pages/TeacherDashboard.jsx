@@ -600,7 +600,7 @@ export default function TeacherDashboard() {
       <Dialog open={showCodingForm} onOpenChange={setShowCodingForm}>
         <DialogContent className="max-w-5xl w-[90vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingCoding?.id ? "Edit Short Problem" : "New Short Problem"}</DialogTitle>
+            <DialogTitle>{editingCoding?.id ? "Edit Mini Problem" : "New Mini Problem"}</DialogTitle>
           </DialogHeader>
           <CodingProblemForm
             initial={editingCoding}

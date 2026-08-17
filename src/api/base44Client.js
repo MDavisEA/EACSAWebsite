@@ -482,6 +482,27 @@ const Teacher = {
     return (await callFunction('teachers', { action: 'list' })).results;
   },
 
+  // The comment bank lives here rather than on a course: a saved remark is
+  // about how this teacher writes feedback, not about one class.
+  async listComments() {
+    return (await callFunction('teachers', { action: 'listComments' })).results;
+  },
+  async createComment(body) {
+    const data = await callFunction('teachers', { action: 'createComment', body });
+    return data.result;
+  },
+  async updateComment(id, body) {
+    return (await callFunction('teachers', { action: 'updateComment', id, body })).result;
+  },
+  async deleteComment(id) {
+    await callFunction('teachers', { action: 'deleteComment', id });
+  },
+  // Fire-and-forget: it only affects ordering, so a failure here should never
+  // interrupt the teacher mid-grade.
+  usedComment(id) {
+    callFunction('teachers', { action: 'usedComment', id }).catch(() => {});
+  },
+
   async invite({ email, display_name, redirect_to }) {
     const data = await callFunction('teachers', {
       action: 'invite',

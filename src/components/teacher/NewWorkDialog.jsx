@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { BookOpen, Code2, FolderGit2, ChevronRight } from "lucide-react";
 
 // The three kinds of work, described by what the teacher gets rather than by
-// how the grader is implemented - "short problem" means more to someone
+// how the grader is implemented - "mini problem" means more to someone
 // planning a week than "program_output harness" does.
 const KINDS = [
   {
@@ -17,7 +17,7 @@ const KINDS = [
   {
     kind: "code",
     icon: Code2,
-    title: "Short Problem",
+    title: "Mini Problem",
     blurb: "Java that gets checked automatically. Either whole-program output or specific methods.",
     accent: "text-emerald-600",
     chip: "bg-emerald-50",

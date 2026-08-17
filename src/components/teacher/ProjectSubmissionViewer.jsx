@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import CommentBank from "./CommentBank";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -386,6 +387,11 @@ export default function ProjectSubmissionViewer({ project }) {
                 onChange={(e) => setReviewDraft((d) => ({ ...d, teacher_comments: e.target.value }))}
                 placeholder="Paste or write the feedback this student should see..."
                 className="text-sm min-h-[220px]"
+              />
+              <CommentBank
+                compact
+                value={reviewDraft.teacher_comments}
+                onChange={(next) => setReviewDraft((d) => ({ ...d, teacher_comments: next }))}
               />
             </div>
 
