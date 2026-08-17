@@ -48,8 +48,11 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
   const isProject = !!result.project_id;
   const projectFeedbackVisible = isProject && result.feedback_released;
 
+  // A coding submission's mark comes from the autograder when there was one,
+  // but a hand-graded Code Review has no autograde_score - the teacher's mark
+  // lands in `score` like every other manually graded thing.
   const displayScore = result.coding_problem_id
-    ? result.autograde_score
+    ? result.autograde_score ?? result.score
     : isProject
     ? (projectFeedbackVisible ? result.score : null)
     : result.score;
@@ -123,10 +126,50 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
         <div className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Your Code</p>
-            <pre className="bg-slate-50 border rounded-lg p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto">
-              {result.code || "(no code)"}
-            </pre>
+            {(result.line_comments || []).length > 0 ? (
+              <div className="bg-slate-50 border rounded-lg overflow-hidden text-sm font-mono">
+                {(result.code || "").split("\n").map((text, i) => {
+                  const n = i + 1;
+                  const note = (result.line_comments || []).find((c) => c.line === n);
+                  return (
+                    <div key={n}>
+                      <div className={`flex ${note ? "bg-amber-50" : ""}`}>
+                        <span
+                          className={`w-10 flex-shrink-0 text-right pr-2 select-none border-r ${
+                            note ? "text-amber-600 font-semibold" : "text-slate-400"
+                          }`}
+                        >
+                          {n}
+                        </span>
+                        <pre className="px-3 whitespace-pre flex-1 overflow-x-auto">{text || " "}</pre>
+                      </div>
+                      {note && (
+                        <div className="flex items-start gap-1.5 bg-amber-100/70 border-l-2 border-amber-400 pl-11 pr-3 py-1.5">
+                          <MessageSquare className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                          <span className="text-xs text-amber-900 font-sans">{note.body}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <pre className="bg-slate-50 border rounded-lg p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto">
+                {result.code || "(no code)"}
+              </pre>
+            )}
           </div>
+          {result.teacher_comments && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                Teacher Feedback
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-sm text-amber-900 whitespace-pre-wrap">{result.teacher_comments}</p>
+              </div>
+            </div>
+          )}
+          {(result.compile_error || (result.test_results || []).length > 0) && (
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Checks</p>
             {result.compile_error ? (
@@ -173,6 +216,7 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
               </div>
             )}
           </div>
+          )}
         </div>
       ) : (
         buildSections(result, assignment).map((section) => (
