@@ -63,6 +63,23 @@ function stripPublicModifier(code: string, className: string): string {
   return code.replace(re, (_m, modifiers, rest) => `${modifiers}class${rest}`);
 }
 
+// Java's single-file source-launch (`java Foo.java`) enforces the ordinary
+// javac rule that a PUBLIC top-level class's name must match the file it is
+// in - it just does the check in memory instead of on disk. Piston's `name`
+// field is that filename, so running a plain submission under a fixed name
+// like "Main" only compiles for the one student who happened to call their
+// class Main; everyone else gets "class X is public, should be declared in a
+// file named X.java" for a program that is otherwise completely correct.
+// Reading the student's own class name and naming the file after it is what
+// makes this harness-free case (no method name, no fixed class_name to
+// enforce) actually independent of what they called anything. A submission
+// with no public class has no such constraint - Java just runs the first
+// declared class - so any placeholder name works.
+function extractPublicClassName(code: string): string | null {
+  const m = code.match(/public\s+(?:final\s+|abstract\s+|strictfp\s+)*class\s+([A-Za-z_$][A-Za-z0-9_$]*)/);
+  return m ? m[1] : null;
+}
+
 // Java requires every import to appear before the first type declaration. The
 // driver class is concatenated ahead of the student's code, so a student
 // writing `import java.util.Scanner;` (or ArrayList, HashMap, ...) would put
@@ -462,6 +479,10 @@ Deno.serve(async (req) => {
       // Run the student's class directly, so whatever they named their entry
       // point still works: the file is theirs, not wrapped in a driver.
       const plainSource = `${plainImports.join('\n')}${plainImports.length ? '\n\n' : ''}${plainBody}`;
+      // The Piston filename has to match this exactly - see
+      // extractPublicClassName - or a submission with a public class named
+      // anything but "Main" fails to compile through no fault of the student.
+      const plainFileName = extractPublicClassName(plainBody) || 'Main';
 
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       const key = Deno.env.get('PISTON_API_KEY');
@@ -473,7 +494,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           language: 'java',
           version: '*',
-          files: [{ name: 'Main', content: plainSource }],
+          files: [{ name: plainFileName, content: plainSource }],
           stdin: String(payload.stdin ?? ''),
         }),
       });

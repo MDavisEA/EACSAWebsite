@@ -250,7 +250,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           />
         </div>
         <div className="space-y-2">
-          <Label>Class Name *</Label>
+          <Label>{isReview ? "Class Name (for the starter code)" : "Class Name *"}</Label>
           <Input
             value={form.class_name}
             onChange={(e) => updateField("class_name", e.target.value)}
@@ -259,6 +259,11 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           />
           {classNameError ? (
             <p className="text-xs text-destructive">{classNameError}</p>
+          ) : isReview ? (
+            <p className="text-xs text-muted-foreground">
+              Just names the class in the starter code below — students can rename it and their
+              program still runs fine, since nothing here checks for a specific name.
+            </p>
           ) : (
             <p className="text-xs text-muted-foreground">
               Students must name their public class exactly this.
