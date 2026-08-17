@@ -8,20 +8,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, BookOpen, LogOut, KeyRound, Users, Lock } from "lucide-react";
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import AssignmentForm from "@/components/teacher/AssignmentForm";
-import AssignmentCard from "@/components/teacher/AssignmentCard";
 import CodingProblemForm from "@/components/teacher/CodingProblemForm";
-import CodingProblemCard from "@/components/teacher/CodingProblemCard";
 import ProjectForm from "@/components/teacher/ProjectForm";
-import ProjectCard from "@/components/teacher/ProjectCard";
 import CourseForm from "@/components/teacher/CourseForm";
 import CourseCard from "@/components/teacher/CourseCard";
 import TeachersPanel from "@/components/teacher/TeachersPanel";
+import CourseworkView from "@/components/teacher/CourseworkView";
+import NewWorkDialog from "@/components/teacher/NewWorkDialog";
+import SharedLibraryDialog from "@/components/teacher/SharedLibraryDialog";
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("assignments");
+  const [activeTab, setActiveTab] = useState("coursework");
+
+  // Which course the coursework view is showing, and the unit a new item
+  // should land in when it was started from a unit's own "Add" button.
+  const [activeCourseId, setActiveCourseId] = useState(null);
+  const [showNewWork, setShowNewWork] = useState(false);
+  const [newWorkUnitId, setNewWorkUnitId] = useState(null);
+  const [showShared, setShowShared] = useState(false);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -120,6 +126,17 @@ export default function TeacherDashboard() {
     })();
   }, []);
 
+  // The type picker decides which form opens; the course and unit come from
+  // wherever it was launched, so a new item lands where the teacher was
+  // already looking rather than needing to be filed afterwards.
+  const startNewWork = (kind) => {
+    setShowNewWork(false);
+    const seed = { course_id: activeCourseId, unit_id: newWorkUnitId };
+    if (kind === "frq") { setEditing(seed); setShowForm(true); }
+    else if (kind === "code") { setEditingCoding(seed); setShowCodingForm(true); }
+    else { setEditingProject(seed); setShowProjectForm(true); }
+  };
+
   const handleTeacherLogin = async () => {
     setLoginError("");
     setLoggingIn(true);
@@ -147,6 +164,11 @@ export default function TeacherDashboard() {
   const loadCourses = async () => {
     const results = await base44.entities.Course.list();
     setCourses(results);
+    // Land on a course rather than an empty picker, and recover if the one
+    // being viewed was deleted.
+    setActiveCourseId((current) =>
+      current && results.some((c) => c.id === current) ? current : results[0]?.id ?? null
+    );
   };
 
   const loadGradingCounts = async () => {
@@ -165,20 +187,9 @@ export default function TeacherDashboard() {
     setLoading(false);
   };
 
-  const handleDragEnd = async (result) => {
-    if (!result.destination) return;
-    const reordered = Array.from(assignments);
-    const [moved] = reordered.splice(result.source.index, 1);
-    reordered.splice(result.destination.index, 0, moved);
-    setAssignments(reordered);
-    // Persist new order
-    await Promise.all(
-      reordered.map((a, i) => base44.entities.Assignment.update(a.id, { sort_order: i }))
-    );
-  };
 
   const handleSave = async (data) => {
-    if (editing) {
+    if (editing?.id) {
       await base44.entities.Assignment.update(editing.id, data);
     } else {
       await base44.entities.Assignment.create(data);
@@ -227,7 +238,7 @@ export default function TeacherDashboard() {
   };
 
   const handleSaveCoding = async (data) => {
-    if (editingCoding) {
+    if (editingCoding?.id) {
       await base44.entities.CodingProblem.update(editingCoding.id, data);
     } else {
       await base44.entities.CodingProblem.create(data);
@@ -261,7 +272,7 @@ export default function TeacherDashboard() {
   };
 
   const handleSaveProject = async (data) => {
-    if (editingProject) {
+    if (editingProject?.id) {
       await base44.entities.Project.update(editingProject.id, data);
     } else {
       await base44.entities.Project.create(data);
@@ -357,8 +368,7 @@ export default function TeacherDashboard() {
   }
 
   const sumCounts = (map) => Object.values(map || {}).reduce((a, b) => a + b, 0);
-  const ungradedFrqTotal = sumCounts(gradingCounts.byAssignment);
-  const ungradedProjectTotal = sumCounts(gradingCounts.byProject);
+  const ungradedTotal = sumCounts(gradingCounts.byAssignment) + sumCounts(gradingCounts.byProject);
 
   return (
     <div className="min-h-screen bg-slate-50/50">
@@ -405,20 +415,11 @@ export default function TeacherDashboard() {
       <main className="max-w-5xl mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
-            <TabsTrigger value="assignments">
-              FRQ Assignments
-              {ungradedFrqTotal > 0 && (
+            <TabsTrigger value="coursework">
+              Coursework
+              {ungradedTotal > 0 && (
                 <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white">
-                  {ungradedFrqTotal}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="coding">Code Practice</TabsTrigger>
-            <TabsTrigger value="projects">
-              Projects
-              {ungradedProjectTotal > 0 && (
-                <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white">
-                  {ungradedProjectTotal}
+                  {ungradedTotal}
                 </span>
               )}
             </TabsTrigger>
@@ -426,106 +427,35 @@ export default function TeacherDashboard() {
             <TabsTrigger value="teachers">Teachers</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="assignments">
-            {assignments.length === 0 ? (
-              <div className="text-center py-20">
-                <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
-                <h2 className="text-lg font-semibold mb-2">No assignments yet</h2>
-                <p className="text-muted-foreground mb-6">Create your first FRQ assignment to get started.</p>
-                <Button onClick={() => setShowForm(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Create Assignment
-                </Button>
-              </div>
-            ) : (
-              <DragDropContext onDragEnd={handleDragEnd}>
-                <Droppable droppableId="assignments">
-                  {(provided) => (
-                    <div className="space-y-4" {...provided.droppableProps} ref={provided.innerRef}>
-                      {assignments.map((a, index) => (
-                        <Draggable key={a.id} draggableId={a.id} index={index}>
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              className={snapshot.isDragging ? "opacity-80 shadow-xl" : ""}
-                            >
-                              <AssignmentCard
-                                assignment={a}
-                                ungradedCount={gradingCounts.byAssignment?.[a.id] || 0}
-                                onGraded={loadGradingCounts}
-                                dragHandleProps={provided.dragHandleProps}
-                                onEdit={() => { setEditing(a); setShowForm(true); }}
-                                onDelete={() => setDeleting(a)}
-                                onToggleActive={() => handleToggleActive(a)}
-                                onToggleFeatured={() => handleToggleFeatured(a)}
-                                onToggleShowAnswerKey={() => handleToggleShowAnswerKey(a)}
-                                onDuplicate={() => handleDuplicate(a)}
-                              />
-                            </div>
-                          )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              </DragDropContext>
-            )}
-          </TabsContent>
-
-          <TabsContent value="coding">
-            {codingProblems.length === 0 ? (
-              <div className="text-center py-20">
-                <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
-                <h2 className="text-lg font-semibold mb-2">No coding problems yet</h2>
-                <p className="text-muted-foreground mb-6">Create your first Java autograder problem to get started.</p>
-                <Button onClick={() => setShowCodingForm(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Create Coding Problem
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {codingProblems.map((p) => (
-                  <CodingProblemCard
-                    key={p.id}
-                    problem={p}
-                    onEdit={() => { setEditingCoding(p); setShowCodingForm(true); }}
-                    onDelete={() => setDeletingCoding(p)}
-                    onToggleActive={() => handleToggleCodingActive(p)}
-                    onDuplicate={() => handleDuplicateCoding(p)}
-                  />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="projects">
-            {projects.length === 0 ? (
-              <div className="text-center py-20">
-                <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
-                <h2 className="text-lg font-semibold mb-2">No projects yet</h2>
-                <p className="text-muted-foreground mb-6">
-                  Create a big project - students turn in a gist link, and you get an export ready for an AI review pass.
-                </p>
-                <Button onClick={() => setShowProjectForm(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Create Project
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {projects.map((p) => (
-                  <ProjectCard
-                    key={p.id}
-                    project={p}
-                    ungradedCount={gradingCounts.byProject?.[p.id] || 0}
-                    onEdit={() => { setEditingProject(p); setShowProjectForm(true); }}
-                    onDelete={() => setDeletingProject(p)}
-                    onToggleActive={() => handleToggleProjectActive(p)}
-                    onDuplicate={() => handleDuplicateProject(p)}
-                  />
-                ))}
-              </div>
-            )}
+          <TabsContent value="coursework">
+            <CourseworkView
+              courses={courses}
+              courseId={activeCourseId}
+              onCourseChange={setActiveCourseId}
+              assignments={assignments}
+              codingProblems={codingProblems}
+              projects={projects}
+              gradingCounts={gradingCounts}
+              onNew={(unitId) => { setNewWorkUnitId(unitId); setShowNewWork(true); }}
+              onBrowseShared={() => setShowShared(true)}
+              handlers={{
+                onGraded: loadGradingCounts,
+                editAssignment: (a) => { setEditing(a); setShowForm(true); },
+                deleteAssignment: (a) => setDeleting(a),
+                toggleAssignmentActive: handleToggleActive,
+                toggleFeatured: handleToggleFeatured,
+                toggleShowAnswerKey: handleToggleShowAnswerKey,
+                duplicateAssignment: handleDuplicate,
+                editCoding: (p) => { setEditingCoding(p); setShowCodingForm(true); },
+                deleteCoding: (p) => setDeletingCoding(p),
+                toggleCodingActive: handleToggleCodingActive,
+                duplicateCoding: handleDuplicateCoding,
+                editProject: (p) => { setEditingProject(p); setShowProjectForm(true); },
+                deleteProject: (p) => setDeletingProject(p),
+                toggleProjectActive: handleToggleProjectActive,
+                duplicateProject: handleDuplicateProject,
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="courses">
@@ -562,10 +492,29 @@ export default function TeacherDashboard() {
         </Tabs>
       </main>
 
+      <NewWorkDialog
+        open={showNewWork}
+        onOpenChange={setShowNewWork}
+        onPick={startNewWork}
+        courseName={courses.find((c) => c.id === activeCourseId)?.name}
+        unitName={
+          courses
+            .find((c) => c.id === activeCourseId)
+            ?.units?.find((u) => u.id === newWorkUnitId)?.name
+        }
+      />
+
+      <SharedLibraryDialog
+        open={showShared}
+        onOpenChange={setShowShared}
+        courses={courses}
+        onCopied={loadCodingProblems}
+      />
+
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Assignment" : "New Assignment"}</DialogTitle>
+            <DialogTitle>{editing?.id ? "Edit Assignment" : "New FRQ Assignment"}</DialogTitle>
           </DialogHeader>
           <AssignmentForm
             initial={editing}
@@ -594,7 +543,7 @@ export default function TeacherDashboard() {
       <Dialog open={showCodingForm} onOpenChange={setShowCodingForm}>
         <DialogContent className="max-w-5xl w-[90vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingCoding ? "Edit Coding Problem" : "New Coding Problem"}</DialogTitle>
+            <DialogTitle>{editingCoding?.id ? "Edit Short Problem" : "New Short Problem"}</DialogTitle>
           </DialogHeader>
           <CodingProblemForm
             initial={editingCoding}
@@ -623,7 +572,7 @@ export default function TeacherDashboard() {
       <Dialog open={showProjectForm} onOpenChange={setShowProjectForm}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingProject ? "Edit Project" : "New Project"}</DialogTitle>
+            <DialogTitle>{editingProject?.id ? "Edit Project" : "New Project"}</DialogTitle>
           </DialogHeader>
           <ProjectForm
             initial={editingProject}

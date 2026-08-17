@@ -36,8 +36,11 @@ function toLocalInputValue(iso) {
 }
 
 export default function AssignmentForm({ initial, courses = [], onSave, onCancel }) {
+  // `initial` may be a seed carrying only course_id/unit_id for a new item,
+  // so an id - not mere presence - is what marks an actual edit.
+  const isEdit = !!initial?.id;
   const [form, setForm] = useState(
-    initial
+    isEdit
       ? {
           ...initial,
           due_date: toLocalInputValue(initial.due_date),
@@ -56,8 +59,8 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
           questions: [newQuestion(1)],
           time_limit_minutes: null,
           due_date: "",
-          course_id: null,
-    unit_id: null,
+          course_id: initial?.course_id ?? null,
+          unit_id: initial?.unit_id ?? null,
           is_active: true,
           reference_sheet_url: "",
         }
@@ -246,7 +249,7 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
           Cancel
         </Button>
         <Button onClick={handleSubmit} disabled={!canSave}>
-          {initial ? "Save Changes" : "Create Assignment"}
+          {isEdit ? "Save Changes" : "Create Assignment"}
         </Button>
       </div>
     </div>

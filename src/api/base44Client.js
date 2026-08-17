@@ -311,6 +311,22 @@ const CodingProblem = {
     return data.result;
   },
 
+  // Colleagues' problems, read-only, for copying. The copy lands in one of
+  // MY units as a new row I own - the original is never touched.
+  async listShared() {
+    return (await callFunction('coding-problems', { action: 'listShared' })).results;
+  },
+
+  async copyToMyCourse(id, course_id, unit_id) {
+    const data = await callFunction('coding-problems', {
+      action: 'copyToMyCourse',
+      id,
+      course_id,
+      unit_id,
+    });
+    return data.result;
+  },
+
   async create(fields) {
     const data = await callFunction('coding-problems', { action: 'create', data: fields });
     return data.result;

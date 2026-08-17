@@ -81,7 +81,7 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
   const [form, setForm] = useState(
     initial
       ? { ...defaultForm(), ...initial, due_date: toLocalInputValue(initial.due_date) }
-      : defaultForm()
+      : { ...defaultForm(), course_id: initial?.course_id ?? null, unit_id: initial?.unit_id ?? null }
   );
   const [dragActive, setDragActive] = useState(false);
   const [gistUrl, setGistUrl] = useState("");

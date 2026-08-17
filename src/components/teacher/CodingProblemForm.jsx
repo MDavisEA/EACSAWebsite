@@ -83,15 +83,18 @@ function hydrateMethod(m) {
 }
 
 export default function CodingProblemForm({ initial, courses = [], onSave, onCancel }) {
+  // `initial` may be a seed carrying only course_id/unit_id for a new problem,
+  // so an id - not mere presence - is what marks an actual edit.
+  const isEdit = !!initial?.id;
   const [form, setForm] = useState(
-    initial
+    isEdit
       ? {
           ...defaultForm(),
           ...initial,
           due_date: toLocalInputValue(initial.due_date),
           methods: initial.methods?.length ? initial.methods.map(hydrateMethod) : [newMethod()],
         }
-      : defaultForm()
+      : { ...defaultForm(), course_id: initial?.course_id ?? null, unit_id: initial?.unit_id ?? null }
   );
 
   const updateField = (field, value) => setForm((f) => ({ ...f, [field]: value }));
