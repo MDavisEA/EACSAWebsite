@@ -12,8 +12,11 @@ import NamedListEditor from "./NamedListEditor";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export default function CourseCard({ course, onEdit, onDelete, onRosterChange }) {
-  const [expanded, setExpanded] = useState(false);
+// showUnits is off inside a class, where units are managed next to the work
+// they hold rather than here; startExpanded skips the collapse toggle when
+// this IS the page rather than one card in a list.
+export default function CourseCard({ course, onEdit, onDelete, onRosterChange, showUnits = true, startExpanded = false }) {
+  const [expanded, setExpanded] = useState(startExpanded);
   const [roster, setRoster] = useState([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
 
@@ -98,6 +101,7 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange })
         </div>
 
         <div className="border-t">
+          {!startExpanded && (
           <button
             onClick={() => setExpanded(!expanded)}
             className="w-full flex items-center justify-center gap-1 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-slate-50/50 transition-colors"
@@ -106,9 +110,11 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange })
             Units, Sections &amp; Roster
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
+          )}
           {expanded && (
             <div className="px-5 pb-5 border-t pt-4 space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className={`grid grid-cols-1 ${showUnits ? "md:grid-cols-2" : ""} gap-6`}>
+                {showUnits && (
                 <NamedListEditor
                   title="Units"
                   hint="How work is grouped in this course."
@@ -118,6 +124,7 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange })
                   onRename={async (id, name) => { await base44.entities.Course.renameUnit(id, name); onRosterChange?.(); }}
                   onDelete={async (id) => { await base44.entities.Course.deleteUnit(id); onRosterChange?.(); }}
                 />
+                )}
                 <NamedListEditor
                   title="Sections"
                   hint="Which period a student is in. Every section gets the same work."

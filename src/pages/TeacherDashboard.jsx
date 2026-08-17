@@ -7,24 +7,27 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, BookOpen, LogOut, KeyRound, Users, Lock } from "lucide-react";
+import { BookOpen, LogOut, Lock, Library, ChevronLeft } from "lucide-react";
 import AssignmentForm from "@/components/teacher/AssignmentForm";
 import CodingProblemForm from "@/components/teacher/CodingProblemForm";
 import ProjectForm from "@/components/teacher/ProjectForm";
 import CourseForm from "@/components/teacher/CourseForm";
 import CourseCard from "@/components/teacher/CourseCard";
 import TeachersPanel from "@/components/teacher/TeachersPanel";
-import CourseworkView from "@/components/teacher/CourseworkView";
+import TeacherHome from "@/components/teacher/TeacherHome";
+import CourseUnitsView from "@/components/teacher/CourseUnitsView";
 import NewWorkDialog from "@/components/teacher/NewWorkDialog";
 import SharedLibraryDialog from "@/components/teacher/SharedLibraryDialog";
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("coursework");
-
-  // Which course the coursework view is showing, and the unit a new item
-  // should land in when it was started from a unit's own "Add" button.
-  const [activeCourseId, setActiveCourseId] = useState(null);
+  // Canvas-style navigation: null means the My Classes list, otherwise the
+  // class being looked at. Kept as state rather than a route because the whole
+  // dashboard is one authenticated page.
+  const [openCourseId, setOpenCourseId] = useState(null);
+  const [topTab, setTopTab] = useState("classes");
+  const [courseTab, setCourseTab] = useState("assignments");
+  const [deletingUnit, setDeletingUnit] = useState(null);
   const [showNewWork, setShowNewWork] = useState(false);
   const [newWorkUnitId, setNewWorkUnitId] = useState(null);
   const [showShared, setShowShared] = useState(false);
@@ -131,7 +134,7 @@ export default function TeacherDashboard() {
   // already looking rather than needing to be filed afterwards.
   const startNewWork = (kind) => {
     setShowNewWork(false);
-    const seed = { course_id: activeCourseId, unit_id: newWorkUnitId };
+    const seed = { course_id: openCourseId, unit_id: newWorkUnitId };
     if (kind === "frq") { setEditing(seed); setShowForm(true); }
     else if (kind === "code") { setEditingCoding(seed); setShowCodingForm(true); }
     else { setEditingProject(seed); setShowProjectForm(true); }
@@ -164,11 +167,9 @@ export default function TeacherDashboard() {
   const loadCourses = async () => {
     const results = await base44.entities.Course.list();
     setCourses(results);
-    // Land on a course rather than an empty picker, and recover if the one
-    // being viewed was deleted.
-    setActiveCourseId((current) =>
-      current && results.some((c) => c.id === current) ? current : results[0]?.id ?? null
-    );
+    // If the class being viewed was deleted, fall back to the list rather
+    // than rendering a blank page.
+    setOpenCourseId((current) => (current && results.some((c) => c.id === current) ? current : null));
   };
 
   const loadGradingCounts = async () => {
@@ -367,45 +368,56 @@ export default function TeacherDashboard() {
     );
   }
 
+  const openCourse = courses.find((c) => c.id === openCourseId) || null;
   const sumCounts = (map) => Object.values(map || {}).reduce((a, b) => a + b, 0);
   const ungradedTotal = sumCounts(gradingCounts.byAssignment) + sumCounts(gradingCounts.byProject);
+
+  const itemCounts = {};
+  for (const c of courses) {
+    itemCounts[c.id] =
+      assignments.filter((a) => a.course_id === c.id).length +
+      codingProblems.filter((p) => p.course_id === c.id).length +
+      projects.filter((p) => p.course_id === c.id).length;
+  }
+
+  const workHandlers = {
+    onGraded: loadGradingCounts,
+    editAssignment: (a) => { setEditing(a); setShowForm(true); },
+    deleteAssignment: (a) => setDeleting(a),
+    toggleAssignmentActive: handleToggleActive,
+    toggleFeatured: handleToggleFeatured,
+    toggleShowAnswerKey: handleToggleShowAnswerKey,
+    duplicateAssignment: handleDuplicate,
+    editCoding: (p) => { setEditingCoding(p); setShowCodingForm(true); },
+    deleteCoding: (p) => setDeletingCoding(p),
+    toggleCodingActive: handleToggleCodingActive,
+    duplicateCoding: handleDuplicateCoding,
+    editProject: (p) => { setEditingProject(p); setShowProjectForm(true); },
+    deleteProject: (p) => setDeletingProject(p),
+    toggleProjectActive: handleToggleProjectActive,
+    duplicateProject: handleDuplicateProject,
+  };
 
   return (
     <div className="min-h-screen bg-slate-50/50">
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <button
+            onClick={() => setOpenCourseId(null)}
+            className="flex items-center gap-3 hover:opacity-70 transition-opacity"
+          >
             <BookOpen className="w-5 h-5 text-primary" />
-            <h1 className="font-semibold text-lg">AP CSA Teacher Dashboard</h1>
-          </div>
+            <h1 className="font-semibold text-lg">AP CSA</h1>
+          </button>
           <div className="flex items-center gap-2">
-            {activeTab === "assignments" && (
-              <Button variant="outline" size="sm" onClick={handleBackfillCodes} disabled={backfilling}>
-                <KeyRound className="w-4 h-4 mr-1" />
-                {backfilling ? "Generating..." : backfillDone != null ? `Done (${backfillDone} updated)` : "Generate Missing Codes"}
-              </Button>
-            )}
-            {activeTab === "assignments" && (
-              <Button onClick={() => { setEditing(null); setShowForm(true); }}>
-                <Plus className="w-4 h-4 mr-1" /> New Assignment
-              </Button>
-            )}
-            {activeTab === "coding" && (
-              <Button onClick={() => { setEditingCoding(null); setShowCodingForm(true); }}>
-                <Plus className="w-4 h-4 mr-1" /> New Coding Problem
-              </Button>
-            )}
-            {activeTab === "projects" && (
-              <Button onClick={() => { setEditingProject(null); setShowProjectForm(true); }}>
-                <Plus className="w-4 h-4 mr-1" /> New Project
-              </Button>
-            )}
-            {activeTab === "courses" && (
-              <Button onClick={() => { setEditingCourse(null); setShowCourseForm(true); }}>
-                <Plus className="w-4 h-4 mr-1" /> New Course
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
+            <Button
+              variant={openCourseId ? "ghost" : "outline"}
+              size="sm"
+              onClick={() => { setOpenCourseId(null); setTopTab("teachers"); }}
+            >
+              Teachers
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleLogout} title="Sign out">
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
@@ -413,93 +425,134 @@ export default function TeacherDashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="coursework">
-              Coursework
-              {ungradedTotal > 0 && (
-                <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white">
-                  {ungradedTotal}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="courses">Courses</TabsTrigger>
-            <TabsTrigger value="teachers">Teachers</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="coursework">
-            <CourseworkView
-              courses={courses}
-              courseId={activeCourseId}
-              onCourseChange={setActiveCourseId}
-              assignments={assignments}
-              codingProblems={codingProblems}
-              projects={projects}
-              gradingCounts={gradingCounts}
-              onNew={(unitId) => { setNewWorkUnitId(unitId); setShowNewWork(true); }}
-              onBrowseShared={() => setShowShared(true)}
-              handlers={{
-                onGraded: loadGradingCounts,
-                editAssignment: (a) => { setEditing(a); setShowForm(true); },
-                deleteAssignment: (a) => setDeleting(a),
-                toggleAssignmentActive: handleToggleActive,
-                toggleFeatured: handleToggleFeatured,
-                toggleShowAnswerKey: handleToggleShowAnswerKey,
-                duplicateAssignment: handleDuplicate,
-                editCoding: (p) => { setEditingCoding(p); setShowCodingForm(true); },
-                deleteCoding: (p) => setDeletingCoding(p),
-                toggleCodingActive: handleToggleCodingActive,
-                duplicateCoding: handleDuplicateCoding,
-                editProject: (p) => { setEditingProject(p); setShowProjectForm(true); },
-                deleteProject: (p) => setDeletingProject(p),
-                toggleProjectActive: handleToggleProjectActive,
-                duplicateProject: handleDuplicateProject,
-              }}
-            />
-          </TabsContent>
-
-          <TabsContent value="courses">
-            {courses.length === 0 ? (
-              <div className="text-center py-20">
-                <Users className="w-12 h-12 text-muted-foreground/40 mx-auto mb-4" />
-                <h2 className="text-lg font-semibold mb-2">No courses yet</h2>
-                <p className="text-muted-foreground mb-6">
-                  Add a course and upload a roster, then project submissions can show you who has
-                  <em> not</em> turned work in - not just who has.
-                </p>
-                <Button onClick={() => setShowCourseForm(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Create Course
+        {openCourse ? (
+          <div className="space-y-6">
+            <div>
+              <button
+                onClick={() => setOpenCourseId(null)}
+                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-2"
+              >
+                <ChevronLeft className="w-4 h-4" /> My Classes
+              </button>
+              <div className="flex items-center justify-between gap-3">
+                <h1 className="text-2xl font-bold tracking-tight">{openCourse.name}</h1>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setEditingCourse(openCourse); setShowCourseForm(true); }}
+                >
+                  Rename
                 </Button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {courses.map((c) => (
-                  <CourseCard
-                    key={c.id}
-                    course={c}
-                    onEdit={() => { setEditingCourse(c); setShowCourseForm(true); }}
-                    onDelete={() => setDeletingCourse(c)}
-                    onRosterChange={loadCourses}
-                  />
-                ))}
-              </div>
-            )}
-          </TabsContent>
+            </div>
 
-          <TabsContent value="teachers">
+            <Tabs value={courseTab} onValueChange={setCourseTab}>
+              <TabsList className="mb-6">
+                <TabsTrigger value="assignments">
+                  Assignments
+                  {ungradedTotal > 0 && (
+                    <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white">
+                      {ungradedTotal}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="people">People</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="assignments">
+                <div className="flex justify-end mb-4">
+                  <Button variant="outline" size="sm" onClick={() => setShowShared(true)}>
+                    <Library className="w-4 h-4 mr-1.5" /> Browse shared
+                  </Button>
+                </div>
+                <CourseUnitsView
+                  course={openCourse}
+                  assignments={assignments}
+                  codingProblems={codingProblems}
+                  projects={projects}
+                  gradingCounts={gradingCounts}
+                  onAddWork={(unitId) => { setNewWorkUnitId(unitId); setShowNewWork(true); }}
+                  onUnitCreate={async (name) => {
+                    await base44.entities.Course.createUnit(openCourse.id, name);
+                    loadCourses();
+                  }}
+                  onUnitRename={async (id, name) => {
+                    await base44.entities.Course.renameUnit(id, name);
+                    loadCourses();
+                  }}
+                  onUnitDelete={(unit) => setDeletingUnit(unit)}
+                  handlers={workHandlers}
+                />
+              </TabsContent>
+
+              <TabsContent value="people">
+                <CourseCard
+                  course={openCourse}
+                  showUnits={false}
+                  startExpanded
+                  onEdit={() => { setEditingCourse(openCourse); setShowCourseForm(true); }}
+                  onDelete={() => setDeletingCourse(openCourse)}
+                  onRosterChange={loadCourses}
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
+        ) : topTab === "teachers" ? (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h1 className="text-xl font-bold tracking-tight">Teachers</h1>
+              <Button variant="outline" size="sm" onClick={() => setTopTab("classes")}>
+                Back to My Classes
+              </Button>
+            </div>
             <TeachersPanel />
-          </TabsContent>
-        </Tabs>
+          </div>
+        ) : (
+          <TeacherHome
+            courses={courses}
+            counts={itemCounts}
+            onOpen={(id) => { setOpenCourseId(id); setCourseTab("assignments"); }}
+            onNewCourse={() => { setEditingCourse(null); setShowCourseForm(true); }}
+          />
+        )}
+
       </main>
+
+      <AlertDialog open={!!deletingUnit} onOpenChange={() => setDeletingUnit(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete &ldquo;{deletingUnit?.name}&rdquo;?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The assignments in it are not deleted — they move to Unfiled, so you can put them
+              somewhere else.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                await base44.entities.Course.deleteUnit(deletingUnit.id);
+                setDeletingUnit(null);
+                loadCourses();
+                loadAssignments();
+                loadCodingProblems();
+                loadProjects();
+              }}
+            >
+              Delete unit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <NewWorkDialog
         open={showNewWork}
         onOpenChange={setShowNewWork}
         onPick={startNewWork}
-        courseName={courses.find((c) => c.id === activeCourseId)?.name}
+        courseName={courses.find((c) => c.id === openCourseId)?.name}
         unitName={
           courses
-            .find((c) => c.id === activeCourseId)
+            .find((c) => c.id === openCourseId)
             ?.units?.find((u) => u.id === newWorkUnitId)?.name
         }
       />
