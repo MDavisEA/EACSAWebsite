@@ -2,10 +2,18 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, Check, X, Layers } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Pencil, Trash2, Check, X, Layers, Library } from "lucide-react";
 import AssignmentCard from "./AssignmentCard";
 import CodingProblemCard from "./CodingProblemCard";
 import ProjectCard from "./ProjectCard";
+
+const TYPE_TABS = [
+  { value: "all", label: "All" },
+  { value: "frq", label: "FRQ" },
+  { value: "code", label: "Short Problem" },
+  { value: "project", label: "Projects" },
+];
 
 // Inside a class: its units, and the work filed under each. Units are managed
 // here rather than on a settings screen, because renaming or adding one is
@@ -20,24 +28,31 @@ export default function CourseUnitsView({
   onUnitCreate,
   onUnitRename,
   onUnitDelete,
+  onBrowseShared,
   handlers,
 }) {
   const [addingUnit, setAddingUnit] = useState("");
   const [editingUnitId, setEditingUnitId] = useState(null);
   const [editingUnitName, setEditingUnitName] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
 
-  const inCourse = [
+  const allInCourse = [
     ...assignments.filter((a) => a.course_id === course.id).map((x) => ({ kind: "frq", item: x })),
     ...codingProblems.filter((p) => p.course_id === course.id).map((x) => ({ kind: "code", item: x })),
     ...projects.filter((p) => p.course_id === course.id).map((x) => ({ kind: "project", item: x })),
   ];
+  const inCourse =
+    typeFilter === "all" ? allInCourse : allInCourse.filter((w) => w.kind === typeFilter);
 
   const units = course.units || [];
   const unfiled = inCourse.filter((w) => !w.item.unit_id || !units.some((u) => u.id === w.item.unit_id));
-  const groups = [
+  const allGroups = [
     ...units.map((u) => ({ unit: u, items: inCourse.filter((w) => w.item.unit_id === u.id) })),
     ...(unfiled.length > 0 ? [{ unit: { id: null, name: "Unfiled" }, items: unfiled }] : []),
   ];
+  // With a type selected, a unit holding none of that type is just noise -
+  // but on All an empty unit still needs to show so it can be added to.
+  const groups = typeFilter === "all" ? allGroups : allGroups.filter((g) => g.items.length > 0);
 
   const addUnit = async () => {
     const name = addingUnit.trim();
@@ -98,7 +113,31 @@ export default function CourseUnitsView({
 
   return (
     <div className="space-y-8">
-      {units.length === 0 && inCourse.length === 0 && (
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <Tabs value={typeFilter} onValueChange={setTypeFilter}>
+          <TabsList>
+            {TYPE_TABS.map((t) => (
+              <TabsTrigger key={t.value} value={t.value}>
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        {onBrowseShared && (
+          <Button variant="outline" size="sm" onClick={onBrowseShared}>
+            <Library className="w-4 h-4 mr-1.5" /> Browse shared
+          </Button>
+        )}
+      </div>
+
+      {typeFilter !== "all" && groups.length === 0 && allInCourse.length > 0 && (
+        <p className="text-sm text-muted-foreground text-center py-10 border rounded-xl bg-slate-50/40">
+          No {TYPE_TABS.find((t) => t.value === typeFilter)?.label.toLowerCase()} work in this class
+          yet.
+        </p>
+      )}
+
+      {units.length === 0 && allInCourse.length === 0 && (
         <div className="text-center py-12 border rounded-xl bg-slate-50/40">
           <Layers className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-sm font-medium mb-1">No units yet</p>
@@ -174,6 +213,7 @@ export default function CourseUnitsView({
         </section>
       ))}
 
+      {typeFilter === "all" && (
       <div className="flex items-center gap-2 pt-2 border-t max-w-md">
         <Input
           value={addingUnit}
@@ -186,6 +226,7 @@ export default function CourseUnitsView({
           <Plus className="w-4 h-4 mr-1" /> Add Unit
         </Button>
       </div>
+      )}
     </div>
   );
 }

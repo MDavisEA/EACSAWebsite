@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { BookOpen, LogOut, Lock, Library, ChevronLeft } from "lucide-react";
+import { BookOpen, LogOut, Lock, ChevronLeft } from "lucide-react";
 import AssignmentForm from "@/components/teacher/AssignmentForm";
 import CodingProblemForm from "@/components/teacher/CodingProblemForm";
 import ProjectForm from "@/components/teacher/ProjectForm";
@@ -460,11 +460,6 @@ export default function TeacherDashboard() {
               </TabsList>
 
               <TabsContent value="assignments">
-                <div className="flex justify-end mb-4">
-                  <Button variant="outline" size="sm" onClick={() => setShowShared(true)}>
-                    <Library className="w-4 h-4 mr-1.5" /> Browse shared
-                  </Button>
-                </div>
                 <CourseUnitsView
                   course={openCourse}
                   assignments={assignments}
@@ -481,6 +476,7 @@ export default function TeacherDashboard() {
                     loadCourses();
                   }}
                   onUnitDelete={(unit) => setDeletingUnit(unit)}
+                  onBrowseShared={() => setShowShared(true)}
                   handlers={workHandlers}
                 />
               </TabsContent>
