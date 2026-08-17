@@ -14,7 +14,7 @@ const TYPE_TABS = [
   { value: "all", label: "All" },
   { value: "frq", label: "FRQ" },
   { value: "code", label: "Mini Problem" },
-  { value: "review", label: "Code Review" },
+  { value: "review", label: "Coding Assignment" },
   { value: "project", label: "Projects" },
 ];
 
@@ -44,7 +44,7 @@ export default function CourseUnitsView({
 
   const allInCourse = [
     ...assignments.filter((a) => a.course_id === course.id).map((x) => ({ kind: "frq", item: x })),
-    // Mini Problems and Code Reviews are the same table with a different
+    // Mini Problems and Coding Assignments are the same table with a different
     // grading_kind, but they are different things to the teacher, so they are
     // separated back out here.
     ...codingProblems

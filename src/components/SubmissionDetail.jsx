@@ -49,7 +49,7 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
   const projectFeedbackVisible = isProject && result.feedback_released;
 
   // A coding submission's mark comes from the autograder when there was one,
-  // but a hand-graded Code Review has no autograde_score - the teacher's mark
+  // but a hand-graded Coding Assignment has no autograde_score - the teacher's mark
   // lands in `score` like every other manually graded thing.
   const displayScore = result.coding_problem_id
     ? result.autograde_score ?? result.score

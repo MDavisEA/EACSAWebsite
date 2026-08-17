@@ -36,7 +36,7 @@ export default function CodePracticePage() {
   // Practice runs already spent. Seeded from the resumed submission so the
   // count survives a reload, then kept in step with what the server reports.
   const [runsUsed, setRunsUsed] = useState(0);
-  // Code Review problems only: what to type in, and what the program printed.
+  // Coding Assignment problems only: what to type in, and what the program printed.
   const [plainStdin, setPlainStdin] = useState("");
   const [plainOutput, setPlainOutput] = useState(null);
 
@@ -96,7 +96,7 @@ export default function CodePracticePage() {
     return res.data;
   };
 
-  // A Code Review problem has no tests, so Run just executes the program and
+  // A Coding Assignment problem has no tests, so Run just executes the program and
   // shows what it printed. Letting students do this before submitting is the
   // cheapest way to stop code that does not compile from reaching grading.
   const handlePlainRun = async () => {
@@ -143,7 +143,7 @@ export default function CodePracticePage() {
     setSubmitting(true);
     setRunError("");
     try {
-      // A Code Review problem has no harness to run, so submitting is just
+      // A Coding Assignment problem has no harness to run, so submitting is just
       // handing the code in - there is no score to compute.
       if (problem.grading_kind === "review") {
         await base44.entities.Submission.update(submissionRef.current.id, {

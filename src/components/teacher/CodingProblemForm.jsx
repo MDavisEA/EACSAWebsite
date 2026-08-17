@@ -99,7 +99,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
       : { ...defaultForm(), course_id: initial?.course_id ?? null, unit_id: initial?.unit_id ?? null }
   );
 
-  // A Code Review is the same row as a Mini Problem with grading_kind
+  // A Coding Assignment is the same row as a Mini Problem with grading_kind
   // 'review': no test cases, the teacher marks it by hand. Branching here
   // keeps one form instead of a near-duplicate of it.
   const isReview = form.grading_kind === "review";
@@ -489,7 +489,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           Cancel
         </Button>
         <Button onClick={handleSubmit} disabled={!isValid}>
-          {isEdit ? "Save Changes" : isReview ? "Create Code Review" : "Create Problem"}
+          {isEdit ? "Save Changes" : isReview ? "Create Coding Assignment" : "Create Problem"}
         </Button>
       </div>
     </div>

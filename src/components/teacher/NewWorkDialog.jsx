@@ -25,7 +25,7 @@ const KINDS = [
   {
     kind: "review",
     icon: FileCode,
-    title: "Code Review",
+    title: "Coding Assignment",
     blurb:
       "Java you mark by hand. You read the code, run it right there to see the output, and comment on specific lines.",
     accent: "text-amber-600",

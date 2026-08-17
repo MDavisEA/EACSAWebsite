@@ -603,8 +603,8 @@ export default function TeacherDashboard() {
           <DialogHeader>
             <DialogTitle>
               {editingCoding?.id
-                ? editingCoding.grading_kind === "review" ? "Edit Code Review" : "Edit Mini Problem"
-                : editingCoding?.grading_kind === "review" ? "New Code Review" : "New Mini Problem"}
+                ? editingCoding.grading_kind === "review" ? "Edit Coding Assignment" : "Edit Mini Problem"
+                : editingCoding?.grading_kind === "review" ? "New Coding Assignment" : "New Mini Problem"}
             </DialogTitle>
           </DialogHeader>
           <CodingProblemForm
