@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import CommentBank from "./CommentBank";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import AnnotatedCodeView from "./AnnotatedCodeView";
+import GradesDialog from "./GradesDialog";
 import { groupByStudent } from "@/lib/groupSubmissionsByStudent";
 import {
   Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, User,
@@ -41,6 +42,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const [gradingSkipped, setGradingSkipped] = useState(false);
   const [lineComments, setLineComments] = useState([]);
 
+  const [gradesOpen, setGradesOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -199,7 +201,20 @@ export default function CodeReviewGrader({ problem, onGraded }) {
           {groups.length} turned in &middot; {gradedCount} graded
           {gradedCount < groups.length && `, ${groups.length - gradedCount} to go`}
         </p>
+        <Button variant="outline" size="sm" onClick={() => setGradesOpen(true)}>
+          Grades
+        </Button>
       </div>
+
+      <GradesDialog
+        open={gradesOpen}
+        onOpenChange={setGradesOpen}
+        title={problem.title}
+        submissions={submissions}
+        courseId={problem.course_id}
+        maxPoints={maxPoints}
+        scoreOf={(s) => s.score ?? null}
+      />
 
       {problem.grading_skipped && (
         <p className="text-xs text-slate-500 bg-slate-50 border rounded-lg px-3 py-2 mb-3">

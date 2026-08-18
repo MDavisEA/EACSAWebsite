@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
 import AnnotatedCodeView from "./AnnotatedCodeView";
+import GradesDialog from "./GradesDialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -56,6 +57,7 @@ export default function ProjectSubmissionViewer({ project }) {
   const [lineComments, setLineComments] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
   const [savingReview, setSavingReview] = useState(false);
+  const [gradesOpen, setGradesOpen] = useState(false);
 
   useEffect(() => {
     loadAll();
@@ -239,6 +241,9 @@ export default function ProjectSubmissionViewer({ project }) {
           <Button variant="outline" size="sm" onClick={() => setShowBulkImport(true)}>
             <Upload className="w-4 h-4 mr-1.5" /> Bulk Import (CSV)
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setGradesOpen(true)}>
+            Grades
+          </Button>
           <Button size="sm" onClick={handleExport} disabled={exporting || submissions.length === 0}>
             {exporting ? (
               <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Building zip...</>
@@ -378,6 +383,16 @@ export default function ProjectSubmissionViewer({ project }) {
           </TableBody>
         </Table>
       )}
+
+      <GradesDialog
+        open={gradesOpen}
+        onOpenChange={setGradesOpen}
+        title={project.title}
+        submissions={submissions}
+        courseId={project.course_id}
+        maxPoints={null}
+        scoreOf={(s) => s.score ?? null}
+      />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>

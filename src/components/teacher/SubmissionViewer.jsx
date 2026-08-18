@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
 import ByQuestionGrader from "./ByQuestionGrader";
 import { latestPerStudent, studentKey } from "@/lib/groupSubmissionsByStudent";
+import GradesDialog from "./GradesDialog";
 import { FileDown, Clock, User, Trash2, ArrowUpDown, GraduationCap, BookOpen, KeyRound, ExternalLink, ZoomIn, Save, CheckCircle2, Clipboard, ClipboardCheck, ChevronLeft, ChevronRight, Copy, Check, Link2, ListChecks } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -22,6 +23,7 @@ export default function SubmissionViewer({ assignment, onGraded }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [lightboxUrl, setLightboxUrl] = useState(null);
   const [byQuestionOpen, setByQuestionOpen] = useState(false);
+  const [gradesOpen, setGradesOpen] = useState(false);
   const [questionScores, setQuestionScores] = useState({}); // { [questionId]: string }
   const [partComments, setPartComments] = useState({}); // { [key]: string }
 
@@ -239,6 +241,9 @@ export default function SubmissionViewer({ assignment, onGraded }) {
                 <ListChecks className="w-4 h-4 mr-1" /> Grade by Question
               </Button>
             )}
+            <Button variant="outline" size="sm" onClick={() => setGradesOpen(true)}>
+              <GraduationCap className="w-4 h-4 mr-1" /> Grades
+            </Button>
           </div>
         )}
       </div>
@@ -579,6 +584,16 @@ export default function SubmissionViewer({ assignment, onGraded }) {
           })()}
         </DialogContent>
       </Dialog>
+      <GradesDialog
+        open={gradesOpen}
+        onOpenChange={setGradesOpen}
+        title={assignment.title}
+        submissions={submissions}
+        courseId={assignment.course_id}
+        maxPoints={(assignment.questions || []).reduce((sum, q) => sum + (Number(q.max_score ?? 9) || 0), 0) || null}
+        scoreOf={(s) => s.score ?? null}
+      />
+
       <ByQuestionGrader
         open={byQuestionOpen}
         onOpenChange={setByQuestionOpen}

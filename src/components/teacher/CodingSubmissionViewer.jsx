@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
 import AnnotatedCodeView from "./AnnotatedCodeView";
+import GradesDialog from "./GradesDialog";
 
 // Derived from a submission's run_history (one entry per Run/Submit click,
 // each carrying a full code snapshot, compile status, and per-check
@@ -29,6 +30,10 @@ function computeAttemptStats(submission) {
   };
 }
 
+// Autograded: the mark is autograde_score. Falls back to a hand-entered score
+// for anything marked by hand before it was autograded, or afterwards.
+const SCORE_OF_AUTOGRADED = (s) => s.autograde_score ?? s.score ?? null;
+
 export default function CodingSubmissionViewer({ problem }) {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +44,7 @@ export default function CodingSubmissionViewer({ problem }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [copiedCode, setCopiedCode] = useState(null);
   const [expandedAttempt, setExpandedAttempt] = useState(null);
+  const [gradesOpen, setGradesOpen] = useState(false);
 
   // The autograder produces a score, but it cannot say anything useful about
   // HOW the code is written - so a teacher still wants to leave notes on an
@@ -236,6 +242,9 @@ export default function CodingSubmissionViewer({ problem }) {
             <Button variant="outline" size="sm" onClick={exportCSV}>
               <FileDown className="w-4 h-4 mr-1" /> Export CSV
             </Button>
+            <Button variant="outline" size="sm" onClick={() => setGradesOpen(true)}>
+              Grades
+            </Button>
           </div>
         )}
       </div>
@@ -351,6 +360,16 @@ export default function CodingSubmissionViewer({ problem }) {
           </TableBody>
         </Table>
       )}
+
+      <GradesDialog
+        open={gradesOpen}
+        onOpenChange={setGradesOpen}
+        title={problem.title}
+        submissions={submissions}
+        courseId={problem.course_id}
+        maxPoints={problem.points_possible ?? null}
+        scoreOf={SCORE_OF_AUTOGRADED}
+      />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>
