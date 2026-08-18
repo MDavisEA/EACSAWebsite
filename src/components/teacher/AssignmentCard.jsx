@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Copy, Pencil, Trash2, ChevronDown, ChevronUp, Link2, Users, Clock, Check, Star, CopyPlus, GripVertical, Eye } from "lucide-react";
+import { Copy, Pencil, Trash2, ChevronDown, ChevronUp, Link2, Users, Clock, Check, Star, CopyPlus, GripVertical, Eye, Ban } from "lucide-react";
 import SubmissionViewer from "./SubmissionViewer";
 import StudentPreviewDialog from "./StudentPreviewDialog";
 
-export default function AssignmentCard({ assignment, ungradedCount = 0, onGraded, dragHandleProps, onEdit, onDelete, onToggleActive, onToggleFeatured, onDuplicate, onToggleShowAnswerKey }) {
+export default function AssignmentCard({ assignment, ungradedCount = 0, onGraded, dragHandleProps, onEdit, onDelete, onToggleActive, onToggleGrading, onToggleFeatured, onDuplicate, onToggleShowAnswerKey }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -42,10 +42,14 @@ export default function AssignmentCard({ assignment, ungradedCount = 0, onGraded
                 <Badge variant={assignment.is_active ? "default" : "secondary"}>
                   {assignment.is_active ? "Active" : "Inactive"}
                 </Badge>
-                {ungradedCount > 0 && (
-                  <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
-                    {ungradedCount} to grade
-                  </Badge>
+                {assignment.grading_skipped ? (
+                  <Badge variant="outline" className="text-slate-500">Not grading this</Badge>
+                ) : (
+                  ungradedCount > 0 && (
+                    <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
+                      {ungradedCount} to grade
+                    </Badge>
+                  )
                 )}
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -84,6 +88,19 @@ export default function AssignmentCard({ assignment, ungradedCount = 0, onGraded
               />
               <Button variant="ghost" size="sm" onClick={() => setPreviewing(true)} title="Preview as student">
                 <Eye className="w-4 h-4" />
+              </Button>
+              {/* One decision, made on the assignment: if I'm not grading it
+                  for one student I'm not grading it for the class. Removes
+                  it from every "needs grading" badge and the Needs Grading
+                  panel entirely, rather than toggling each submission. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleGrading}
+                title={assignment.grading_skipped ? "Grade this assignment again" : "Don't grade this assignment"}
+                className={assignment.grading_skipped ? "text-slate-700" : "text-slate-300 hover:text-slate-600"}
+              >
+                <Ban className="w-4 h-4" />
               </Button>
               <Button variant="ghost" size="sm" onClick={onDuplicate} title="Duplicate assignment">
                 <CopyPlus className="w-4 h-4" />

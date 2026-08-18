@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Pencil, Trash2, CopyPlus, Link2, Users, ChevronDown, ChevronUp, Copy, Check , GripVertical } from "lucide-react";
+import { Pencil, Trash2, CopyPlus, Link2, Users, ChevronDown, ChevronUp, Copy, Check , GripVertical, Ban } from "lucide-react";
 import ProjectSubmissionViewer from "./ProjectSubmissionViewer";
 
-export default function ProjectCard({ project, dragHandleProps, ungradedCount = 0, onEdit, onDelete, onToggleActive, onDuplicate }) {
+export default function ProjectCard({ project, dragHandleProps, ungradedCount = 0, onEdit, onDelete, onToggleActive, onToggleGrading, onDuplicate }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -40,10 +40,14 @@ export default function ProjectCard({ project, dragHandleProps, ungradedCount = 
                 <Badge variant={project.is_active ? "default" : "secondary"}>
                   {project.is_active ? "Active" : "Inactive"}
                 </Badge>
-                {ungradedCount > 0 && (
-                  <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
-                    {ungradedCount} to review
-                  </Badge>
+                {project.grading_skipped ? (
+                  <Badge variant="outline" className="text-slate-500">Not grading this</Badge>
+                ) : (
+                  ungradedCount > 0 && (
+                    <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
+                      {ungradedCount} to review
+                    </Badge>
+                  )
                 )}
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -62,6 +66,15 @@ export default function ProjectCard({ project, dragHandleProps, ungradedCount = 
             </div>
             <div className="flex items-center gap-1">
               <Switch checked={project.is_active} onCheckedChange={onToggleActive} className="mr-2" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleGrading}
+                title={project.grading_skipped ? "Grade this project again" : "Don't grade this project"}
+                className={project.grading_skipped ? "text-slate-700" : "text-slate-300 hover:text-slate-600"}
+              >
+                <Ban className="w-4 h-4" />
+              </Button>
               <Button variant="ghost" size="sm" onClick={onDuplicate} title="Duplicate project">
                 <CopyPlus className="w-4 h-4" />
               </Button>

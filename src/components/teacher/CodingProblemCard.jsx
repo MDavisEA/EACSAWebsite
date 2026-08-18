@@ -3,12 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Pencil, Trash2, CopyPlus, Code2, Eye, EyeOff, Link2, Users, ChevronDown, ChevronUp, Copy, Check , GripVertical } from "lucide-react";
+import { Pencil, Trash2, CopyPlus, Code2, Eye, EyeOff, Link2, Users, ChevronDown, ChevronUp, Copy, Check , GripVertical, Ban } from "lucide-react";
 import CodingSubmissionViewer from "./CodingSubmissionViewer";
 import CodeReviewGrader from "./CodeReviewGrader";
 import StudentPreviewDialog from "./StudentPreviewDialog";
 
-export default function CodingProblemCard({ problem, ungradedCount = 0, dragHandleProps, onEdit, onDelete, onToggleActive, onDuplicate }) {
+export default function CodingProblemCard({ problem, ungradedCount = 0, dragHandleProps, onEdit, onDelete, onToggleActive, onToggleGrading, onDuplicate }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -54,10 +54,14 @@ export default function CodingProblemCard({ problem, ungradedCount = 0, dragHand
                     {methods.length} method{methods.length !== 1 ? "s" : ""}
                   </Badge>
                 )}
-                {problem.grading_kind === "review" && ungradedCount > 0 && (
-                  <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
-                    {ungradedCount} to grade
-                  </Badge>
+                {problem.grading_kind === "review" && problem.grading_skipped ? (
+                  <Badge variant="outline" className="text-slate-500">Not grading this</Badge>
+                ) : (
+                  problem.grading_kind === "review" && ungradedCount > 0 && (
+                    <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
+                      {ungradedCount} to grade
+                    </Badge>
+                  )
                 )}
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -86,6 +90,20 @@ export default function CodingProblemCard({ problem, ungradedCount = 0, dragHand
               <Button variant="ghost" size="sm" onClick={() => setPreviewing(true)} title="Preview as student">
                 <Eye className="w-4 h-4" />
               </Button>
+              {/* Only meaningful for a hand-graded Coding Assignment - an
+                  autograded Mini Problem never needs a human, so there is
+                  nothing here to opt out of. */}
+              {problem.grading_kind === "review" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleGrading}
+                  title={problem.grading_skipped ? "Grade this again" : "Don't grade this"}
+                  className={problem.grading_skipped ? "text-slate-700" : "text-slate-300 hover:text-slate-600"}
+                >
+                  <Ban className="w-4 h-4" />
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={onDuplicate} title="Duplicate problem">
                 <CopyPlus className="w-4 h-4" />
               </Button>

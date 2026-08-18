@@ -217,6 +217,16 @@ export default function TeacherDashboard() {
     loadAssignments();
   };
 
+  // "Not going to grade this" for the whole assignment - the pattern being
+  // that a teacher who decides not to grade it for one student is not
+  // grading it for the class, so this is one decision on the work rather
+  // than repeated per submission. Recomputes gradingCounts too, since it
+  // stops contributing to every badge the moment this is set.
+  const handleToggleAssignmentGrading = async (assignment) => {
+    await base44.entities.Assignment.update(assignment.id, { grading_skipped: !assignment.grading_skipped });
+    await Promise.all([loadAssignments(), loadGradingCounts()]);
+  };
+
   const handleDuplicate = async (assignment) => {
     const { id, created_date, updated_date, created_by, ...data } = assignment;
     await base44.entities.Assignment.create({
@@ -266,6 +276,11 @@ export default function TeacherDashboard() {
     loadCodingProblems();
   };
 
+  const handleToggleCodingGrading = async (problem) => {
+    await base44.entities.CodingProblem.update(problem.id, { grading_skipped: !problem.grading_skipped });
+    await Promise.all([loadCodingProblems(), loadGradingCounts()]);
+  };
+
   const handleDuplicateCoding = async (problem) => {
     const { id, created_at, updated_at, ...data } = problem;
     await base44.entities.CodingProblem.create({
@@ -298,6 +313,11 @@ export default function TeacherDashboard() {
   const handleToggleProjectActive = async (project) => {
     await base44.entities.Project.update(project.id, { is_active: !project.is_active });
     loadProjects();
+  };
+
+  const handleToggleProjectGrading = async (project) => {
+    await base44.entities.Project.update(project.id, { grading_skipped: !project.grading_skipped });
+    await Promise.all([loadProjects(), loadGradingCounts()]);
   };
 
   const handleSaveCourse = async (data) => {
@@ -392,16 +412,19 @@ export default function TeacherDashboard() {
     editAssignment: (a) => { setEditing(a); setShowForm(true); },
     deleteAssignment: (a) => setDeleting(a),
     toggleAssignmentActive: handleToggleActive,
+    toggleAssignmentGrading: handleToggleAssignmentGrading,
     toggleFeatured: handleToggleFeatured,
     toggleShowAnswerKey: handleToggleShowAnswerKey,
     duplicateAssignment: handleDuplicate,
     editCoding: (p) => { setEditingCoding(p); setShowCodingForm(true); },
     deleteCoding: (p) => setDeletingCoding(p),
     toggleCodingActive: handleToggleCodingActive,
+    toggleCodingGrading: handleToggleCodingGrading,
     duplicateCoding: handleDuplicateCoding,
     editProject: (p) => { setEditingProject(p); setShowProjectForm(true); },
     deleteProject: (p) => setDeletingProject(p),
     toggleProjectActive: handleToggleProjectActive,
+    toggleProjectGrading: handleToggleProjectGrading,
     duplicateProject: handleDuplicateProject,
   };
 

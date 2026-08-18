@@ -414,37 +414,61 @@ Deno.serve(async (req) => {
       return json({ results: (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids)) });
     }
 
-    // Which of this teacher's own coding problems are hand-graded. Needed by
-    // both actions below: an autograded Mini Problem gets its autograde_score
-    // the instant it is submitted and can never be "waiting on a human", so a
-    // null `score` on one of those means nothing - only a `review` problem's
-    // null score is really a submission sitting in the pile.
-    const myReviewProblemIds = async (): Promise<Set<string>> => {
+    // Which of this teacher's own work is actually gradeable right now.
+    // Needed by both actions below. Two separate reasons a piece of work is
+    // excluded: an autograded Mini Problem gets its autograde_score the
+    // instant it is submitted and can never be "waiting on a human", so a
+    // null `score` on one means nothing - only a `review` problem's null
+    // score is really a submission sitting in the pile. Separately, a teacher
+    // can mark a whole assignment/problem/project as one they are not
+    // grading at all (see 0017_work_level_skip_grading.sql) - the usual real
+    // pattern being "if I'm not grading it for one student I'm not grading it
+    // for the class", so this is a decision made once on the work rather than
+    // repeated per submission.
+    const myGradableWorkIds = async () => {
       const ids = await myWorkIds();
-      if (ids.coding.length === 0) return new Set();
-      const { data } = await admin
-        .from('coding_problems')
-        .select('id')
-        .in('id', ids.coding)
-        .eq('grading_kind', 'review');
-      return new Set((data || []).map((r: Record<string, any>) => r.id));
+      const [a, p, c] = await Promise.all([
+        ids.assignments.length
+          ? admin.from('assignments').select('id, grading_skipped').in('id', ids.assignments)
+          : Promise.resolve({ data: [] }),
+        ids.projects.length
+          ? admin.from('projects').select('id, grading_skipped').in('id', ids.projects)
+          : Promise.resolve({ data: [] }),
+        ids.coding.length
+          ? admin.from('coding_problems').select('id, grading_kind, grading_skipped').in('id', ids.coding)
+          : Promise.resolve({ data: [] }),
+      ]);
+      return {
+        assignments: new Set(
+          (a.data || []).filter((r: Record<string, any>) => !r.grading_skipped).map((r: Record<string, any>) => r.id)
+        ),
+        projects: new Set(
+          (p.data || []).filter((r: Record<string, any>) => !r.grading_skipped).map((r: Record<string, any>) => r.id)
+        ),
+        reviewProblems: new Set(
+          (c.data || [])
+            .filter((r: Record<string, any>) => r.grading_kind === 'review' && !r.grading_skipped)
+            .map((r: Record<string, any>) => r.id)
+        ),
+      };
     };
 
     // How much work is sitting there waiting on the teacher. Counted here
     // rather than by shipping every submission to the browser and filtering
-    // client-side. `grading_skipped` rows are excluded - a teacher who has
+    // client-side. `grading_skipped` submissions are excluded, and so is
+    // anything belonging to work marked not-graded at all - a teacher who has
     // deliberately decided not to grade something should not keep seeing it
     // nag at them from every badge in the app.
     if (action === 'gradingCounts') {
       const ids = await myWorkIds();
-      const [{ data, error }, reviewIds] = await Promise.all([
+      const [{ data, error }, gradable] = await Promise.all([
         admin
           .from('submissions')
           .select('assignment_id, project_id, coding_problem_id, score')
           .eq('submitted', true)
           .eq('grading_skipped', false)
           .is('score', null),
-        myReviewProblemIds(),
+        myGradableWorkIds(),
       ]);
       if (error) return json({ error: error.message }, 500);
       const owned = (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids));
@@ -453,9 +477,11 @@ Deno.serve(async (req) => {
       const byProject: Record<string, number> = {};
       const byCodingProblem: Record<string, number> = {};
       for (const row of owned) {
-        if (row.assignment_id) byAssignment[row.assignment_id] = (byAssignment[row.assignment_id] || 0) + 1;
-        else if (row.project_id) byProject[row.project_id] = (byProject[row.project_id] || 0) + 1;
-        else if (row.coding_problem_id && reviewIds.has(row.coding_problem_id))
+        if (row.assignment_id && gradable.assignments.has(row.assignment_id))
+          byAssignment[row.assignment_id] = (byAssignment[row.assignment_id] || 0) + 1;
+        else if (row.project_id && gradable.projects.has(row.project_id))
+          byProject[row.project_id] = (byProject[row.project_id] || 0) + 1;
+        else if (row.coding_problem_id && gradable.reviewProblems.has(row.coding_problem_id))
           byCodingProblem[row.coding_problem_id] = (byCodingProblem[row.coding_problem_id] || 0) + 1;
       }
       return json({ result: { byAssignment, byProject, byCodingProblem } });
@@ -463,13 +489,15 @@ Deno.serve(async (req) => {
 
     // The full "needs grading" list behind the dashboard's Needs Grading
     // panel - every submitted, unscored, gradeable submission this teacher
-    // owns, regardless of grading_skipped (the panel shows both piles and
-    // lets a teacher move something between them). Titles and course context
-    // are resolved here rather than making the browser stitch three more
-    // round trips together.
+    // owns. Submissions individually marked grading_skipped are still
+    // included (the panel shows both piles and lets a teacher move something
+    // between them) - but anything belonging to work marked not-graded at
+    // the assignment level is left out entirely, not shown in either pile,
+    // since that decision was about the whole class, not about any one
+    // submission worth surfacing for review.
     if (action === 'listNeedsGrading') {
       const ids = await myWorkIds();
-      const [{ data, error }, reviewIds] = await Promise.all([
+      const [{ data, error }, gradable] = await Promise.all([
         admin
           .from('submissions')
           .select(
@@ -478,7 +506,7 @@ Deno.serve(async (req) => {
           .eq('submitted', true)
           .is('score', null)
           .order('submitted_at', { ascending: true }),
-        myReviewProblemIds(),
+        myGradableWorkIds(),
       ]);
       if (error) return json({ error: error.message }, 500);
       const owned = (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids));
@@ -502,10 +530,10 @@ Deno.serve(async (req) => {
       for (const s of owned) {
         let kind: string;
         let workId: string;
-        if (s.assignment_id) { kind = 'frq'; workId = s.assignment_id; }
-        else if (s.project_id) { kind = 'project'; workId = s.project_id; }
-        else if (s.coding_problem_id && reviewIds.has(s.coding_problem_id)) { kind = 'review'; workId = s.coding_problem_id; }
-        else continue; // an autograded Mini Problem - never waiting on a human
+        if (s.assignment_id && gradable.assignments.has(s.assignment_id)) { kind = 'frq'; workId = s.assignment_id; }
+        else if (s.project_id && gradable.projects.has(s.project_id)) { kind = 'project'; workId = s.project_id; }
+        else if (s.coding_problem_id && gradable.reviewProblems.has(s.coding_problem_id)) { kind = 'review'; workId = s.coding_problem_id; }
+        else continue; // autograded, or the whole assignment/problem/project is marked not-graded
         const meta = titleMap.get(workId);
         if (!meta) continue; // work item since deleted
         results.push({

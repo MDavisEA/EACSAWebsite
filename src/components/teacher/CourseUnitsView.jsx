@@ -138,6 +138,7 @@ export default function CourseUnitsView({
           onEdit={() => handlers.editAssignment(item)}
           onDelete={() => handlers.deleteAssignment(item)}
           onToggleActive={() => handlers.toggleAssignmentActive(item)}
+          onToggleGrading={() => handlers.toggleAssignmentGrading(item)}
           onToggleFeatured={() => handlers.toggleFeatured(item)}
           onToggleShowAnswerKey={() => handlers.toggleShowAnswerKey(item)}
           onDuplicate={() => handlers.duplicateAssignment(item)}
@@ -154,6 +155,7 @@ export default function CourseUnitsView({
           onEdit={() => handlers.editCoding(item)}
           onDelete={() => handlers.deleteCoding(item)}
           onToggleActive={() => handlers.toggleCodingActive(item)}
+          onToggleGrading={() => handlers.toggleCodingGrading(item)}
           onDuplicate={() => handlers.duplicateCoding(item)}
         />
       );
@@ -167,6 +169,7 @@ export default function CourseUnitsView({
         onEdit={() => handlers.editProject(item)}
         onDelete={() => handlers.deleteProject(item)}
         onToggleActive={() => handlers.toggleProjectActive(item)}
+        onToggleGrading={() => handlers.toggleProjectGrading(item)}
         onDuplicate={() => handlers.duplicateProject(item)}
       />
     );
