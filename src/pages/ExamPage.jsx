@@ -139,6 +139,19 @@ export default function ExamPage() {
         assignment_id: assignmentId,
         responses: localDraft,
       });
+
+      // create() now hands back an already-submitted row rather than making a
+      // second one (see startFresh) whenever this assignment was already
+      // turned in - which happens just by revisiting this page after
+      // submitting, no special action needed. Nothing here can actually
+      // change it (submitFinal treats an already-submitted row as a no-op),
+      // so send them to the dashboard's real "view what you turned in / turn
+      // it in again" flow instead of quietly reopening the exam UI on it.
+      if (sub.submitted) {
+        navigate("/");
+        return;
+      }
+
       responsesRef.current = localDraft;
       setResponses(localDraft);
       if (hasLocalDraft && Object.keys(localDraft).some((k) => localDraft[k]?.trim())) {

@@ -77,6 +77,20 @@ export default function CodePracticePage() {
     } else {
       sub = await base44.entities.Submission.create({ coding_problem_id: problemId });
     }
+
+    // create() now hands back an already-submitted row rather than making a
+    // second one (see startCoding) whenever this problem was already turned
+    // in - which happens just by revisiting this page after submitting, no
+    // special action needed. There is nothing to edit in that case; the
+    // dashboard already has the real "view what you turned in / turn it in
+    // again" flow, so send them there instead of quietly reopening an
+    // editor on a submission that a Submit click here cannot actually change
+    // (submitFinal treats an already-submitted row as a no-op).
+    if (sub.submitted) {
+      navigate("/");
+      return;
+    }
+
     submissionRef.current = { id: sub.id, session_token: sub.session_token };
     setRunsUsed((sub.run_history || []).filter((h) => !h.final).length);
     setCode(draft || sub.code || p.starter_code || "");

@@ -72,6 +72,29 @@ Deno.serve(async (req) => {
         return json({ error: 'One of assignment_id/coding_problem_id is required' }, 400);
       }
 
+      // A student who already has a row for this assignment - submitted or
+      // not - gets it back rather than a second, blank one. The client only
+      // ever asks for an UNSUBMITTED row before deciding to create one
+      // (findMyOpenSubmission), so simply revisiting the assignment's start
+      // link after already turning it in - an old bookmark, clicking the
+      // link again from an email - fell through to here and silently
+      // created an orphaned duplicate every time. That is what actually made
+      // a submission look like it had several "attempts": most were never
+      // real second tries, just the same visit repeated. Checked before the
+      // is_active/due_date gate below, so a student can still get back to
+      // their own work even if the teacher deactivates the assignment
+      // afterward - those checks exist to stop a new start, not to lock
+      // someone out of what they already turned in.
+      const { data: existingAny } = await admin
+        .from('submissions')
+        .select('*')
+        .eq('student_user_id', student.id)
+        .eq(assignment_id ? 'assignment_id' : 'coding_problem_id', assignment_id || coding_problem_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existingAny) return json({ result: existingAny });
+
       // is_active / due_date used to be enforced only in StudentEntry.jsx, which
       // a bookmarked /exam?id=... URL skips entirely - so a student could start
       // and submit a closed or past-due assignment just by reusing an old link.
@@ -252,6 +275,19 @@ Deno.serve(async (req) => {
       const { coding_problem_id } = body;
       if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
       if (!coding_problem_id) return json({ error: 'coding_problem_id is required' }, 400);
+
+      // See the identical check in startFresh - a student who already has a
+      // row for this problem, submitted or not, gets it back rather than a
+      // second blank one.
+      const { data: existingAny } = await admin
+        .from('submissions')
+        .select('*')
+        .eq('student_user_id', student.id)
+        .eq('coding_problem_id', coding_problem_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existingAny) return json({ result: existingAny });
 
       // Same reason as startFresh: a bookmarked /code-practice?id=... URL
       // skips the picker page where this was previously the only check.
