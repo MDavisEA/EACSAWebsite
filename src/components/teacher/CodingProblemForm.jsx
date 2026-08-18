@@ -225,14 +225,21 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
       ? 'Cannot be "Main" — the grader already uses that name internally. Try "Solution".'
       : null;
 
+  // Required for a Mini Problem - the autograder actually calls
+  // `<class_name>.<method>()`, so a blank name has nowhere to compile to. A
+  // Coding Assignment is graded by hand and only ever uses this to label
+  // starter code, so leaving it blank (or deleting it) is harmless and
+  // should not block saving - it used to, which meant an accidental delete
+  // locked the form.
   const isValid =
-    form.title.trim() && form.class_name.trim() && form.course_id && !classNameError && !hasMethodNameErrors;
+    form.title.trim() && (isReview || form.class_name.trim()) && form.course_id && !classNameError && !hasMethodNameErrors;
 
   const handleSubmit = () => {
     if (!isValid) return;
     onSave({
       ...form,
       language: "java",
+      class_name: form.class_name.trim() || "Solution",
       course_id: form.course_id || null,
       unit_id: form.unit_id || null,
       due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
@@ -261,7 +268,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           />
         </div>
         <div className="space-y-2">
-          <Label>Class Name (for the starter code)</Label>
+          <Label>Class Name (for the starter code){isReview ? " (optional)" : ""}</Label>
           <Input
             value={form.class_name}
             onChange={(e) => updateField("class_name", e.target.value)}
@@ -272,8 +279,9 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
             <p className="text-xs text-destructive">{classNameError}</p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Just names the class in the starter code below — students can rename it and their
-              program still gets graded correctly, since nothing here checks for a specific name.
+              {isReview
+                ? "Just names the class in the starter code below. You're grading by hand, so nothing checks this - leave it blank and it defaults to \"Solution\"."
+                : "Just names the class in the starter code below — students can rename it and their program still gets graded correctly, since nothing here checks for a specific name."}
             </p>
           )}
         </div>

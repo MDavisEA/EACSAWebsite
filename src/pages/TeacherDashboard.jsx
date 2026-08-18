@@ -195,11 +195,29 @@ export default function TeacherDashboard() {
   };
 
 
+  // Units order their work by sort_order (unset reads as 9999, i.e. last).
+  // Newly created work has no sort_order at all, so without this it landed
+  // wherever the tie-break (alphabetical by title) put it - usually not the
+  // top. One position lower than the current lowest in that same unit puts a
+  // brand-new item first, which is where you want to find the thing you just
+  // made rather than scrolling to look for it.
+  const nextTopSortOrder = (courseId, unitId) => {
+    const unitKey = unitId || null;
+    const inSameUnit = [...assignments, ...codingProblems, ...projects].filter(
+      (w) => w.course_id === courseId && (w.unit_id || null) === unitKey
+    );
+    const min = inSameUnit.reduce((m, w) => Math.min(m, w.sort_order ?? 9999), 9999);
+    return min - 1;
+  };
+
   const handleSave = async (data) => {
     if (editing?.id) {
       await base44.entities.Assignment.update(editing.id, data);
     } else {
-      await base44.entities.Assignment.create(data);
+      await base44.entities.Assignment.create({
+        ...data,
+        sort_order: nextTopSortOrder(data.course_id, data.unit_id),
+      });
     }
     setShowForm(false);
     setEditing(null);
@@ -258,7 +276,10 @@ export default function TeacherDashboard() {
     if (editingCoding?.id) {
       await base44.entities.CodingProblem.update(editingCoding.id, data);
     } else {
-      await base44.entities.CodingProblem.create(data);
+      await base44.entities.CodingProblem.create({
+        ...data,
+        sort_order: nextTopSortOrder(data.course_id, data.unit_id),
+      });
     }
     setShowCodingForm(false);
     setEditingCoding(null);
@@ -304,7 +325,10 @@ export default function TeacherDashboard() {
     if (editingProject?.id) {
       await base44.entities.Project.update(editingProject.id, data);
     } else {
-      await base44.entities.Project.create(data);
+      await base44.entities.Project.create({
+        ...data,
+        sort_order: nextTopSortOrder(data.course_id, data.unit_id),
+      });
     }
     setShowProjectForm(false);
     setEditingProject(null);
