@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
 import ByQuestionGrader from "./ByQuestionGrader";
+import { latestPerStudent, studentKey } from "@/lib/groupSubmissionsByStudent";
 import { FileDown, Clock, User, Trash2, ArrowUpDown, GraduationCap, BookOpen, KeyRound, ExternalLink, ZoomIn, Save, CheckCircle2, Clipboard, ClipboardCheck, ChevronLeft, ChevronRight, Copy, Check, Link2, ListChecks } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -62,7 +63,14 @@ export default function SubmissionViewer({ assignment, onGraded }) {
     setLoading(false);
   };
 
-  const sortedSubmissions = [...submissions].sort((a, b) => {
+  // One row per student everywhere below - a student with more than one
+  // submission row for this assignment (old data from before a revisit after
+  // submitting stopped creating a fresh row every time) is one person, not
+  // several. `submissions` itself stays the raw fetched rows, since deleting
+  // a specific duplicate still needs its real id.
+  const visible = latestPerStudent(submissions);
+
+  const sortedSubmissions = [...visible].sort((a, b) => {
     const aTime = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
     const bTime = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
     return sortOrder === "newest" ? bTime - aTime : aTime - bTime;
@@ -117,8 +125,15 @@ export default function SubmissionViewer({ assignment, onGraded }) {
   };
 
   const handleDelete = async () => {
-    await base44.entities.Submission.delete(deleteTarget.id);
-    setSubmissions((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+    // deleteTarget is the visible (most recent) row - a student with
+    // duplicate rows has others hidden underneath it in `submissions`.
+    // Deleting only the one shown would silently leave the older ones in the
+    // database, ready to reappear as "the" row next time this list loads.
+    const key = studentKey(deleteTarget);
+    const toDelete = submissions.filter((s) => studentKey(s) === key);
+    await Promise.all(toDelete.map((s) => base44.entities.Submission.delete(s.id)));
+    const idsDeleted = new Set(toDelete.map((s) => s.id));
+    setSubmissions((prev) => prev.filter((s) => !idsDeleted.has(s.id)));
     setDeleteTarget(null);
   };
 
@@ -132,12 +147,12 @@ export default function SubmissionViewer({ assignment, onGraded }) {
   const exportCSV = () => {
     const headers = ["Student Name", "Submitted At", "Time Spent"];
     const allKeys = new Set();
-    submissions.forEach((s) => {
+    visible.forEach((s) => {
       Object.keys(s.responses || {}).forEach((k) => allKeys.add(k));
     });
     const responseKeys = Array.from(allKeys);
     headers.push(...responseKeys);
-    const rows = submissions.map((s) => [
+    const rows = visible.map((s) => [
       s.student_name,
       s.submitted_at ? format(new Date(s.submitted_at), "yyyy-MM-dd HH:mm") : "",
       formatDuration(s.time_spent_seconds),
@@ -204,9 +219,9 @@ export default function SubmissionViewer({ assignment, onGraded }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">
-          {submissions.length} Submission{submissions.length !== 1 ? "s" : ""}
+          {visible.length} Submission{visible.length !== 1 ? "s" : ""}
         </h3>
-        {submissions.length > 0 && (
+        {visible.length > 0 && (
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -228,7 +243,7 @@ export default function SubmissionViewer({ assignment, onGraded }) {
         )}
       </div>
 
-      {submissions.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground">No submissions yet.</div>
       ) : (
         <Table>
@@ -305,7 +320,11 @@ export default function SubmissionViewer({ assignment, onGraded }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Submission?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete {deleteTarget?.student_name}'s submission. This cannot be undone.
+              This will permanently delete {deleteTarget?.student_name}'s submission
+              {deleteTarget && submissions.filter((s) => studentKey(s) === studentKey(deleteTarget)).length > 1
+                ? ", including their earlier resubmissions"
+                : ""}
+              . This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

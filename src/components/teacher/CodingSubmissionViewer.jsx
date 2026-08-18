@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { FileDown, Clock, User, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Check, Link2, CheckCircle2, XCircle, EyeOff, AlertTriangle } from "lucide-react";
+import { latestPerStudent, studentKey } from "@/lib/groupSubmissionsByStudent";
 
 // Derived from a submission's run_history (one entry per Run/Submit click,
 // each carrying a full code snapshot, compile status, and per-check
@@ -55,7 +56,15 @@ export default function CodingSubmissionViewer({ problem }) {
     }
   };
 
-  const sortedSubmissions = [...submissions].sort((a, b) => {
+  // One row per student for every list, count, and stat below - a student
+  // with more than one submission row (old data from before a revisit after
+  // submitting stopped creating a fresh row every time) is one person, not
+  // several, and should never be counted, listed, or averaged-into class
+  // stats more than once. `submissions` itself stays the raw fetched rows,
+  // since deleting a specific duplicate still needs its real id.
+  const visible = latestPerStudent(submissions);
+
+  const sortedSubmissions = [...visible].sort((a, b) => {
     const aTime = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
     const bTime = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
     return sortOrder === "newest" ? bTime - aTime : aTime - bTime;
@@ -74,14 +83,23 @@ export default function CodingSubmissionViewer({ problem }) {
   };
 
   const handleDelete = async () => {
-    await base44.entities.Submission.delete(deleteTarget.id);
-    setSubmissions((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+    // deleteTarget is the visible (most recent) row, but a student who left
+    // duplicate rows behind has others hidden underneath it in `submissions`.
+    // Deleting only the one shown would silently leave the older ones in the
+    // database - invisible right now, but ready to reappear as "the" row the
+    // next time this list loads. "Delete this student's submission" should
+    // mean all of it.
+    const key = studentKey(deleteTarget);
+    const toDelete = submissions.filter((s) => studentKey(s) === key);
+    await Promise.all(toDelete.map((s) => base44.entities.Submission.delete(s.id)));
+    const idsDeleted = new Set(toDelete.map((s) => s.id));
+    setSubmissions((prev) => prev.filter((s) => !idsDeleted.has(s.id)));
     setDeleteTarget(null);
   };
 
   const exportCSV = () => {
     const headers = ["Student Name", "Submitted At", "Score", "Points Possible", "Checks Passed", "Attempts", "Solved On Attempt", "Compile Errors"];
-    const rows = submissions.map((s) => {
+    const rows = visible.map((s) => {
       const passed = (s.test_results || []).filter((r) => r.passed).length;
       const total = (s.test_results || []).length;
       const stats = computeAttemptStats(s);
@@ -110,7 +128,7 @@ export default function CodingSubmissionViewer({ problem }) {
   // the most useful reteach target surfaces immediately.
   const checkStats = (() => {
     const byCheck = {};
-    submissions.forEach((s) => {
+    visible.forEach((s) => {
       (s.test_results || []).forEach((r) => {
         const key = `${r.method_name}::${r.test_id}`;
         if (!byCheck[key]) byCheck[key] = { method_name: r.method_name, label: r.label, hidden: r.hidden, passed: 0, total: 0 };
@@ -124,12 +142,12 @@ export default function CodingSubmissionViewer({ problem }) {
   })();
 
   const avgAttempts =
-    submissions.length > 0
-      ? submissions.reduce((sum, s) => sum + (s.run_history?.length || 0), 0) / submissions.length
+    visible.length > 0
+      ? visible.reduce((sum, s) => sum + (s.run_history?.length || 0), 0) / visible.length
       : 0;
   const compileErrorRate =
-    submissions.length > 0
-      ? submissions.filter((s) => (s.run_history || []).some((h) => h.compile_error)).length / submissions.length
+    visible.length > 0
+      ? visible.filter((s) => (s.run_history || []).some((h) => h.compile_error)).length / visible.length
       : 0;
 
   if (loading) {
@@ -153,9 +171,9 @@ export default function CodingSubmissionViewer({ problem }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">
-          {submissions.length} Submission{submissions.length !== 1 ? "s" : ""}
+          {visible.length} Submission{visible.length !== 1 ? "s" : ""}
         </h3>
-        {submissions.length > 0 && (
+        {visible.length > 0 && (
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setSortOrder((o) => (o === "newest" ? "oldest" : "newest"))}>
               <ArrowUpDown className="w-3.5 h-3.5 mr-1" />
@@ -168,7 +186,7 @@ export default function CodingSubmissionViewer({ problem }) {
         )}
       </div>
 
-      {submissions.length > 0 && (
+      {visible.length > 0 && (
         <div className="mb-4 p-4 bg-slate-50 border rounded-lg">
           <p className="text-sm font-semibold mb-2">Class Insights</p>
           <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
@@ -199,7 +217,7 @@ export default function CodingSubmissionViewer({ problem }) {
         </div>
       )}
 
-      {submissions.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground">No submissions yet.</div>
       ) : (
         <Table>
@@ -285,7 +303,11 @@ export default function CodingSubmissionViewer({ problem }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Submission?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete {deleteTarget?.student_name}'s submission. This cannot be undone.
+              This will permanently delete {deleteTarget?.student_name}&rsquo;s submission
+              {deleteTarget && submissions.filter((s) => studentKey(s) === studentKey(deleteTarget)).length > 1
+                ? ", including their earlier resubmissions"
+                : ""}
+              . This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

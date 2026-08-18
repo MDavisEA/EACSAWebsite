@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import CommentBank from "./CommentBank";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import { highlightJava, ONE_DARK } from "@/lib/javaHighlight";
+import { groupByStudent } from "@/lib/groupSubmissionsByStudent";
 import {
   Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, User,
   FileCode, Terminal, Info, ChevronRight as Arrow,
@@ -88,31 +89,18 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   };
 
   // One row per STUDENT, not per row in the table. A student can end up with
-  // several submissions - reopening a finished problem inserts a fresh row
-  // rather than reusing the old one - and a list of repeated names is worse
-  // than useless when you are working out who still needs marking. Keyed on
-  // the signed-in user where there is one, falling back to email and then name
-  // for rows created before sign-in was required.
-  const groups = useMemo(() => {
-    const byStudent = new Map();
-    for (const s of submissions) {
-      const key =
-        s.student_user_id || (s.student_email || "").toLowerCase() || s.student_name || s.id;
-      if (!byStudent.has(key)) byStudent.set(key, []);
-      byStudent.get(key).push(s);
-    }
-    return [...byStudent.values()]
-      .map((all) => {
-        // Newest first, so [0] is the attempt that counts.
-        const sorted = [...all].sort(
-          (a, b) => new Date(b.submitted_at ?? 0) - new Date(a.submitted_at ?? 0)
-        );
-        return { name: sorted[0].student_name, latest: sorted[0], all: sorted };
-      })
-      // Alphabetical: this is a class list being worked through, so finding a
-      // particular person matters more than who happened to submit last.
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [submissions]);
+  // several submissions - old data from before startCoding stopped inserting
+  // a fresh row on every revisit, or a resubmission that raced ahead of that
+  // fix - and a list of repeated names is worse than useless when you are
+  // working out who still needs marking.
+  const groups = useMemo(
+    () =>
+      groupByStudent(submissions)
+        // Alphabetical: this is a class list being worked through, so finding
+        // a particular person matters more than who happened to submit last.
+        .sort((a, b) => (a.name || "").localeCompare(b.name || "")),
+    [submissions]
+  );
 
   const openAt = (i) => {
     setIndex(i);
@@ -224,6 +212,13 @@ export default function CodeReviewGrader({ problem, onGraded }) {
         </p>
       </div>
 
+      {problem.grading_skipped && (
+        <p className="text-xs text-slate-500 bg-slate-50 border rounded-lg px-3 py-2 mb-3">
+          You&rsquo;ve marked this whole assignment as not graded — it won&rsquo;t show up as needing
+          grading anywhere. Any scores already entered below are kept.
+        </p>
+      )}
+
       <div className="border rounded-lg divide-y overflow-hidden">
         {groups.map((g, i) => {
           const s = g.latest;
@@ -261,11 +256,18 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                     {(s.line_comments || []).length}
                   </span>
                 )}
+                {/* problem.grading_skipped (the whole assignment) takes
+                    priority over a per-submission grading_skipped - a card
+                    already showing "Not grading this" instead of a count
+                    should not still nag "Needs grading" per student the
+                    moment its window is opened. A score already entered
+                    still shows, in case some were graded before the
+                    assignment-wide decision was made. */}
                 {s.score != null ? (
                   <Badge variant="outline" className="text-emerald-700 border-emerald-300">
                     {s.score}{maxPoints != null ? ` / ${maxPoints}` : ""}
                   </Badge>
-                ) : s.grading_skipped ? (
+                ) : problem.grading_skipped || s.grading_skipped ? (
                   <Badge variant="outline" className="text-slate-500">Won&rsquo;t grade</Badge>
                 ) : (
                   <Badge>Needs grading</Badge>
