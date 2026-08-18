@@ -10,10 +10,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import CommentBank from "./CommentBank";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import AnnotatedCodeView from "./AnnotatedCodeView";
+import AnswerKeyPanel from "./AnswerKeyPanel";
 import GradesDialog from "./GradesDialog";
 import { groupByStudent } from "@/lib/groupSubmissionsByStudent";
 import {
-  Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, User,
+  Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, User, KeyRound,
   FileCode, Terminal, Info, ChevronRight as Arrow,
 } from "lucide-react";
 
@@ -43,6 +44,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const [lineComments, setLineComments] = useState([]);
 
   const [gradesOpen, setGradesOpen] = useState(false);
+  const [showKey, setShowKey] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -467,6 +469,39 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                   </div>
 
                   <div className="space-y-3">
+                    {/* Your own solution, to grade against. Foldable for the
+                        same reason as the FRQ keys: needed for the first few,
+                        then not. */}
+                    {(problem.answer_key_code || problem.answer_key_notes_html) && (
+                      <div className="border rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => setShowKey((v) => !v)}
+                          className="w-full flex items-center gap-1.5 px-3 py-2 text-xs text-amber-700 hover:bg-amber-50/60 bg-slate-50"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                          {showKey ? "Hide answer key" : "Show answer key"}
+                          {problem.answer_key_released && (
+                            <Badge variant="outline" className="ml-auto text-[10px] text-emerald-700 border-emerald-300">
+                              Students can see this
+                            </Badge>
+                          )}
+                        </button>
+                        {showKey && (
+                          <div className="p-2 space-y-2">
+                            {problem.answer_key_code && (
+                              <pre
+                                className="text-xs font-mono rounded p-2 overflow-x-auto max-h-56 overflow-y-auto"
+                                style={{ background: "#282c34", color: "#abb2bf" }}
+                              >
+                                {problem.answer_key_code}
+                              </pre>
+                            )}
+                            <AnswerKeyPanel keyHtml={problem.answer_key_notes_html} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="space-y-1.5">
                       <Label className="text-xs text-slate-500">Overall comments</Label>
                       <Textarea

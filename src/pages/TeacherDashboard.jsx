@@ -278,6 +278,13 @@ export default function TeacherDashboard() {
     loadCodingProblems();
   };
 
+  const handleToggleCodingKeyReleased = async (problem) => {
+    await base44.entities.CodingProblem.update(problem.id, {
+      answer_key_released: !problem.answer_key_released,
+    });
+    loadCodingProblems();
+  };
+
   const handleToggleCodingGrading = async (problem) => {
     await base44.entities.CodingProblem.update(problem.id, { grading_skipped: !problem.grading_skipped });
     await Promise.all([loadCodingProblems(), loadGradingCounts()]);
@@ -422,6 +429,7 @@ export default function TeacherDashboard() {
     deleteCoding: (p) => setDeletingCoding(p),
     toggleCodingActive: handleToggleCodingActive,
     toggleCodingGrading: handleToggleCodingGrading,
+    toggleCodingKeyReleased: handleToggleCodingKeyReleased,
     duplicateCoding: handleDuplicateCoding,
     editProject: (p) => { setEditingProject(p); setShowProjectForm(true); },
     deleteProject: (p) => setDeletingProject(p),

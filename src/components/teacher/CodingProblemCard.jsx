@@ -8,7 +8,7 @@ import CodingSubmissionViewer from "./CodingSubmissionViewer";
 import CodeReviewGrader from "./CodeReviewGrader";
 import StudentPreviewDialog from "./StudentPreviewDialog";
 
-export default function CodingProblemCard({ problem, ungradedCount = 0, dragHandleProps, onEdit, onDelete, onToggleActive, onToggleGrading, onDuplicate }) {
+export default function CodingProblemCard({ problem, ungradedCount = 0, dragHandleProps, onEdit, onDelete, onToggleActive, onToggleGrading, onToggleKeyReleased, onDuplicate }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -86,6 +86,21 @@ export default function CodingProblemCard({ problem, ungradedCount = 0, dragHand
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {/* Only offered when there is a key to release. Mirrors the
+                  "Show Answers" switch on an FRQ card. */}
+              {(problem.answer_key_code || problem.answer_key_notes_html) && (
+                <div
+                  className="flex items-center gap-1.5 mr-2 border rounded-md px-2 py-1"
+                  title="Let students see the answer key on work they have already turned in"
+                >
+                  <Switch
+                    checked={!!problem.answer_key_released}
+                    onCheckedChange={onToggleKeyReleased}
+                    className="scale-75"
+                  />
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Key</span>
+                </div>
+              )}
               <Switch checked={problem.is_active} onCheckedChange={onToggleActive} className="mr-2" />
               <Button variant="ghost" size="sm" onClick={() => setPreviewing(true)} title="Preview as student">
                 <Eye className="w-4 h-4" />

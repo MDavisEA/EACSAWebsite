@@ -156,6 +156,7 @@ export default function CourseUnitsView({
           onDelete={() => handlers.deleteCoding(item)}
           onToggleActive={() => handlers.toggleCodingActive(item)}
           onToggleGrading={() => handlers.toggleCodingGrading(item)}
+          onToggleKeyReleased={() => handlers.toggleCodingKeyReleased(item)}
           onDuplicate={() => handlers.duplicateCoding(item)}
         />
       );

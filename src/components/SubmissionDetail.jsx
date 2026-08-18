@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { highlightJava, ONE_DARK } from "@/lib/javaHighlight";
 import { Star, MessageSquare, KeyRound, CheckCircle2, XCircle, EyeOff } from "lucide-react";
@@ -113,6 +113,7 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
     ? (projectFeedbackVisible ? result.score : null)
     : result.score;
 
+  const [showKey, setShowKey] = useState(false);
   const hasCode = !!(result.code || "").trim();
 
   // A project's line comments are feedback, so they stay hidden until the
@@ -213,6 +214,36 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
               </p>
             )}
           </div>
+          {/* The answer key, but only when it actually arrived - the server
+              omits it entirely until the teacher releases it, so its presence
+              here IS the permission. Behind a toggle so it cannot be read by
+              accident before they have thought about their own attempt. */}
+          {(codingProblem?.answer_key_code || codingProblem?.answer_key_notes_html) && (
+            <div>
+              <button
+                onClick={() => setShowKey((v) => !v)}
+                className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex items-center gap-1.5 hover:text-amber-900"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                {showKey ? "Hide the answer key" : "Show the answer key"}
+              </button>
+              {showKey && (
+                <div className="mt-2 space-y-2">
+                  {codingProblem.answer_key_code && (
+                    <CodeWithNotes code={codingProblem.answer_key_code} />
+                  )}
+                  {codingProblem.answer_key_notes_html && (
+                    <div className="border border-amber-200 rounded-lg bg-amber-50/40 p-4">
+                      <div
+                        className="prose prose-sm max-w-none quill-render"
+                        dangerouslySetInnerHTML={{ __html: codingProblem.answer_key_notes_html }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {result.teacher_comments && (
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">

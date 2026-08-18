@@ -52,6 +52,8 @@ function defaultForm() {
     unit_id: null,
     grading_kind: "auto",
     manual_points: 10,
+    answer_key_code: "",
+    answer_key_notes_html: "",
     due_date: "",
     max_test_runs: 5,
     is_active: true,
@@ -394,6 +396,41 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
             theme="none"
             minHeight="250px"
             basicSetup={{ tabSize: 4 }}
+          />
+        </div>
+      </div>
+
+      {/* A reference solution. Kept out of everything students can reach until
+          it is released - see sanitizeForStudent. Offered for both kinds: it
+          helps while grading either, and it is what students check their own
+          work against afterwards. */}
+      <div className="space-y-2 border-t pt-6">
+        <Label>Answer key (optional)</Label>
+        <p className="text-xs text-muted-foreground">
+          Your solution. You see it while grading; students only ever see it after you release it
+          with the Key switch on this assignment&rsquo;s card, and only on work they have already
+          turned in.
+        </p>
+        <div className="border rounded-md overflow-hidden">
+          <CodeMirror
+            value={form.answer_key_code || ""}
+            onChange={(value) => updateField("answer_key_code", value)}
+            placeholder={`public class ${form.class_name || "Solution"} {\n    // your solution\n}`}
+            extensions={CODE_EXTENSIONS}
+            theme="none"
+            minHeight="180px"
+            basicSetup={{ tabSize: 4 }}
+          />
+        </div>
+        <Label className="text-xs text-slate-500">Notes on the key (optional)</Label>
+        <div className="min-h-[110px]">
+          <ReactQuill
+            value={form.answer_key_notes_html || ""}
+            onChange={(val) => updateField("answer_key_notes_html", val)}
+            modules={QUILL_MODULES}
+            formats={QUILL_FORMATS}
+            placeholder="What to look for, common wrong turns, what earns partial credit..."
+            className="bg-white"
           />
         </div>
       </div>

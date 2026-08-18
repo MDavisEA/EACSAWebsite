@@ -53,7 +53,7 @@ export default function StudentDashboard() {
   // Looking at something already turned in. Fetched on demand rather than with
   // the dashboard: these rows carry the full code and every response, which is
   // a lot to pull for a list that only needs titles and statuses.
-  const [detail, setDetail] = useState(null); // { item, submission }
+  const [detail, setDetail] = useState(null); // { item, submission, codingProblem }
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [reopening, setReopening] = useState(false);
@@ -85,7 +85,21 @@ export default function StudentDashboard() {
       if (!mine) {
         setDetailError("Couldn't find that submission.");
       } else {
-        setDetail({ item, submission: mine });
+        // Fetch the problem itself for a coding item rather than synthesising a
+        // stand-in: it carries the real points_possible, and the answer key
+        // when the teacher has released it. The key is stripped server-side
+        // until then (sanitizeForStudent), and this is only ever reached from a
+        // submission they have already turned in - so seeing it here cannot
+        // help anyone still writing their own.
+        let codingProblem;
+        if (item.kind === "code") {
+          try {
+            codingProblem = (await base44.entities.CodingProblem.filter({ id: item.id }))[0];
+          } catch {
+            // A missing problem should not block them seeing their own work.
+          }
+        }
+        setDetail({ item, submission: mine, codingProblem });
       }
     } catch (e) {
       setDetailError(e.message || "Couldn't load your submission.");
@@ -300,7 +314,10 @@ export default function StudentDashboard() {
                 result={detail.submission}
                 codingProblem={
                   detail.item.kind === "code"
-                    ? { title: detail.item.title, points_possible: detail.item.points_possible }
+                    ? detail.codingProblem ?? {
+                        title: detail.item.title,
+                        points_possible: detail.item.points_possible,
+                      }
                     : undefined
                 }
               />

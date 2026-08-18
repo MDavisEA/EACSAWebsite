@@ -27,6 +27,21 @@ function sanitizeForStudent(problem: Record<string, any>) {
     // Students need to see how many practice runs they get; the cap itself is
     // enforced server-side in run-java-tests.
     max_test_runs: problem.max_test_runs,
+    // The answer key is the answer, so it is only ever included once the
+    // teacher has released it. This function is an allowlist - a new column is
+    // invisible to students until named here - so this is the one place that
+    // decision gets made. The second gate is on the client side of where it is
+    // shown: a student only meets it on a submission they already turned in
+    // (see StudentDashboard), so releasing early cannot hand the solution to
+    // someone still working. The flag itself is safe to expose either way -
+    // "there is a key you cannot see yet" is not a leak.
+    answer_key_released: !!problem.answer_key_released,
+    ...(problem.answer_key_released
+      ? {
+          answer_key_code: problem.answer_key_code || null,
+          answer_key_notes_html: problem.answer_key_notes_html || null,
+        }
+      : {}),
     methods: (problem.methods || []).map((m: Record<string, any>) => ({
       method_name: m.method_name,
       // Not sensitive - it only says how the work is checked, which the check
