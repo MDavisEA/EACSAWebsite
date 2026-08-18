@@ -621,6 +621,41 @@ Deno.serve(async (req) => {
       return json({ results });
     }
 
+    // Everything needed to grade ONE submission, whatever kind it is: the full
+    // row plus the assignment/problem/project it belongs to. The grading queue
+    // walks a list that spans all three types and all courses, so it cannot
+    // pre-load the parent work item the way a per-assignment viewer can - it
+    // does not know what the next item will be until it gets there. One round
+    // trip per item rather than three.
+    if (action === 'getForGrading') {
+      if (!(await ownsSubmissionId(body.submission_id))) return json({ error: 'Not found' }, 404);
+      const { data: sub, error } = await admin
+        .from('submissions')
+        .select('*')
+        .eq('id', body.submission_id)
+        .maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      if (!sub) return json({ error: 'Not found' }, 404);
+
+      let work = null;
+      let kind = null;
+      if (sub.assignment_id) {
+        kind = 'frq';
+        const { data } = await admin.from('assignments').select('*').eq('id', sub.assignment_id).maybeSingle();
+        work = data;
+      } else if (sub.coding_problem_id) {
+        const { data } = await admin.from('coding_problems').select('*').eq('id', sub.coding_problem_id).maybeSingle();
+        work = data;
+        kind = data?.grading_kind === 'review' ? 'review' : 'code';
+      } else if (sub.project_id) {
+        kind = 'project';
+        const { data } = await admin.from('projects').select('*').eq('id', sub.project_id).maybeSingle();
+        work = data;
+      }
+      if (!work) return json({ error: 'Not found' }, 404);
+      return json({ result: { submission: sub, work, kind } });
+    }
+
     if (action === 'saveGrade') {
       if (!(await ownsSubmissionId(body.submission_id))) return json({ error: 'Not found' }, 404);
       const update: Record<string, unknown> = {};

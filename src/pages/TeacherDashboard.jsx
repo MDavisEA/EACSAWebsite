@@ -16,6 +16,7 @@ import CourseCard from "@/components/teacher/CourseCard";
 import TeachersPanel from "@/components/teacher/TeachersPanel";
 import GlobalCommentsPanel from "@/components/teacher/GlobalCommentsPanel";
 import NeedsGradingPanel from "@/components/teacher/NeedsGradingPanel";
+import GradingQueue from "@/components/teacher/GradingQueue";
 import TeacherHome from "@/components/teacher/TeacherHome";
 import CourseUnitsView from "@/components/teacher/CourseUnitsView";
 import NewWorkDialog from "@/components/teacher/NewWorkDialog";
@@ -28,6 +29,7 @@ export default function TeacherDashboard() {
   // dashboard is one authenticated page.
   const [openCourseId, setOpenCourseId] = useState(null);
   const [showNeedsGrading, setShowNeedsGrading] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
   const [topTab, setTopTab] = useState("classes");
   const [courseTab, setCourseTab] = useState("assignments");
   const [deletingUnit, setDeletingUnit] = useState(null);
@@ -440,6 +442,14 @@ export default function TeacherDashboard() {
             <h1 className="font-semibold text-lg">AP CSA</h1>
           </button>
           <div className="flex items-center gap-2">
+            {ungradedTotal > 0 && (
+              <Button size="sm" onClick={() => setShowQueue(true)}>
+                Start grading
+                <span className="ml-1.5 rounded-full bg-white/25 px-1.5 text-[10px] font-semibold">
+                  {ungradedTotal}
+                </span>
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -593,6 +603,12 @@ export default function TeacherDashboard() {
         )}
 
       </main>
+
+      <GradingQueue
+        open={showQueue}
+        onOpenChange={setShowQueue}
+        onChanged={loadGradingCounts}
+      />
 
       <NeedsGradingPanel
         open={showNeedsGrading}

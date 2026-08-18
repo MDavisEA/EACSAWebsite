@@ -215,6 +215,12 @@ const Submission = {
   async listNeedsGrading() {
     return (await callFunction('submissions', { action: 'listNeedsGrading' })).results;
   },
+  // One submission plus the assignment/problem/project it belongs to - what
+  // the grading queue needs, since it crosses work types and cannot know what
+  // the next item will be until it reaches it.
+  async getForGrading(submission_id) {
+    return (await callFunction('submissions', { action: 'getForGrading', submission_id })).result;
+  },
 
   async update(id, fields) {
     if (await hasActiveTeacherSession()) {
