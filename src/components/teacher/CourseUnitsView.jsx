@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { Plus, Pencil, Trash2, Check, X, Layers, Library, ArrowUpDown } from "lucide-react";
+import { Plus, Pencil, Trash2, Check, X, Layers, Library, ArrowUpDown, ChevronDown, ChevronRight } from "lucide-react";
 import ReorderUnitsDialog from "./ReorderUnitsDialog";
 import AssignmentCard from "./AssignmentCard";
 import CodingProblemCard from "./CodingProblemCard";
@@ -31,6 +31,7 @@ export default function CourseUnitsView({
   onUnitCreate,
   onUnitRename,
   onUnitDelete,
+  onUnitToggleCollapsed,
   onBrowseShared,
   onReorderUnits,
   onReorderWork,
@@ -148,6 +149,7 @@ export default function CourseUnitsView({
         <CodingProblemCard
           key={`code-${item.id}`}
           problem={item}
+          ungradedCount={gradingCounts.byCodingProblem?.[item.id] || 0}
           dragHandleProps={dragHandleProps}
           onEdit={() => handlers.editCoding(item)}
           onDelete={() => handlers.deleteCoding(item)}
@@ -215,7 +217,11 @@ export default function CourseUnitsView({
 
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="space-y-8">
-      {groups.map(({ unit, items }) => (
+      {groups.map(({ unit, items }) => {
+        // Collapsing only applies to a real unit, never to the synthetic
+        // Unfiled bucket - stray work is exactly what should stay visible.
+        const collapsed = !!(unit.id && unit.collapsed);
+        return (
         <section key={unit.id || "unfiled"}>
           <div className="flex items-center justify-between mb-3 gap-2">
             {/* unit.id is null for the Unfiled bucket, and so is editingUnitId
@@ -239,6 +245,15 @@ export default function CourseUnitsView({
               </div>
             ) : (
               <div className="flex items-center gap-2">
+                {unit.id && (
+                  <button
+                    onClick={() => onUnitToggleCollapsed(unit.id, !collapsed)}
+                    className="text-muted-foreground hover:text-foreground"
+                    title={collapsed ? "Expand unit" : "Minimize unit"}
+                  >
+                    {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                )}
                 <h2 className="text-sm font-semibold uppercase tracking-wide">{unit.name}</h2>
                 <Badge variant="outline" className="text-xs">{items.length}</Badge>
                 {unit.id && (
@@ -266,13 +281,19 @@ export default function CourseUnitsView({
               </div>
             )}
 
-            {unit.id && (
+            {unit.id && !collapsed && (
               <Button variant="outline" size="sm" onClick={() => onAddWork(unit.id)}>
                 <Plus className="w-3.5 h-3.5 mr-1" /> Add Assignment
               </Button>
             )}
           </div>
 
+          {/* Collapsed units drop out of the drag-and-drop entirely rather
+              than just being hidden with CSS - hiding a Droppable while
+              still mounted leaves it sized as a drop target you cannot see,
+              which is worse than simply not offering it as one until it is
+              reopened. */}
+          {!collapsed && (
           <Droppable droppableId={unit.id || "unfiled"} type="work" isDropDisabled={!dragEnabled}>
             {(workDrop) => (
               <div ref={workDrop.innerRef} {...workDrop.droppableProps} className="space-y-4">
@@ -303,8 +324,10 @@ export default function CourseUnitsView({
               </div>
             )}
           </Droppable>
+          )}
         </section>
-      ))}
+        );
+      })}
         </div>
       </DragDropContext>
 

@@ -106,12 +106,14 @@ Deno.serve(async (req) => {
       const table = action === 'updateUnit' ? 'units' : 'sections';
       const { data: row } = await admin.from(table).select('course_id').eq('id', body.id).maybeSingle();
       if (!row || !(await owns(row.course_id))) return json({ error: 'Not found' }, 404);
-      const { data, error } = await admin
-        .from(table)
-        .update({ name: body.name, ...(body.position !== undefined ? { position: body.position } : {}) })
-        .eq('id', body.id)
-        .select()
-        .single();
+      // Only writes what was actually sent - collapsing a unit sends nothing
+      // but `collapsed`, and must not overwrite its name with undefined.
+      const update: Record<string, unknown> = {};
+      if (body.name !== undefined) update.name = body.name;
+      if (body.position !== undefined) update.position = body.position;
+      // `collapsed` only exists on units - sections have no such column.
+      if (body.collapsed !== undefined && table === 'units') update.collapsed = body.collapsed;
+      const { data, error } = await admin.from(table).update(update).eq('id', body.id).select().single();
       if (error) return json({ error: error.message }, 500);
       return json({ result: data });
     }

@@ -37,6 +37,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
 
   const [score, setScore] = useState("");
   const [comments, setComments] = useState("");
+  const [gradingSkipped, setGradingSkipped] = useState(false);
   const [lineComments, setLineComments] = useState([]);
   const [activeLine, setActiveLine] = useState(null);
   const [draftLine, setDraftLine] = useState("");
@@ -79,6 +80,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
     setScore(s.score != null ? String(s.score) : "");
     setComments(s.teacher_comments || "");
     setLineComments(s.line_comments || []);
+    setGradingSkipped(!!s.grading_skipped);
     setActiveLine(null);
     setDraftLine("");
     setSaved(false);
@@ -148,13 +150,14 @@ export default function CodeReviewGrader({ problem, onGraded }) {
         score: Number.isFinite(parsed) ? parsed : null,
         teacher_comments: comments,
         line_comments: lineComments,
+        grading_skipped: gradingSkipped,
       });
       // Matched on id, not position: the list is grouped by student now, so an
       // index into `groups` is not an index into `submissions`.
       setSubmissions((prev) =>
         prev.map((s) =>
           s.id === current.id
-            ? { ...s, score: parsed, teacher_comments: comments, line_comments: lineComments }
+            ? { ...s, score: parsed, teacher_comments: comments, line_comments: lineComments, grading_skipped: gradingSkipped }
             : s
         )
       );
@@ -262,6 +265,8 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                   <Badge variant="outline" className="text-emerald-700 border-emerald-300">
                     {s.score}{maxPoints != null ? ` / ${maxPoints}` : ""}
                   </Badge>
+                ) : s.grading_skipped ? (
+                  <Badge variant="outline" className="text-slate-500">Won&rsquo;t grade</Badge>
                 ) : (
                   <Badge>Needs grading</Badge>
                 )}
@@ -319,8 +324,24 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                     value={score}
                     onChange={(e) => { setScore(e.target.value); setSaved(false); }}
                     className="w-20 text-center"
+                    disabled={gradingSkipped}
                   />
                 </div>
+
+                {/* Takes this one out of every "needs grading" count and list
+                    without putting a score on it - a duplicate, an empty
+                    placeholder, a student who dropped. */}
+                <button
+                  onClick={() => { setGradingSkipped((v) => !v); setSaved(false); }}
+                  className={`flex items-center gap-1.5 text-xs rounded-full border px-2.5 py-1.5 transition-colors ${
+                    gradingSkipped
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "text-slate-500 hover:bg-slate-50"
+                  }`}
+                  title="Remove this from your needs-grading list without giving it a score"
+                >
+                  {gradingSkipped ? "Won't grade this" : "Don't grade this"}
+                </button>
 
                 <div className="flex items-center gap-1 border rounded-lg p-1 bg-slate-50 ml-auto">
                   {[

@@ -8,7 +8,7 @@ import CodingSubmissionViewer from "./CodingSubmissionViewer";
 import CodeReviewGrader from "./CodeReviewGrader";
 import StudentPreviewDialog from "./StudentPreviewDialog";
 
-export default function CodingProblemCard({ problem, dragHandleProps, onEdit, onDelete, onToggleActive, onDuplicate }) {
+export default function CodingProblemCard({ problem, ungradedCount = 0, dragHandleProps, onEdit, onDelete, onToggleActive, onDuplicate }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -52,6 +52,11 @@ export default function CodingProblemCard({ problem, dragHandleProps, onEdit, on
                 ) : (
                   <Badge variant="outline">
                     {methods.length} method{methods.length !== 1 ? "s" : ""}
+                  </Badge>
+                )}
+                {problem.grading_kind === "review" && ungradedCount > 0 && (
+                  <Badge className="bg-amber-500 hover:bg-amber-500 text-white">
+                    {ungradedCount} to grade
                   </Badge>
                 )}
               </div>

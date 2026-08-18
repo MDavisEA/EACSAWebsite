@@ -414,27 +414,112 @@ Deno.serve(async (req) => {
       return json({ results: (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids)) });
     }
 
+    // Which of this teacher's own coding problems are hand-graded. Needed by
+    // both actions below: an autograded Mini Problem gets its autograde_score
+    // the instant it is submitted and can never be "waiting on a human", so a
+    // null `score` on one of those means nothing - only a `review` problem's
+    // null score is really a submission sitting in the pile.
+    const myReviewProblemIds = async (): Promise<Set<string>> => {
+      const ids = await myWorkIds();
+      if (ids.coding.length === 0) return new Set();
+      const { data } = await admin
+        .from('coding_problems')
+        .select('id')
+        .in('id', ids.coding)
+        .eq('grading_kind', 'review');
+      return new Set((data || []).map((r: Record<string, any>) => r.id));
+    };
+
     // How much work is sitting there waiting on the teacher. Counted here
     // rather than by shipping every submission to the browser and filtering
-    // client-side. Coding problems are deliberately absent: they are graded
-    // automatically, so they can never be waiting on a human.
+    // client-side. `grading_skipped` rows are excluded - a teacher who has
+    // deliberately decided not to grade something should not keep seeing it
+    // nag at them from every badge in the app.
     if (action === 'gradingCounts') {
       const ids = await myWorkIds();
-      const { data, error } = await admin
-        .from('submissions')
-        .select('assignment_id, project_id, score')
-        .eq('submitted', true)
-        .is('score', null);
+      const [{ data, error }, reviewIds] = await Promise.all([
+        admin
+          .from('submissions')
+          .select('assignment_id, project_id, coding_problem_id, score')
+          .eq('submitted', true)
+          .eq('grading_skipped', false)
+          .is('score', null),
+        myReviewProblemIds(),
+      ]);
       if (error) return json({ error: error.message }, 500);
       const owned = (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids));
 
       const byAssignment: Record<string, number> = {};
       const byProject: Record<string, number> = {};
+      const byCodingProblem: Record<string, number> = {};
       for (const row of owned) {
         if (row.assignment_id) byAssignment[row.assignment_id] = (byAssignment[row.assignment_id] || 0) + 1;
         else if (row.project_id) byProject[row.project_id] = (byProject[row.project_id] || 0) + 1;
+        else if (row.coding_problem_id && reviewIds.has(row.coding_problem_id))
+          byCodingProblem[row.coding_problem_id] = (byCodingProblem[row.coding_problem_id] || 0) + 1;
       }
-      return json({ result: { byAssignment, byProject } });
+      return json({ result: { byAssignment, byProject, byCodingProblem } });
+    }
+
+    // The full "needs grading" list behind the dashboard's Needs Grading
+    // panel - every submitted, unscored, gradeable submission this teacher
+    // owns, regardless of grading_skipped (the panel shows both piles and
+    // lets a teacher move something between them). Titles and course context
+    // are resolved here rather than making the browser stitch three more
+    // round trips together.
+    if (action === 'listNeedsGrading') {
+      const ids = await myWorkIds();
+      const [{ data, error }, reviewIds] = await Promise.all([
+        admin
+          .from('submissions')
+          .select(
+            'id, assignment_id, project_id, coding_problem_id, student_name, submitted_at, grading_skipped'
+          )
+          .eq('submitted', true)
+          .is('score', null)
+          .order('submitted_at', { ascending: true }),
+        myReviewProblemIds(),
+      ]);
+      if (error) return json({ error: error.message }, 500);
+      const owned = (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids));
+
+      const uniq = (arr: (string | null)[]) => [...new Set(arr.filter(Boolean))] as string[];
+      const [assignmentRows, projectRows, codingRows] = await Promise.all([
+        admin.from('assignments').select('id, title, course_id').in('id', uniq(owned.map((s) => s.assignment_id))),
+        admin.from('projects').select('id, title, course_id').in('id', uniq(owned.map((s) => s.project_id))),
+        admin
+          .from('coding_problems')
+          .select('id, title, course_id')
+          .in('id', uniq(owned.map((s) => s.coding_problem_id))),
+      ]);
+      const titleMap = new Map(
+        [...(assignmentRows.data || []), ...(projectRows.data || []), ...(codingRows.data || [])].map(
+          (r: Record<string, any>) => [r.id, { title: r.title, course_id: r.course_id }]
+        )
+      );
+
+      const results = [];
+      for (const s of owned) {
+        let kind: string;
+        let workId: string;
+        if (s.assignment_id) { kind = 'frq'; workId = s.assignment_id; }
+        else if (s.project_id) { kind = 'project'; workId = s.project_id; }
+        else if (s.coding_problem_id && reviewIds.has(s.coding_problem_id)) { kind = 'review'; workId = s.coding_problem_id; }
+        else continue; // an autograded Mini Problem - never waiting on a human
+        const meta = titleMap.get(workId);
+        if (!meta) continue; // work item since deleted
+        results.push({
+          id: s.id,
+          kind,
+          work_id: workId,
+          course_id: meta.course_id,
+          title: meta.title,
+          student_name: s.student_name,
+          submitted_at: s.submitted_at,
+          grading_skipped: s.grading_skipped,
+        });
+      }
+      return json({ results });
     }
 
     if (action === 'saveGrade') {
@@ -449,6 +534,10 @@ Deno.serve(async (req) => {
       if (body.feedback_released !== undefined) update.feedback_released = body.feedback_released;
       // Written feedback pinned to specific lines of a hand-graded submission.
       if (body.line_comments !== undefined) update.line_comments = body.line_comments;
+      // "Not grading this one" - a duplicate, an empty placeholder, a student
+      // who dropped. Leaves score untouched: this removes it from the pile,
+      // it does not grade it as a zero.
+      if (body.grading_skipped !== undefined) update.grading_skipped = body.grading_skipped;
       const { data, error } = await admin
         .from('submissions')
         .update(update)

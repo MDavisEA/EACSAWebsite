@@ -209,6 +209,12 @@ const Submission = {
     const data = await callFunction('submissions', { action: 'gradingCounts' });
     return data.result;
   },
+  // Everything currently sitting in the "needs grading" pile, across FRQs,
+  // Projects, and hand-graded Coding Assignments, including anything marked
+  // "won't grade" - the panel that lists these shows both piles.
+  async listNeedsGrading() {
+    return (await callFunction('submissions', { action: 'listNeedsGrading' })).results;
+  },
 
   async update(id, fields) {
     if (await hasActiveTeacherSession()) {
@@ -463,6 +469,9 @@ const Course = {
   },
   async renameUnit(id, name) {
     return (await callFunction('courses', { action: 'updateUnit', id, name })).result;
+  },
+  async setUnitCollapsed(id, collapsed) {
+    return (await callFunction('courses', { action: 'updateUnit', id, collapsed })).result;
   },
   async deleteUnit(id) {
     await callFunction('courses', { action: 'deleteUnit', id });

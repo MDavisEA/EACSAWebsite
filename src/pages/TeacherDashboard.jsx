@@ -15,6 +15,7 @@ import CourseForm from "@/components/teacher/CourseForm";
 import CourseCard from "@/components/teacher/CourseCard";
 import TeachersPanel from "@/components/teacher/TeachersPanel";
 import GlobalCommentsPanel from "@/components/teacher/GlobalCommentsPanel";
+import NeedsGradingPanel from "@/components/teacher/NeedsGradingPanel";
 import TeacherHome from "@/components/teacher/TeacherHome";
 import CourseUnitsView from "@/components/teacher/CourseUnitsView";
 import NewWorkDialog from "@/components/teacher/NewWorkDialog";
@@ -26,6 +27,7 @@ export default function TeacherDashboard() {
   // class being looked at. Kept as state rather than a route because the whole
   // dashboard is one authenticated page.
   const [openCourseId, setOpenCourseId] = useState(null);
+  const [showNeedsGrading, setShowNeedsGrading] = useState(false);
   const [topTab, setTopTab] = useState("classes");
   const [courseTab, setCourseTab] = useState("assignments");
   const [deletingUnit, setDeletingUnit] = useState(null);
@@ -42,7 +44,7 @@ export default function TeacherDashboard() {
 
   // { byAssignment: {id: n}, byProject: {id: n} } - submitted work with no
   // score yet, so the teacher can see what is waiting without opening each one.
-  const [gradingCounts, setGradingCounts] = useState({ byAssignment: {}, byProject: {} });
+  const [gradingCounts, setGradingCounts] = useState({ byAssignment: {}, byProject: {}, byCodingProblem: {} });
 
   // Teacher sign-in lives on this page now that nothing links here.
   const [authed, setAuthed] = useState(false);
@@ -372,7 +374,10 @@ export default function TeacherDashboard() {
 
   const openCourse = courses.find((c) => c.id === openCourseId) || null;
   const sumCounts = (map) => Object.values(map || {}).reduce((a, b) => a + b, 0);
-  const ungradedTotal = sumCounts(gradingCounts.byAssignment) + sumCounts(gradingCounts.byProject);
+  const ungradedTotal =
+    sumCounts(gradingCounts.byAssignment) +
+    sumCounts(gradingCounts.byProject) +
+    sumCounts(gradingCounts.byCodingProblem);
 
   const itemCounts = {};
   for (const c of courses) {
@@ -412,6 +417,18 @@ export default function TeacherDashboard() {
             <h1 className="font-semibold text-lg">AP CSA</h1>
           </button>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowNeedsGrading(true)}
+            >
+              Needs Grading
+              {ungradedTotal > 0 && (
+                <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white">
+                  {ungradedTotal}
+                </span>
+              )}
+            </Button>
             <Button
               variant={openCourseId ? "ghost" : "outline"}
               size="sm"
@@ -485,6 +502,19 @@ export default function TeacherDashboard() {
                     loadCourses();
                   }}
                   onUnitDelete={(unit) => setDeletingUnit(unit)}
+                  onUnitToggleCollapsed={(id, collapsed) => {
+                    // Applied to local state immediately - a full reload for
+                    // something this frequent and this low-stakes would make
+                    // collapsing feel like it is fighting the network.
+                    setCourses((prev) =>
+                      prev.map((c) =>
+                        c.id !== openCourse.id
+                          ? c
+                          : { ...c, units: (c.units || []).map((u) => (u.id === id ? { ...u, collapsed } : u)) }
+                      )
+                    );
+                    base44.entities.Course.setUnitCollapsed(id, collapsed);
+                  }}
                   onBrowseShared={() => setShowShared(true)}
                   onReorderUnits={async (unitIds) => {
                     await base44.entities.Course.reorderUnits(openCourse.id, unitIds);
@@ -540,6 +570,16 @@ export default function TeacherDashboard() {
         )}
 
       </main>
+
+      <NeedsGradingPanel
+        open={showNeedsGrading}
+        onOpenChange={setShowNeedsGrading}
+        onChanged={loadGradingCounts}
+        onNavigate={(courseId) => {
+          setOpenCourseId(courseId);
+          setCourseTab("assignments");
+        }}
+      />
 
       <AlertDialog open={!!deletingUnit} onOpenChange={() => setDeletingUnit(null)}>
         <AlertDialogContent>
