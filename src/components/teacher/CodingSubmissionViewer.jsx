@@ -8,6 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { FileDown, Clock, User, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Check, Link2, CheckCircle2, XCircle, EyeOff, AlertTriangle } from "lucide-react";
 import { latestPerStudent, studentKey } from "@/lib/groupSubmissionsByStudent";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import CommentBank from "./CommentBank";
+import AnnotatedCodeView from "./AnnotatedCodeView";
 
 // Derived from a submission's run_history (one entry per Run/Submit click,
 // each carrying a full code snapshot, compile status, and per-check
@@ -35,6 +39,17 @@ export default function CodingSubmissionViewer({ problem }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [copiedCode, setCopiedCode] = useState(null);
   const [expandedAttempt, setExpandedAttempt] = useState(null);
+
+  // The autograder produces a score, but it cannot say anything useful about
+  // HOW the code is written - so a teacher still wants to leave notes on an
+  // autograded submission even though they are not scoring it by hand.
+  // Feedback lives on the same fields a hand-graded Coding Assignment uses, so
+  // the student sees it through exactly the same path.
+  const [lineComments, setLineComments] = useState([]);
+  const [comments, setComments] = useState("");
+  const [savingFeedback, setSavingFeedback] = useState(false);
+  const [savedFeedback, setSavedFeedback] = useState(false);
+  const [feedbackError, setFeedbackError] = useState("");
 
   useEffect(() => {
     loadSubmissions();
@@ -74,6 +89,45 @@ export default function CodingSubmissionViewer({ problem }) {
     setSelected(s);
     setSelectedIndex(index ?? sortedSubmissions.findIndex((x) => x.id === s.id));
     setExpandedAttempt(null);
+    setLineComments(s.line_comments || []);
+    setComments(s.teacher_comments || "");
+    setSavedFeedback(false);
+    setFeedbackError("");
+  };
+
+  const addLineComment = (line, body) => {
+    setLineComments((prev) => [...prev.filter((c) => c.line !== line), { line, body }]);
+    setSavedFeedback(false);
+  };
+
+  const removeLineComment = (line) => {
+    setLineComments((prev) => prev.filter((c) => c.line !== line));
+    setSavedFeedback(false);
+  };
+
+  // Only the feedback fields - `score` is deliberately not touched, because on
+  // an autograded problem the mark comes from autograde_score and writing a
+  // null score here would make it look hand-graded and un-graded at once.
+  const saveFeedback = async () => {
+    setSavingFeedback(true);
+    setFeedbackError("");
+    try {
+      await base44.entities.Submission.update(selected.id, {
+        teacher_comments: comments,
+        line_comments: lineComments,
+      });
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === selected.id ? { ...s, teacher_comments: comments, line_comments: lineComments } : s
+        )
+      );
+      setSelected((prev) => ({ ...prev, teacher_comments: comments, line_comments: lineComments }));
+      setSavedFeedback(true);
+    } catch (e) {
+      setFeedbackError(e.message || "Couldn't save that feedback.");
+    } finally {
+      setSavingFeedback(false);
+    }
   };
 
   const navigateStudent = (direction) => {
@@ -377,10 +431,30 @@ export default function CodingSubmissionViewer({ problem }) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
                 <div>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Final Submitted Code</p>
-                  <pre className="bg-slate-50 border rounded-lg p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto max-h-[50vh]">
-                    {selected.code || "(no code)"}
-                  </pre>
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                    Final Submitted Code
+                    {(selected.code || "").trim() && (
+                      <span className="font-normal normal-case tracking-normal text-muted-foreground">
+                        {" "}&mdash; click any line to comment on it
+                      </span>
+                    )}
+                  </p>
+                  {(selected.code || "").trim() ? (
+                    <div className="border rounded-lg overflow-hidden">
+                      <AnnotatedCodeView
+                        code={selected.code}
+                        comments={lineComments}
+                        onAdd={addLineComment}
+                        onRemove={removeLineComment}
+                        commentScope={{ coding_problem_id: problem.id }}
+                        maxHeight="50vh"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground border rounded-lg p-4">
+                      They turned this in without any code.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Final Checks</p>
@@ -427,6 +501,39 @@ export default function CodingSubmissionViewer({ problem }) {
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* The autograder scores it; this is where a human says
+                  something about it. Same fields as a hand-graded Coding
+                  Assignment, so it reaches the student the same way. */}
+              <div className="mt-4 border-t pt-4 space-y-2">
+                <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  Feedback for this student
+                </Label>
+                <Textarea
+                  value={comments}
+                  onChange={(e) => { setComments(e.target.value); setSavedFeedback(false); }}
+                  placeholder="Notes on how the code is written - style, structure, anything the tests cannot see..."
+                  rows={3}
+                  className="text-sm"
+                />
+                <CommentBank
+                  compact
+                  value={comments}
+                  onChange={(v) => { setComments(v); setSavedFeedback(false); }}
+                  scope={{ coding_problem_id: problem.id }}
+                />
+                {feedbackError && <p className="text-sm text-destructive">{feedbackError}</p>}
+                <div className="flex items-center gap-3">
+                  <Button size="sm" onClick={saveFeedback} disabled={savingFeedback}>
+                    {savingFeedback ? "Saving..." : savedFeedback ? "Saved" : "Save feedback"}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {lineComments.length > 0
+                      ? `${lineComments.length} line comment${lineComments.length === 1 ? "" : "s"} will be saved with this.`
+                      : "Click a line in the code above to comment on it."}
+                  </span>
                 </div>
               </div>
 

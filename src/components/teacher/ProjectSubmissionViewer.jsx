@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
+import AnnotatedCodeView from "./AnnotatedCodeView";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -52,6 +53,8 @@ export default function ProjectSubmissionViewer({ project }) {
 
   const [reviewTarget, setReviewTarget] = useState(null);
   const [reviewDraft, setReviewDraft] = useState({ teacher_comments: "", score: "", feedback_released: false });
+  const [lineComments, setLineComments] = useState([]);
+  const [activeFile, setActiveFile] = useState(null);
   const [savingReview, setSavingReview] = useState(false);
 
   useEffect(() => {
@@ -149,6 +152,27 @@ export default function ProjectSubmissionViewer({ project }) {
       score: s.score ?? "",
       feedback_released: !!s.feedback_released,
     });
+    setLineComments(s.line_comments || []);
+    // Open on their first file rather than nothing, so the code is visible
+    // without a click - a Project is usually one main class plus helpers.
+    setActiveFile((s.files || [])[0]?.filename ?? null);
+  };
+
+  // A Project is several files, so which file a comment sits on has to be part
+  // of the comment. Single-file work stores no `file` at all, which is also
+  // what every comment written before this looked like - so the old and new
+  // shapes read identically and nothing needed migrating.
+  const addLineComment = (line, body) => {
+    setLineComments((prev) => [
+      ...prev.filter((c) => !((c.file ?? null) === activeFile && c.line === line)),
+      { file: activeFile, line, body },
+    ]);
+  };
+
+  const removeLineComment = (line) => {
+    setLineComments((prev) =>
+      prev.filter((c) => !((c.file ?? null) === activeFile && c.line === line))
+    );
   };
 
   const handleSaveReview = async () => {
@@ -158,6 +182,7 @@ export default function ProjectSubmissionViewer({ project }) {
         teacher_comments: reviewDraft.teacher_comments,
         score: reviewDraft.score === "" ? null : Number(reviewDraft.score),
         feedback_released: reviewDraft.feedback_released,
+        line_comments: lineComments,
       });
       setReviewTarget(null);
       loadAll();
@@ -370,7 +395,7 @@ export default function ProjectSubmissionViewer({ project }) {
       </AlertDialog>
 
       <Dialog open={!!reviewTarget} onOpenChange={(open) => !open && setReviewTarget(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[93vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Feedback — {reviewTarget?.student_name}</DialogTitle>
             <DialogDescription>
@@ -378,6 +403,47 @@ export default function ProjectSubmissionViewer({ project }) {
               when you are ready. Nothing here is visible to the student until you release it.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Their actual code, one file at a time, with comments pinned to
+              lines - the same thing Coding Assignments have. Before this the
+              only way to say anything about a Project was one block of prose,
+              which is a poor fit for "line 34 of Board.java is the problem". */}
+          {(reviewTarget?.files || []).length > 0 && (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-slate-100 border-b px-2 py-1.5 flex items-center gap-1 flex-wrap">
+                {(reviewTarget.files || []).map((f) => {
+                  const count = lineComments.filter((c) => (c.file ?? null) === f.filename).length;
+                  return (
+                    <button
+                      key={f.filename}
+                      onClick={() => setActiveFile(f.filename)}
+                      className={`text-xs font-mono rounded px-2 py-1 transition-colors ${
+                        activeFile === f.filename
+                          ? "bg-white shadow-sm font-semibold"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {f.filename}
+                      {count > 0 && <span className="ml-1.5 text-amber-600">{count}</span>}
+                    </button>
+                  );
+                })}
+                <span className="text-xs text-muted-foreground ml-auto pr-1">
+                  Click any line to comment on it
+                </span>
+              </div>
+              <AnnotatedCodeView
+                key={activeFile}
+                code={(reviewTarget.files || []).find((f) => f.filename === activeFile)?.content || ""}
+                file={activeFile}
+                comments={lineComments}
+                onAdd={addLineComment}
+                onRemove={removeLineComment}
+                commentScope={{ project_id: project.id }}
+                maxHeight="45vh"
+              />
+            </div>
+          )}
 
           <div className="space-y-4">
             <div className="space-y-2">

@@ -42,6 +42,61 @@ function buildSections(sub, asgn) {
   });
 }
 
+// Read-only code with the teacher's line comments spliced in. Used for both a
+// single-file coding submission and each file of a Project, so a student sees
+// "line 34 of Board.java" marked on line 34 of Board.java rather than having
+// to map a note back onto the code themselves. `file` selects which comments
+// belong here - a comment with no file recorded is from single-file work.
+function CodeWithNotes({ code, file = null, lineComments = [] }) {
+  const lines = String(code ?? "").split("\n");
+  const tokens = highlightJava(code ?? "");
+  const mine = (lineComments || []).filter((c) => (c.file ?? null) === file);
+  const noteFor = (n) => mine.find((c) => c.line === n);
+
+  return (
+    <div
+      className="rounded-lg overflow-hidden text-xs font-mono"
+      style={{ background: ONE_DARK.bg, color: ONE_DARK.plain }}
+    >
+      {lines.map((text, i) => {
+        const n = i + 1;
+        const note = noteFor(n);
+        return (
+          <div key={n}>
+            <div className={`flex ${note ? "bg-amber-500/10" : ""}`}>
+              <span
+                className={`w-10 flex-shrink-0 text-right pr-2 select-none border-r border-slate-700 ${
+                  note ? "text-amber-400 font-semibold" : "text-slate-500"
+                }`}
+              >
+                {n}
+              </span>
+              <pre className="px-3 whitespace-pre flex-1">
+                {(tokens[i] || []).length === 0
+                  ? text || " "
+                  : tokens[i].map((t, ti) => (
+                      <span
+                        key={ti}
+                        style={{ color: t.color, fontStyle: t.italic ? "italic" : undefined }}
+                      >
+                        {t.text}
+                      </span>
+                    ))}
+              </pre>
+            </div>
+            {note && (
+              <div className="flex items-start gap-1.5 bg-amber-500/15 border-l-2 border-amber-400 pl-11 pr-3 py-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+                <span className="text-xs text-amber-100 font-sans">{note.body}</span>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SubmissionDetail({ result, assignment, codingProblem, project }) {
   // A project's score and written feedback stay hidden until the teacher
   // releases them, so nothing AI-assisted reaches a student before a human
@@ -58,12 +113,17 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
     ? (projectFeedbackVisible ? result.score : null)
     : result.score;
 
-  // Same colours the teacher reads it in, so a student comparing their code
-  // against a line comment is looking at the same thing their teacher was.
-  const codeLines = (result.code || "").split("\n");
-  const codeTokens = useMemo(() => highlightJava(result.code || ""), [result.code]);
   const hasCode = !!(result.code || "").trim();
-  const lineNote = (n) => (result.line_comments || []).find((c) => c.line === n);
+
+  // A project's line comments are feedback, so they stay hidden until the
+  // teacher releases it, exactly like its score and written review. The server
+  // already strips them (withheldIfUnreleased) - this is the same rule applied
+  // again here, so a future read path that forgets the server-side gate still
+  // cannot show them early.
+  const visibleLineComments = useMemo(
+    () => (isProject && !projectFeedbackVisible ? [] : result.line_comments || []),
+    [isProject, projectFeedbackVisible, result.line_comments]
+  );
 
   return (
     <div className="space-y-4">
@@ -116,14 +176,22 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
               </a>
             )}
             <div className="mt-3 space-y-3">
-              {(result.files || []).map((f) => (
-                <div key={f.filename}>
-                  <p className="text-xs font-mono font-semibold text-slate-500 mb-1">{f.filename}</p>
-                  <pre className="bg-slate-50 border rounded-lg p-4 text-sm font-mono whitespace-pre-wrap overflow-x-auto">
-                    {f.content}
-                  </pre>
-                </div>
-              ))}
+              {(result.files || []).map((f) => {
+                const notes = (visibleLineComments || []).filter((c) => (c.file ?? null) === f.filename);
+                return (
+                  <div key={f.filename}>
+                    <p className="text-xs font-mono font-semibold text-slate-500 mb-1">
+                      {f.filename}
+                      {notes.length > 0 && (
+                        <span className="ml-2 font-sans font-normal text-amber-600">
+                          {notes.length} comment{notes.length === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </p>
+                    <CodeWithNotes code={f.content} file={f.filename} lineComments={visibleLineComments} />
+                  </div>
+                );
+              })}
               {(result.files || []).length === 0 && (
                 <p className="text-sm text-muted-foreground">No files were captured.</p>
               )}
@@ -138,49 +206,7 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
                 numbered gutter is what makes "see line 12" mean anything, and
                 it should not appear only for the students who got comments. */}
             {hasCode ? (
-              <div
-                className="rounded-lg overflow-hidden text-xs font-mono"
-                style={{ background: ONE_DARK.bg, color: ONE_DARK.plain }}
-              >
-                {codeLines.map((text, i) => {
-                  const n = i + 1;
-                  const note = lineNote(n);
-                  return (
-                    <div key={n}>
-                      <div className={`flex ${note ? "bg-amber-500/10" : ""}`}>
-                        <span
-                          className={`w-10 flex-shrink-0 text-right pr-2 select-none border-r border-slate-700 ${
-                            note ? "text-amber-400 font-semibold" : "text-slate-500"
-                          }`}
-                        >
-                          {n}
-                        </span>
-                        <pre className="px-3 whitespace-pre flex-1">
-                          {(codeTokens[i] || []).length === 0
-                            ? text || " "
-                            : codeTokens[i].map((t, ti) => (
-                                <span
-                                  key={ti}
-                                  style={{
-                                    color: t.color,
-                                    fontStyle: t.italic ? "italic" : undefined,
-                                  }}
-                                >
-                                  {t.text}
-                                </span>
-                              ))}
-                        </pre>
-                      </div>
-                      {note && (
-                        <div className="flex items-start gap-1.5 bg-amber-500/15 border-l-2 border-amber-400 pl-11 pr-3 py-1.5">
-                          <MessageSquare className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
-                          <span className="text-xs text-amber-100 font-sans">{note.body}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <CodeWithNotes code={result.code} lineComments={result.line_comments} />
             ) : (
               <p className="text-sm text-muted-foreground">
                 This was turned in without any code in the editor.

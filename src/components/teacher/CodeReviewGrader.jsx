@@ -9,10 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CommentBank from "./CommentBank";
 import InteractiveRunner from "@/components/InteractiveRunner";
-import { highlightJava, ONE_DARK } from "@/lib/javaHighlight";
+import AnnotatedCodeView from "./AnnotatedCodeView";
 import { groupByStudent } from "@/lib/groupSubmissionsByStudent";
 import {
-  Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, User,
+  Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, User,
   FileCode, Terminal, Info, ChevronRight as Arrow,
 } from "lucide-react";
 
@@ -40,8 +40,6 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const [comments, setComments] = useState("");
   const [gradingSkipped, setGradingSkipped] = useState(false);
   const [lineComments, setLineComments] = useState([]);
-  const [activeLine, setActiveLine] = useState(null);
-  const [draftLine, setDraftLine] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -82,8 +80,6 @@ export default function CodeReviewGrader({ problem, onGraded }) {
     setComments(s.teacher_comments || "");
     setLineComments(s.line_comments || []);
     setGradingSkipped(!!s.grading_skipped);
-    setActiveLine(null);
-    setDraftLine("");
     setSaved(false);
     setError("");
   };
@@ -170,12 +166,8 @@ export default function CodeReviewGrader({ problem, onGraded }) {
     else setOpen(false);
   };
 
-  const addLineComment = () => {
-    const body = draftLine.trim();
-    if (!body || activeLine == null) return;
-    setLineComments((prev) => [...prev.filter((c) => c.line !== activeLine), { line: activeLine, body }]);
-    setDraftLine("");
-    setActiveLine(null);
+  const addLineComment = (line, body) => {
+    setLineComments((prev) => [...prev.filter((c) => c.line !== line), { line, body }]);
     setSaved(false);
   };
 
@@ -197,9 +189,6 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const gradedCount = groups.filter((g) => g.latest.score != null).length;
   const maxPoints = problem.manual_points ?? problem.points_possible ?? null;
 
-  const lines = (current?.code || "").split("\n");
-  const highlighted = highlightJava(current?.code || "");
-  const commentFor = (n) => lineComments.find((c) => c.line === n);
   const hasCode = !!(current?.code || "").trim();
 
   return (
@@ -447,106 +436,13 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                       {hasCode ? "Click any line to comment on it" : "Nothing was turned in"}
                     </div>
                     {hasCode ? (
-                      <div
-                        className="text-xs font-mono overflow-x-auto max-h-[60vh] overflow-y-auto"
-                        style={{ background: ONE_DARK.bg, color: ONE_DARK.plain }}
-                      >
-                        {lines.map((text, i) => {
-                          const n = i + 1;
-                          const c = commentFor(n);
-                          return (
-                            <div key={n}>
-                              {/* The whole line is the target, not just the number
-                                  in the gutter - reaching for the code you are
-                                  commenting on is the instinct, and a 40px gutter
-                                  is a small thing to hit over and over. */}
-                              <div
-                                onClick={() => { setActiveLine(n); setDraftLine(c?.body || ""); }}
-                                className={`flex cursor-pointer group hover:bg-slate-800 ${
-                                  c ? "bg-amber-500/10" : ""
-                                }`}
-                                title={c ? "Edit this comment" : "Comment on this line"}
-                              >
-                                <span
-                                  className={`w-10 flex-shrink-0 text-right pr-2 select-none border-r border-slate-700 ${
-                                    c
-                                      ? "text-amber-400 font-semibold"
-                                      : "text-slate-500 group-hover:text-slate-300"
-                                  }`}
-                                >
-                                  {n}
-                                </span>
-                                <pre className="px-2 whitespace-pre flex-1">
-                                  {(highlighted[i] || []).length === 0
-                                    ? text || " "
-                                    : highlighted[i].map((t, ti) => (
-                                        <span
-                                          key={ti}
-                                          style={{
-                                            color: t.color,
-                                            fontStyle: t.italic ? "italic" : undefined,
-                                          }}
-                                        >
-                                          {t.text}
-                                        </span>
-                                      ))}
-                                </pre>
-                                {!c && activeLine !== n && (
-                                  <MessageSquare className="w-3 h-3 mr-2 self-center flex-shrink-0 text-slate-500 opacity-0 group-hover:opacity-100" />
-                                )}
-                              </div>
-
-                              {c && (
-                                <div className="flex items-start gap-1.5 bg-amber-500/15 border-l-2 border-amber-400 pl-11 pr-2 py-1">
-                                  <MessageSquare className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
-                                  <span className="text-amber-100 flex-1">{c.body}</span>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); removeLineComment(n); }}
-                                    className="text-slate-400 hover:text-red-400"
-                                    title="Remove this line comment"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              )}
-
-                              {activeLine === n && (
-                                <div className="bg-slate-800 pl-11 pr-2 py-2 space-y-1.5">
-                                  <Textarea
-                                    value={draftLine}
-                                    onChange={(e) => setDraftLine(e.target.value)}
-                                    placeholder={`Comment on line ${n}...`}
-                                    rows={2}
-                                    className="text-xs bg-slate-900 border-slate-700 text-slate-100"
-                                    autoFocus
-                                  />
-                                  <div className="flex items-center gap-2">
-                                    <Button size="sm" className="h-7 text-xs" onClick={addLineComment}>
-                                      Add
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 text-xs text-slate-400"
-                                      onClick={() => { setActiveLine(null); setDraftLine(""); }}
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                  <div className="[&_button]:text-slate-300">
-                                    <CommentBank
-                                      compact
-                                      value={draftLine}
-                                      onChange={setDraftLine}
-                                      scope={{ coding_problem_id: problem.id }}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <AnnotatedCodeView
+                        code={current.code}
+                        comments={lineComments}
+                        onAdd={addLineComment}
+                        onRemove={removeLineComment}
+                        commentScope={{ coding_problem_id: problem.id }}
+                      />
                     ) : (
                       <p className="text-sm text-muted-foreground p-6 text-center">
                         They pressed submit without any code in the editor. Worth asking them to turn

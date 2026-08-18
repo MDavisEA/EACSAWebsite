@@ -21,7 +21,12 @@ function generateAccessCode(): string {
 // submissions have always shown their score as soon as one exists.
 function withheldIfUnreleased(row: Record<string, any> | null) {
   if (!row || !row.project_id || row.feedback_released) return row;
-  return { ...row, score: null, teacher_comments: null };
+  // line_comments is feedback too - notes pinned to lines of the student's
+  // code - so it has to be withheld on the same terms as the score and the
+  // written review. Added when Projects gained line comments; without it the
+  // one kind of project feedback that is written straight onto their code
+  // would have been the only kind that leaked before release.
+  return { ...row, score: null, teacher_comments: null, line_comments: [] };
 }
 
 // Verifies the caller actually owns this submission before allowing any
