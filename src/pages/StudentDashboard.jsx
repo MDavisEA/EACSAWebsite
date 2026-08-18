@@ -77,7 +77,7 @@ export default function StudentDashboard() {
     setDetailLoading(true);
     setDetailError("");
     try {
-      const rows = await base44.entities.Submission.myScores();
+      const rows = await base44.entities.Submission.filter({ mine: true, submitted: true });
       const field = FIELD_FOR[item.kind];
       const mine = rows
         .filter((r) => r[field] === item.id)
