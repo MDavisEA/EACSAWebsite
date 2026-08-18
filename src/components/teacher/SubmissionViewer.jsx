@@ -538,6 +538,7 @@ export default function SubmissionViewer({ assignment, onGraded }) {
                                     compact
                                     value={partComments[key] || ""}
                                     onChange={(next) => updatePartComment(key, next)}
+                                    scope={{ assignment_id: assignment.id }}
                                   />
                                 </div>
                               </div>

@@ -511,7 +511,12 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                                     </Button>
                                   </div>
                                   <div className="[&_button]:text-slate-300">
-                                    <CommentBank compact value={draftLine} onChange={setDraftLine} />
+                                    <CommentBank
+                                      compact
+                                      value={draftLine}
+                                      onChange={setDraftLine}
+                                      scope={{ coding_problem_id: problem.id }}
+                                    />
                                   </div>
                                 </div>
                               )}
@@ -541,6 +546,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                         compact
                         value={comments}
                         onChange={(v) => { setComments(v); setSaved(false); }}
+                        scope={{ coding_problem_id: problem.id }}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">

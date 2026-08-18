@@ -14,6 +14,7 @@ import ProjectForm from "@/components/teacher/ProjectForm";
 import CourseForm from "@/components/teacher/CourseForm";
 import CourseCard from "@/components/teacher/CourseCard";
 import TeachersPanel from "@/components/teacher/TeachersPanel";
+import GlobalCommentsPanel from "@/components/teacher/GlobalCommentsPanel";
 import TeacherHome from "@/components/teacher/TeacherHome";
 import CourseUnitsView from "@/components/teacher/CourseUnitsView";
 import NewWorkDialog from "@/components/teacher/NewWorkDialog";
@@ -414,6 +415,13 @@ export default function TeacherDashboard() {
             <Button
               variant={openCourseId ? "ghost" : "outline"}
               size="sm"
+              onClick={() => { setOpenCourseId(null); setTopTab("comments"); }}
+            >
+              Comments
+            </Button>
+            <Button
+              variant={openCourseId ? "ghost" : "outline"}
+              size="sm"
               onClick={() => { setOpenCourseId(null); setTopTab("teachers"); }}
             >
               Teachers
@@ -511,6 +519,16 @@ export default function TeacherDashboard() {
               </Button>
             </div>
             <TeachersPanel />
+          </div>
+        ) : topTab === "comments" ? (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h1 className="text-xl font-bold tracking-tight">Comments</h1>
+              <Button variant="outline" size="sm" onClick={() => setTopTab("classes")}>
+                Back to My Classes
+              </Button>
+            </div>
+            <GlobalCommentsPanel />
           </div>
         ) : (
           <TeacherHome

@@ -392,6 +392,7 @@ export default function ProjectSubmissionViewer({ project }) {
                 compact
                 value={reviewDraft.teacher_comments}
                 onChange={(next) => setReviewDraft((d) => ({ ...d, teacher_comments: next }))}
+                scope={{ project_id: project.id }}
               />
             </div>
 

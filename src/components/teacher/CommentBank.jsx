@@ -11,19 +11,28 @@ import { MessageSquarePlus, Plus, Trash2, Search } from "lucide-react";
 //
 // `value`/`onChange` are the field being edited, so this component appends to
 // it rather than owning the text.
-export default function CommentBank({ value, onChange, compact = false }) {
+//
+// `scope` ties saved comments to the one piece of work being graded right now
+// - {assignment_id}, {coding_problem_id}, or {project_id} - so a remark saved
+// while grading one Coding Assignment does not show up while grading a
+// different one, or an FRQ. The list here always also includes the teacher's
+// "use everywhere" comments (see the Comments page on the dashboard), unioned
+// in by the server; a small "Everywhere" tag distinguishes those in the list
+// so it is clear why a comment is showing up outside the current scope.
+export default function CommentBank({ value, onChange, compact = false, scope = {} }) {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(!compact);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { load(); }, []);
+  const scopeKey = scope.assignment_id || scope.coding_problem_id || scope.project_id || "";
+  useEffect(() => { load(); }, [scopeKey]);
 
   const load = async () => {
     setLoading(true);
     try {
-      setComments(await base44.entities.Teacher.listComments());
+      setComments(await base44.entities.Teacher.listComments(scope));
     } catch {
       // A failure here should never block grading - the field still works.
       setComments([]);
@@ -31,6 +40,8 @@ export default function CommentBank({ value, onChange, compact = false }) {
       setLoading(false);
     }
   };
+
+  const isGlobal = (c) => !c.assignment_id && !c.coding_problem_id && !c.project_id;
 
   const insert = (c) => {
     const existing = (value || "").trim();
@@ -50,7 +61,7 @@ export default function CommentBank({ value, onChange, compact = false }) {
     if (!text) return;
     setBusy(true);
     try {
-      await base44.entities.Teacher.createComment(text);
+      await base44.entities.Teacher.createComment(text, scope);
       await load();
     } finally {
       setBusy(false);
@@ -124,10 +135,18 @@ export default function CommentBank({ value, onChange, compact = false }) {
                 <div key={c.id} className="flex items-start gap-1 group">
                   <button
                     onClick={() => insert(c)}
-                    className="flex-1 text-left text-xs bg-white border rounded px-2 py-1.5 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                    className="flex-1 flex items-start gap-1.5 text-left text-xs bg-white border rounded px-2 py-1.5 hover:border-primary/40 hover:bg-primary/5 transition-colors"
                     title="Click to add to the feedback below"
                   >
-                    {c.body}
+                    <span className="flex-1">{c.body}</span>
+                    {isGlobal(c) && (
+                      <span
+                        className="flex-shrink-0 text-[10px] uppercase tracking-wide text-slate-400 border rounded px-1 py-0.5"
+                        title="Saved to show up everywhere you grade, not just here"
+                      >
+                        Everywhere
+                      </span>
+                    )}
                   </button>
                   <button
                     onClick={() => remove(c.id)}

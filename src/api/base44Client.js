@@ -501,11 +501,15 @@ const Teacher = {
 
   // The comment bank lives here rather than on a course: a saved remark is
   // about how this teacher writes feedback, not about one class.
-  async listComments() {
-    return (await callFunction('teachers', { action: 'listComments' })).results;
+  //
+  // `scope` is one of {assignment_id}/{coding_problem_id}/{project_id} - the
+  // one piece of work currently being graded. Omit it (as the "Frequently
+  // Used Comments" manager does) to mean the global, everywhere set.
+  async listComments(scope = {}) {
+    return (await callFunction('teachers', { action: 'listComments', ...scope })).results;
   },
-  async createComment(body) {
-    const data = await callFunction('teachers', { action: 'createComment', body });
+  async createComment(body, scope = {}) {
+    const data = await callFunction('teachers', { action: 'createComment', body, ...scope });
     return data.result;
   },
   async updateComment(id, body) {

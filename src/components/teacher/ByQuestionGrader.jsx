@@ -351,7 +351,12 @@ export default function ByQuestionGrader({ open, onOpenChange, assignment, submi
                     className="text-sm w-full"
                   />
                   <div className="mt-1.5">
-                    <CommentBank compact value={grades[student.id]?.partComments?.[key] || ""} onChange={(next) => updateComment(key, next)} />
+                    <CommentBank
+                      compact
+                      value={grades[student.id]?.partComments?.[key] || ""}
+                      onChange={(next) => updateComment(key, next)}
+                      scope={{ assignment_id: assignment.id }}
+                    />
                   </div>
                 </div>
               </div>

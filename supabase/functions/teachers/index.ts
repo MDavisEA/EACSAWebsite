@@ -91,12 +91,37 @@ Deno.serve(async (req) => {
     // Scoped to the teacher rather than to a course: the remarks worth saving
     // ("check your loop bounds") are about how a teacher writes feedback, not
     // about which class the student is in.
+    //
+    // Within that, each comment is scoped to the one piece of work it was
+    // saved from (see 0015_scope_comment_bank.sql) unless it is "global" - all
+    // three of assignment_id/coding_problem_id/project_id null - in which case
+    // it belongs everywhere. A grading surface asks for its own comments by
+    // passing the one id it has (e.g. coding_problem_id); it always gets the
+    // global set back too, unioned in.
+
+    // Picks the single scope column a caller is asking about, if any. Only one
+    // is ever relevant per request - a Coding Assignment grader has no reason
+    // to also pass an assignment_id.
+    function scopeFromBody(b: Record<string, any>): { col: string; id: string } | null {
+      if (b.assignment_id) return { col: 'assignment_id', id: b.assignment_id };
+      if (b.coding_problem_id) return { col: 'coding_problem_id', id: b.coding_problem_id };
+      if (b.project_id) return { col: 'project_id', id: b.project_id };
+      return null;
+    }
 
     if (action === 'listComments') {
-      const { data, error } = await admin
-        .from('comment_bank')
-        .select('*')
-        .eq('teacher_id', teacher.id)
+      const scope = scopeFromBody(body);
+      let query = admin.from('comment_bank').select('*').eq('teacher_id', teacher.id);
+      query = scope
+        ? // The global set (all three columns null) OR an exact match on the
+          // one scope column asked for.
+          query.or(
+            `and(assignment_id.is.null,coding_problem_id.is.null,project_id.is.null),${scope.col}.eq.${scope.id}`
+          )
+        : // No scope given - the global set only. This is also what the
+          // teacher-page "Frequently Used Comments" manager asks for.
+          query.is('assignment_id', null).is('coding_problem_id', null).is('project_id', null);
+      const { data, error } = await query
         // Most-reached-for first, so the useful ones stay at the top instead
         // of the teacher scanning an alphabetical list every time.
         .order('use_count', { ascending: false })
@@ -108,19 +133,32 @@ Deno.serve(async (req) => {
     if (action === 'createComment') {
       const bodyText = String(body.body || '').trim();
       if (!bodyText) return json({ error: 'A saved comment needs some text.' }, 400);
-      // Saving the same remark twice is a slip, not an intent - hand back the
-      // existing one so the bank does not fill up with duplicates.
-      const { data: dupe } = await admin
+      const scope = scopeFromBody(body);
+      const scopeRow = {
+        assignment_id: scope?.col === 'assignment_id' ? scope.id : null,
+        coding_problem_id: scope?.col === 'coding_problem_id' ? scope.id : null,
+        project_id: scope?.col === 'project_id' ? scope.id : null,
+      };
+
+      // Saving the same remark twice in the same scope is a slip, not an
+      // intent - hand back the existing one so the bank does not fill up with
+      // duplicates. Matched WITHIN the scope: the same words saved once for
+      // this assignment and once as a global comment are two different
+      // decisions, not a duplicate of each other.
+      let dupeQuery = admin
         .from('comment_bank')
         .select('*')
         .eq('teacher_id', teacher.id)
-        .eq('body', bodyText)
-        .maybeSingle();
+        .eq('body', bodyText);
+      for (const [col, val] of Object.entries(scopeRow)) {
+        dupeQuery = val ? dupeQuery.eq(col, val) : dupeQuery.is(col, null);
+      }
+      const { data: dupe } = await dupeQuery.maybeSingle();
       if (dupe) return json({ result: dupe, already_existed: true });
 
       const { data, error } = await admin
         .from('comment_bank')
-        .insert({ teacher_id: teacher.id, body: bodyText })
+        .insert({ teacher_id: teacher.id, body: bodyText, ...scopeRow })
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
