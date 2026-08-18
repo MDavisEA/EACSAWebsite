@@ -400,18 +400,58 @@ Deno.serve(async (req) => {
     // resolve that chain so no action below can touch another teacher's
     // students. `myWorkIds` is one round trip and gets reused by every action.
     const myCourses = await teacherCourseIds(admin, teacher.id);
-    const myWorkIds = async () => {
-      if (myCourses.length === 0) return { assignments: [], coding: [], projects: [] };
+    // Every piece of work in this teacher's courses, in ONE pass, carrying
+    // everything any action below needs from it: what kind it is, its title,
+    // its course, and whether it is gradeable at all. Memoized for the life of
+    // the request - it used to be re-queried several times per request (and
+    // the three tables were fetched twice over, once for flags and once for
+    // titles), which is most of why opening the grading views took seconds.
+    let workIndexCache: Map<string, Record<string, any>> | null = null;
+    const myWorkIndex = async () => {
+      if (workIndexCache) return workIndexCache;
+      const index = new Map<string, Record<string, any>>();
+      if (myCourses.length === 0) { workIndexCache = index; return index; }
       const [a, c, p] = await Promise.all([
-        admin.from('assignments').select('id').in('course_id', myCourses),
-        admin.from('coding_problems').select('id').in('course_id', myCourses),
-        admin.from('projects').select('id').in('course_id', myCourses),
+        admin.from('assignments').select('id, title, course_id, grading_skipped').in('course_id', myCourses),
+        admin
+          .from('coding_problems')
+          .select('id, title, course_id, grading_skipped, grading_kind')
+          .in('course_id', myCourses),
+        admin.from('projects').select('id, title, course_id, grading_skipped').in('course_id', myCourses),
       ]);
-      return {
-        assignments: (a.data || []).map((r: Record<string, any>) => r.id),
-        coding: (c.data || []).map((r: Record<string, any>) => r.id),
-        projects: (p.data || []).map((r: Record<string, any>) => r.id),
+      for (const r of a.data || []) {
+        index.set(r.id, { kind: 'frq', title: r.title, course_id: r.course_id, gradable: !r.grading_skipped });
+      }
+      for (const r of c.data || []) {
+        // An autograded Mini Problem is scored the instant it is submitted, so
+        // it can never be waiting on a human - not gradeable in this sense
+        // however its grading_skipped flag reads.
+        const isReview = r.grading_kind === 'review';
+        index.set(r.id, {
+          kind: isReview ? 'review' : 'code',
+          title: r.title,
+          course_id: r.course_id,
+          gradable: isReview && !r.grading_skipped,
+        });
+      }
+      for (const r of p.data || []) {
+        index.set(r.id, { kind: 'project', title: r.title, course_id: r.course_id, gradable: !r.grading_skipped });
+      }
+      workIndexCache = index;
+      return index;
+    };
+
+    const myWorkIds = async () => {
+      const index = await myWorkIndex();
+      const out: { assignments: string[]; coding: string[]; projects: string[] } = {
+        assignments: [], coding: [], projects: [],
       };
+      for (const [id, meta] of index) {
+        if (meta.kind === 'frq') out.assignments.push(id);
+        else if (meta.kind === 'project') out.projects.push(id);
+        else out.coding.push(id);
+      }
+      return out;
     };
     const ownsSubmissionRow = (s: Record<string, any>, ids: Awaited<ReturnType<typeof myWorkIds>>) =>
       (s.assignment_id && ids.assignments.includes(s.assignment_id)) ||
@@ -455,45 +495,6 @@ Deno.serve(async (req) => {
       return json({ results: (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids)) });
     }
 
-    // Which of this teacher's own work is actually gradeable right now.
-    // Needed by both actions below. Two separate reasons a piece of work is
-    // excluded: an autograded Mini Problem gets its autograde_score the
-    // instant it is submitted and can never be "waiting on a human", so a
-    // null `score` on one means nothing - only a `review` problem's null
-    // score is really a submission sitting in the pile. Separately, a teacher
-    // can mark a whole assignment/problem/project as one they are not
-    // grading at all (see 0017_work_level_skip_grading.sql) - the usual real
-    // pattern being "if I'm not grading it for one student I'm not grading it
-    // for the class", so this is a decision made once on the work rather than
-    // repeated per submission.
-    const myGradableWorkIds = async () => {
-      const ids = await myWorkIds();
-      const [a, p, c] = await Promise.all([
-        ids.assignments.length
-          ? admin.from('assignments').select('id, grading_skipped').in('id', ids.assignments)
-          : Promise.resolve({ data: [] }),
-        ids.projects.length
-          ? admin.from('projects').select('id, grading_skipped').in('id', ids.projects)
-          : Promise.resolve({ data: [] }),
-        ids.coding.length
-          ? admin.from('coding_problems').select('id, grading_kind, grading_skipped').in('id', ids.coding)
-          : Promise.resolve({ data: [] }),
-      ]);
-      return {
-        assignments: new Set(
-          (a.data || []).filter((r: Record<string, any>) => !r.grading_skipped).map((r: Record<string, any>) => r.id)
-        ),
-        projects: new Set(
-          (p.data || []).filter((r: Record<string, any>) => !r.grading_skipped).map((r: Record<string, any>) => r.id)
-        ),
-        reviewProblems: new Set(
-          (c.data || [])
-            .filter((r: Record<string, any>) => r.grading_kind === 'review' && !r.grading_skipped)
-            .map((r: Record<string, any>) => r.id)
-        ),
-      };
-    };
-
     // A student who resubmitted more than once before being graded (see
     // reopenMine) leaves several rows behind, all still unscored - they are
     // one person waiting on a grade, not several. Both actions below need to
@@ -501,6 +502,36 @@ Deno.serve(async (req) => {
     // listing anything. Keyed on the signed-in user where there is one,
     // falling back to email then name for rows predating sign-in - the same
     // key CodeReviewGrader already groups attempts by.
+    // Filtered in Postgres by the work ids this teacher owns. Previously this
+    // selected EVERY submitted-and-unscored row in the table and discarded
+    // other teachers' in JS, which is both slower and more data over the wire
+    // than it needs to be. Chunked because these ids ride in the URL and a
+    // whole school's worth would eventually overflow it.
+    const unscoredSubmissionsFor = async (
+      workIds: string[],
+      columns: string,
+      excludeSkipped: boolean
+    ) => {
+      const CHUNK = 100;
+      const out: Record<string, any>[] = [];
+      for (let i = 0; i < workIds.length; i += CHUNK) {
+        const slice = workIds.slice(i, i + CHUNK).join(',');
+        let q = admin
+          .from('submissions')
+          .select(columns)
+          .eq('submitted', true)
+          .is('score', null)
+          .or(
+            `assignment_id.in.(${slice}),project_id.in.(${slice}),coding_problem_id.in.(${slice})`
+          );
+        if (excludeSkipped) q = q.eq('grading_skipped', false);
+        const { data, error } = await q.order('submitted_at', { ascending: false });
+        if (error) throw new Error(error.message);
+        out.push(...(data || []));
+      }
+      return out;
+    };
+
     const studentKey = (s: Record<string, any>) =>
       s.student_user_id || (s.student_email || '').toLowerCase() || s.student_name || s.id;
 
@@ -511,33 +542,27 @@ Deno.serve(async (req) => {
     // deliberately decided not to grade something should not keep seeing it
     // nag at them from every badge in the app.
     if (action === 'gradingCounts') {
-      const ids = await myWorkIds();
-      const [{ data, error }, gradable] = await Promise.all([
-        admin
-          .from('submissions')
-          .select('assignment_id, project_id, coding_problem_id, score, student_user_id, student_email, student_name')
-          .eq('submitted', true)
-          .eq('grading_skipped', false)
-          .is('score', null),
-        myGradableWorkIds(),
-      ]);
-      if (error) return json({ error: error.message }, 500);
-      const owned = (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids));
+      const index = await myWorkIndex();
+      const gradableIds = [...index.entries()].filter(([, m]) => m.gradable).map(([id]) => id);
+      if (gradableIds.length === 0) {
+        return json({ result: { byAssignment: {}, byProject: {}, byCodingProblem: {} } });
+      }
+      const rows = await unscoredSubmissionsFor(gradableIds, 'assignment_id, project_id, coding_problem_id, student_user_id, student_email, student_name', true);
 
       const byAssignment: Record<string, number> = {};
       const byProject: Record<string, number> = {};
       const byCodingProblem: Record<string, number> = {};
       const seenKeys = new Set<string>();
-      const bump = (bucket: Record<string, number>, workId: string, row: Record<string, any>) => {
+      for (const row of rows) {
+        const workId = row.assignment_id || row.project_id || row.coding_problem_id;
+        const meta = index.get(workId);
+        if (!meta || !meta.gradable) continue;
         const key = `${workId}::${studentKey(row)}`;
-        if (seenKeys.has(key)) return; // a resubmission from the same student - already counted
+        if (seenKeys.has(key)) continue; // a resubmission from the same student
         seenKeys.add(key);
+        const bucket =
+          meta.kind === 'frq' ? byAssignment : meta.kind === 'project' ? byProject : byCodingProblem;
         bucket[workId] = (bucket[workId] || 0) + 1;
-      };
-      for (const row of owned) {
-        if (row.assignment_id && gradable.assignments.has(row.assignment_id)) bump(byAssignment, row.assignment_id, row);
-        else if (row.project_id && gradable.projects.has(row.project_id)) bump(byProject, row.project_id, row);
-        else if (row.coding_problem_id && gradable.reviewProblems.has(row.coding_problem_id)) bump(byCodingProblem, row.coding_problem_id, row);
       }
       return json({ result: { byAssignment, byProject, byCodingProblem } });
     }
@@ -552,72 +577,41 @@ Deno.serve(async (req) => {
     // that decision was about the whole class, not about any one submission
     // worth surfacing for review.
     if (action === 'listNeedsGrading') {
-      const ids = await myWorkIds();
-      const [{ data, error }, gradable] = await Promise.all([
-        admin
-          .from('submissions')
-          .select(
-            'id, assignment_id, project_id, coding_problem_id, student_name, student_user_id, student_email, submitted_at, grading_skipped'
-          )
-          // Newest first, so the first row kept per (work, student) below is
-          // their most recent attempt.
-          .eq('submitted', true)
-          .is('score', null)
-          .order('submitted_at', { ascending: false }),
-        myGradableWorkIds(),
-      ]);
-      if (error) return json({ error: error.message }, 500);
-      const owned = (data || []).filter((s: Record<string, any>) => ownsSubmissionRow(s, ids));
+      const index = await myWorkIndex();
+      const gradableIds = [...index.entries()].filter(([, m]) => m.gradable).map(([id]) => id);
+      if (gradableIds.length === 0) return json({ results: [] });
+      const rows = await unscoredSubmissionsFor(
+        gradableIds,
+        'id, assignment_id, project_id, coding_problem_id, student_name, student_user_id, student_email, submitted_at, grading_skipped',
+        false
+      );
 
+      // Newest attempt per (work, student); titles come off the index already
+      // loaded above rather than three more queries.
       const seenKeys = new Set<string>();
-      const deduped: Record<string, any>[] = [];
-      for (const s of owned) {
-        let kind: string;
-        let workId: string;
-        if (s.assignment_id && gradable.assignments.has(s.assignment_id)) { kind = 'frq'; workId = s.assignment_id; }
-        else if (s.project_id && gradable.projects.has(s.project_id)) { kind = 'project'; workId = s.project_id; }
-        else if (s.coding_problem_id && gradable.reviewProblems.has(s.coding_problem_id)) { kind = 'review'; workId = s.coding_problem_id; }
-        else continue; // autograded, or the whole assignment/problem/project is marked not-graded
-        const key = `${workId}::${studentKey(s)}`;
-        if (seenKeys.has(key)) continue; // an earlier, superseded attempt from the same student
-        seenKeys.add(key);
-        deduped.push({ ...s, kind, work_id: workId });
-      }
-      // Oldest-waiting-first for display, same ordering as before dedup.
-      deduped.sort(
-        (a, b) => new Date(a.submitted_at ?? 0).getTime() - new Date(b.submitted_at ?? 0).getTime()
-      );
-
-      const uniq = (arr: (string | null)[]) => [...new Set(arr.filter(Boolean))] as string[];
-      const [assignmentRows, projectRows, codingRows] = await Promise.all([
-        admin.from('assignments').select('id, title, course_id').in('id', uniq(deduped.map((s) => s.assignment_id))),
-        admin.from('projects').select('id, title, course_id').in('id', uniq(deduped.map((s) => s.project_id))),
-        admin
-          .from('coding_problems')
-          .select('id, title, course_id')
-          .in('id', uniq(deduped.map((s) => s.coding_problem_id))),
-      ]);
-      const titleMap = new Map(
-        [...(assignmentRows.data || []), ...(projectRows.data || []), ...(codingRows.data || [])].map(
-          (r: Record<string, any>) => [r.id, { title: r.title, course_id: r.course_id }]
-        )
-      );
-
       const results = [];
-      for (const s of deduped) {
-        const meta = titleMap.get(s.work_id);
-        if (!meta) continue; // work item since deleted
+      for (const s2 of rows) {
+        const workId = s2.assignment_id || s2.project_id || s2.coding_problem_id;
+        const meta = index.get(workId);
+        if (!meta || !meta.gradable) continue;
+        const key = `${workId}::${studentKey(s2)}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
         results.push({
-          id: s.id,
-          kind: s.kind,
-          work_id: s.work_id,
+          id: s2.id,
+          kind: meta.kind,
+          work_id: workId,
           course_id: meta.course_id,
           title: meta.title,
-          student_name: s.student_name,
-          submitted_at: s.submitted_at,
-          grading_skipped: s.grading_skipped,
+          student_name: s2.student_name,
+          submitted_at: s2.submitted_at,
+          grading_skipped: s2.grading_skipped,
         });
       }
+      // Oldest-waiting first, which is the order the queue works through.
+      results.sort(
+        (a, b) => new Date(a.submitted_at ?? 0).getTime() - new Date(b.submitted_at ?? 0).getTime()
+      );
       return json({ results });
     }
 
