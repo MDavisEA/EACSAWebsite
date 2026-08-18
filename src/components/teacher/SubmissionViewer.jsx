@@ -10,7 +10,8 @@ import CommentBank from "./CommentBank";
 import ByQuestionGrader from "./ByQuestionGrader";
 import { latestPerStudent, studentKey } from "@/lib/groupSubmissionsByStudent";
 import GradesDialog from "./GradesDialog";
-import { FileDown, Clock, User, Trash2, ArrowUpDown, GraduationCap, BookOpen, KeyRound, ExternalLink, ZoomIn, Save, CheckCircle2, Clipboard, ClipboardCheck, ChevronLeft, ChevronRight, Copy, Check, Link2, ListChecks } from "lucide-react";
+import AnswerKeyPanel from "./AnswerKeyPanel";
+import { FileDown, Clock, User, Trash2, ArrowUpDown, GraduationCap, BookOpen, KeyRound, ExternalLink, Save, CheckCircle2, Clipboard, ClipboardCheck, ChevronLeft, ChevronRight, Copy, Check, Link2, ListChecks } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 export default function SubmissionViewer({ assignment, onGraded }) {
@@ -525,29 +526,11 @@ export default function SubmissionViewer({ assignment, onGraded }) {
                                   {text || "(no response)"}
                                 </pre>
                               </div>
-                              <div>
-                                <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1 flex items-center gap-1">
-                                  <KeyRound className="w-3 h-3" /> Answer Key
-                                </p>
-                                <div className="border border-amber-200 rounded-lg bg-amber-50/40 p-4 text-sm">
-                                  {keyHtml && (
-                                    <div
-                                      className="prose prose-sm max-w-none quill-render"
-                                      dangerouslySetInnerHTML={{ __html: keyHtml }}
-                                    />
-                                  )}
-                                  {keyImageUrl && (
-                                    <button onClick={() => setLightboxUrl(keyImageUrl)} className="mt-2 block group relative">
-                                      <img src={keyImageUrl} alt="Answer key" className="max-w-full rounded border group-hover:opacity-90 transition-opacity" />
-                                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <div className="bg-black/50 rounded-full p-2">
-                                          <ZoomIn className="w-5 h-5 text-white" />
-                                        </div>
-                                      </div>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
+                              <AnswerKeyPanel
+                                keyHtml={keyHtml}
+                                keyImageUrl={keyImageUrl}
+                                onZoom={setLightboxUrl}
+                              />
                               <div>
                                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Comments</p>
                                 <Textarea

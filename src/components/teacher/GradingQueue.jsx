@@ -10,9 +10,11 @@ import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import CommentBank from "./CommentBank";
 import AnnotatedCodeView from "./AnnotatedCodeView";
+import AnswerKeyPanel from "./AnswerKeyPanel";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import {
   Loader2, ChevronLeft, ChevronRight, CheckCircle2, EyeOff, FileCode, Terminal, Info,
+  KeyRound, ExternalLink,
 } from "lucide-react";
 
 const KIND_LABEL = { frq: "FRQ", code: "Mini Problem", review: "Coding Assignment", project: "Project" };
@@ -30,9 +32,9 @@ const KIND_LABEL = { frq: "FRQ", code: "Mini Problem", review: "Coding Assignmen
 // item.
 //
 // What it does NOT try to replace: the full per-assignment windows still hold
-// the things that only make sense there - class-wide autograder insights,
-// answer-key images, CSV export, the project export zip. This is for getting
-// through the pile.
+// the things that are about a whole assignment rather than one submission -
+// class-wide autograder insights, CSV export, the project export zip. This is
+// for getting through the pile.
 export default function GradingQueue({ open, onOpenChange, onChanged }) {
   const [queue, setQueue] = useState(null);
   const [index, setIndex] = useState(0);
@@ -48,6 +50,11 @@ export default function GradingQueue({ open, onOpenChange, onChanged }) {
   const [release, setRelease] = useState(false);
   const [activeFile, setActiveFile] = useState(null);
   const [tab, setTab] = useState("feedback");
+  // Kept across items on purpose: the pattern is looking at the key for the
+  // first few of a pile and then not needing it, so collapsing it once should
+  // stay collapsed for the rest of the run rather than reopening every student.
+  const [showKeys, setShowKeys] = useState(true);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -130,6 +137,15 @@ export default function GradingQueue({ open, onOpenChange, onChanged }) {
       prev.filter((c) => !((c.file ?? null) === (kind === "project" ? activeFile : null) && c.line === line))
     );
   };
+
+  const hasAnyKey =
+    kind === "frq" &&
+    (work?.questions || []).some(
+      (q) =>
+        q.answer_key_html ||
+        q.answer_key_image_url ||
+        (q.parts || []).some((p) => p.answer_key_html || p.answer_key_image_url)
+    );
 
   // FRQ scores are per question and the total is their sum, matching what the
   // per-assignment grader writes - so a submission graded here and one graded
@@ -389,7 +405,33 @@ export default function GradingQueue({ open, onOpenChange, onChanged }) {
                     // FRQ: their written answer per question, with a score box
                     // each. Answer-key images and the lightbox stay in the full
                     // per-assignment grader rather than being half-rebuilt here.
-                    <div className="divide-y max-h-[60vh] overflow-y-auto">
+                    <div className="max-h-[60vh] overflow-y-auto">
+                      {/* Answer keys fold away rather than being absent - see
+                          showKeys above for why the choice persists. */}
+                      {(hasAnyKey || work.answer_key_url) && (
+                        <div className="flex items-center gap-3 px-3 py-2 border-b bg-slate-50 sticky top-0">
+                          {hasAnyKey && (
+                            <button
+                              onClick={() => setShowKeys((v) => !v)}
+                              className="text-xs flex items-center gap-1.5 text-amber-700 hover:text-amber-900"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                              {showKeys ? "Hide answer keys" : "Show answer keys"}
+                            </button>
+                          )}
+                          {work.answer_key_url && (
+                            <a
+                              href={work.answer_key_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs flex items-center gap-1.5 text-primary hover:underline ml-auto"
+                            >
+                              Full answer key <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+                      <div className="divide-y">
                       {(work.questions || []).map((q) => {
                         const parts = q.parts && q.parts.length > 0 ? q.parts : null;
                         return (
@@ -410,6 +452,8 @@ export default function GradingQueue({ open, onOpenChange, onChanged }) {
                             {(parts || [{ id: null, label: null }]).map((p) => {
                               const key = p.id ? `${q.id}_${p.id}` : q.id;
                               const text = (submission.responses || {})[key];
+                              const keyHtml = p.id ? p.answer_key_html : q.answer_key_html;
+                              const keyImageUrl = p.id ? p.answer_key_image_url : q.answer_key_image_url;
                               return (
                                 <div key={key}>
                                   {p.label && (
@@ -420,6 +464,15 @@ export default function GradingQueue({ open, onOpenChange, onChanged }) {
                                   <pre className="bg-slate-50 border rounded p-2 text-xs whitespace-pre-wrap font-mono">
                                     {text?.trim() ? text : "(left blank)"}
                                   </pre>
+                                  {showKeys && (
+                                    <div className="mt-1.5">
+                                      <AnswerKeyPanel
+                                        keyHtml={keyHtml}
+                                        keyImageUrl={keyImageUrl}
+                                        onZoom={setLightboxUrl}
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -431,6 +484,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged }) {
                           This assignment has no questions.
                         </p>
                       )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -499,6 +553,19 @@ export default function GradingQueue({ open, onOpenChange, onChanged }) {
           </>
         )}
       </DialogContent>
+
+      {/* Keys are often photographs of a rubric page, unreadable at column
+          width - clicking one opens it full size. */}
+      <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
+        <DialogContent className="max-w-[92vw] w-fit p-2">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Answer key</DialogTitle>
+          </DialogHeader>
+          {lightboxUrl && (
+            <img src={lightboxUrl} alt="Answer key" className="max-h-[85vh] max-w-full rounded" />
+          )}
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
