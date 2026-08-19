@@ -454,6 +454,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                     </div>
                     {hasCode ? (
                       <AnnotatedCodeView
+                        key={current.id}
                         code={current.code}
                         comments={lineComments}
                         onAdd={addLineComment}

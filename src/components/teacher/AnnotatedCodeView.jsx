@@ -17,6 +17,15 @@ import { MessageSquare, Trash2 } from "lucide-react";
 // every comment written before Projects had this looks like. That makes the
 // old shape [{line, body}] and the new [{file, line, body}] the same thing
 // read the same way, with no migration.
+//
+// Which line is being commented on (`activeLine`) lives inside this
+// component, not the caller - so a caller that swaps `code`/`comments` to a
+// different submission (Next student, Save & next, switching a file tab)
+// without changing this component's `key` reuses the same instance, and an
+// open, unsaved draft on line N survives the swap and can be submitted onto
+// the next student's line N. Every call site must pass `key` scoped to
+// whatever identifies "this specific piece of code" - a submission id, or
+// `${submissionId}::${file}` when file tabs are involved.
 export default function AnnotatedCodeView({
   code,
   file = null,

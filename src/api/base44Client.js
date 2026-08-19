@@ -340,6 +340,16 @@ const CodingProblem = {
     return data.result;
   },
 
+  // For looking back at work already turned in (MyScore, "what I turned in"
+  // on the student dashboard) rather than starting it - unlike filter({id}),
+  // this does not require the problem still be active, so a released answer
+  // key or a past grade stays visible after the teacher deactivates the
+  // problem at the end of a unit.
+  async getForReview(id) {
+    const data = await callFunction('coding-problems', { action: 'getForReview', id });
+    return data.result;
+  },
+
   // Colleagues' problems, read-only, for copying. The copy lands in one of
   // MY units as a new row I own - the original is never touched.
   async listShared() {

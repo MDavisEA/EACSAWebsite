@@ -94,7 +94,10 @@ export default function StudentDashboard() {
         let codingProblem;
         if (item.kind === "code") {
           try {
-            codingProblem = (await base44.entities.CodingProblem.filter({ id: item.id }))[0];
+            // Not filter({id}) - that requires the problem still be active,
+            // which would hide a released answer key the moment the teacher
+            // deactivates a finished problem (the normal end-of-unit move).
+            codingProblem = await base44.entities.CodingProblem.getForReview(item.id);
           } catch {
             // A missing problem should not block them seeing their own work.
           }

@@ -366,7 +366,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged }) {
                           })}
                         </div>
                         <AnnotatedCodeView
-                          key={activeFile}
+                          key={`${submission.id}::${activeFile}`}
                           code={(submission.files || []).find((f) => f.filename === activeFile)?.content || ""}
                           file={activeFile}
                           comments={lineComments}
@@ -388,6 +388,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged }) {
                           Click any line to comment on it
                         </div>
                         <AnnotatedCodeView
+                          key={submission.id}
                           code={submission.code}
                           comments={lineComments}
                           onAdd={addLineComment}

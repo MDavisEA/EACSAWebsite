@@ -34,8 +34,11 @@ export default function MyScore() {
       const sub = matches[0];
       setResult(sub);
       if (sub.coding_problem_id) {
-        const probs = await base44.entities.CodingProblem.filter({ id: sub.coding_problem_id });
-        if (probs.length > 0) setCodingProblem(probs[0]);
+        // Not filter({id}) - that requires the problem still be active, which
+        // would hide a released answer key the moment the teacher deactivates
+        // a finished problem, exactly the normal end-of-unit sequence.
+        const prob = await base44.entities.CodingProblem.getForReview(sub.coding_problem_id);
+        if (prob) setCodingProblem(prob);
       } else {
         // Fetch assignment for question titles/structure
         const asgn = await base44.entities.Assignment.list();

@@ -461,6 +461,7 @@ export default function CodingSubmissionViewer({ problem }) {
                   {(selected.code || "").trim() ? (
                     <div className="border rounded-lg overflow-hidden">
                       <AnnotatedCodeView
+                        key={selected.id}
                         code={selected.code}
                         comments={lineComments}
                         onAdd={addLineComment}

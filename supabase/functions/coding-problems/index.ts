@@ -82,6 +82,29 @@ Deno.serve(async (req) => {
       return json({ result: data ? sanitizeForStudent(data) : null });
     }
 
+    // Same sanitized shape as getActive, but for looking back at a piece of
+    // work already turned in - MyScore and the "what I turned in" dialog on
+    // the student dashboard, not for starting new work. is_active is
+    // deliberately NOT checked here: it gates whether a student can begin or
+    // continue a problem (enforced separately in submissions/index.ts's
+    // startFresh), not whether they can see their own past submission or a
+    // released answer key. The normal end-of-unit sequence is deactivate the
+    // problem, then release the key - without this action that sequence
+    // would silently hide the key from every student who already submitted.
+    // No ownership check needed: this returns exactly the fields getActive
+    // already hands to anyone with the id while the problem is active, so
+    // dropping is_active removes no real boundary - the id itself isn't
+    // guessable, and this endpoint has never gated on more than that.
+    if (action === 'getForReview') {
+      const { data, error } = await admin
+        .from('coding_problems')
+        .select('*')
+        .eq('id', body.id)
+        .maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data ? sanitizeForStudent(data) : null });
+    }
+
     // ---- Teacher-only ----
 
     const teacher = await getTeacherFromRequest(req, admin);
