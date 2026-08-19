@@ -253,6 +253,7 @@ export default function TeacherDashboard() {
       ...data,
       title: `${assignment.title} (Copy)`,
       is_active: false,
+      sort_order: nextTopSortOrder(data.course_id, data.unit_id),
     });
     loadAssignments();
   };
@@ -317,6 +318,11 @@ export default function TeacherDashboard() {
       ...data,
       title: `${problem.title} (Copy)`,
       is_active: false,
+      sort_order: nextTopSortOrder(data.course_id, data.unit_id),
+      // A fresh copy has no students, nothing graded, and no answer key that
+      // has been reviewed for this specific copy - releasing was a decision
+      // about the original, not something that should carry over silently.
+      answer_key_released: false,
     });
     loadCodingProblems();
   };
@@ -378,6 +384,7 @@ export default function TeacherDashboard() {
       ...data,
       title: `${project.title} (Copy)`,
       is_active: false,
+      sort_order: nextTopSortOrder(data.course_id, data.unit_id),
     });
     loadProjects();
   };

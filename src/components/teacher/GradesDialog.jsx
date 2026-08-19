@@ -31,30 +31,37 @@ export default function GradesDialog({
   title,
   submissions,
   courseId,
+  preloadedRoster,
   maxPoints,
   scoreOf,
 }) {
   const [sortBy, setSortBy] = useState("last");
-  const [roster, setRoster] = useState([]);
+  const [fetchedRoster, setFetchedRoster] = useState([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // The roster is what makes "who has no grade yet" answerable - without it
   // this can only list people who turned something in, which is the wrong list
-  // to work from when entering marks for a whole class.
+  // to work from when entering marks for a whole class. Skipped when the
+  // caller already has one loaded (ProjectSubmissionViewer keeps its own for
+  // the "who hasn't turned in" table) - fetching it twice for the same
+  // course, every time this dialog opens, was pure waste.
   useEffect(() => {
-    if (!open || !courseId) return;
+    if (!open || !courseId || preloadedRoster) return;
     let cancelled = false;
     setLoadingRoster(true);
     base44.entities.Course.listRoster(courseId)
-      .then((r) => { if (!cancelled) setRoster(r || []); })
-      .catch(() => { if (!cancelled) setRoster([]); })
+      .then((r) => { if (!cancelled) setFetchedRoster(r || []); })
+      .catch(() => { if (!cancelled) setFetchedRoster([]); })
       .finally(() => { if (!cancelled) setLoadingRoster(false); });
     return () => { cancelled = true; };
-  }, [open, courseId]);
+  }, [open, courseId, preloadedRoster]);
+
+  const roster = preloadedRoster || fetchedRoster;
 
   const rows = useMemo(() => {
-    const submitted = latestPerStudent(submissions || []).map((s) => {
+    const latest = latestPerStudent(submissions || []);
+    const submitted = latest.map((s) => {
       const score = scoreOf(s);
       return {
         key: s.id,
@@ -68,7 +75,7 @@ export default function GradesDialog({
     // Roster students with nothing turned in still need a row - they are
     // usually the ones that need a zero typed into Canvas.
     const { missing } = roster.length
-      ? diffRosterAgainstSubmissions(roster, latestPerStudent(submissions || []))
+      ? diffRosterAgainstSubmissions(roster, latest)
       : { missing: [] };
     const notIn = missing.map((r) => ({
       key: `missing-${r.email || r.student_name}`,

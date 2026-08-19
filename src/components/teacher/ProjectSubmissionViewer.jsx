@@ -390,6 +390,7 @@ export default function ProjectSubmissionViewer({ project }) {
         title={project.title}
         submissions={submissions}
         courseId={project.course_id}
+        preloadedRoster={roster}
         maxPoints={null}
         scoreOf={(s) => s.score ?? null}
       />

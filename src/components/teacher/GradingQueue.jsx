@@ -126,16 +126,19 @@ export default function GradingQueue({ open, onOpenChange, onChanged }) {
       ? work?.points_possible ?? null
       : null;
 
+  // Only a Project has files, so only there does a comment need to record
+  // which one it's on - everything else stores null, same as before Projects
+  // had multiple files. Computed once and reused below rather than repeating
+  // the kind check at every call site.
+  const commentFile = kind === "project" ? activeFile : null;
   const addLineComment = (line, body) => {
     setLineComments((prev) => [
-      ...prev.filter((c) => !((c.file ?? null) === (kind === "project" ? activeFile : null) && c.line === line)),
-      kind === "project" ? { file: activeFile, line, body } : { line, body },
+      ...prev.filter((c) => !((c.file ?? null) === commentFile && c.line === line)),
+      commentFile != null ? { file: commentFile, line, body } : { line, body },
     ]);
   };
   const removeLineComment = (line) => {
-    setLineComments((prev) =>
-      prev.filter((c) => !((c.file ?? null) === (kind === "project" ? activeFile : null) && c.line === line))
-    );
+    setLineComments((prev) => prev.filter((c) => !((c.file ?? null) === commentFile && c.line === line)));
   };
 
   const hasAnyKey =
