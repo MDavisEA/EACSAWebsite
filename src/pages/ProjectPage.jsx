@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import ReactMarkdown from "react-markdown";
 import { googleDocEmbedUrl } from "@/lib/googleDoc";
 import SampleOutputs from "@/components/SampleOutputs";
-import { FolderGit2, AlertCircle, ChevronRight, LogIn, CheckCircle2, FileCode2, ExternalLink } from "lucide-react";
+import { FolderGit2, AlertCircle, ChevronRight, LogIn, CheckCircle2, FileCode2, ExternalLink, ArrowLeft } from "lucide-react";
 
 export default function ProjectPage() {
   const navigate = useNavigate();
@@ -156,6 +156,16 @@ export default function ProjectPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50 py-12 px-4">
       <div className="max-w-2xl mx-auto space-y-6">
+        {/* The only way back used to be the browser's own Back button - easy
+            to lose track of once a student has clicked into a Gist link or
+            scrolled through directions. */}
+        <button
+          onClick={() => navigate("/")}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to My Work
+        </button>
+
         <div className="text-center">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-violet-500/10 mb-4">
             <FolderGit2 className="w-7 h-7 text-violet-600" />
