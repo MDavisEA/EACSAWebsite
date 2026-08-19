@@ -2,10 +2,13 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, EyeOff, CheckCircle2, Code2, FileText } from "lucide-react";
+import { Loader2, EyeOff, CheckCircle2, Code2, FileText, FolderGit2, ExternalLink } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
+import ReactMarkdown from "react-markdown";
+import { googleDocEmbedUrl } from "@/lib/googleDoc";
+import SampleOutputs from "@/components/SampleOutputs";
 
 // Defined once at module scope, not inline in JSX - a new array reference on
 // every render makes @uiw/react-codemirror tear down and rebuild the editor's
@@ -38,6 +41,8 @@ export default function StudentPreviewDialog({ open, onOpenChange, kind, itemId,
         const result =
           kind === "code"
             ? await base44.entities.CodingProblem.previewAsStudent(itemId)
+            : kind === "project"
+            ? await base44.entities.Project.previewAsStudent(itemId)
             : (await base44.entities.Assignment.filter({ id: itemId }))[0];
         if (!cancelled) setData(result ?? null);
       } catch (e) {
@@ -54,7 +59,13 @@ export default function StudentPreviewDialog({ open, onOpenChange, kind, itemId,
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {kind === "code" ? <Code2 className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+            {kind === "code" ? (
+              <Code2 className="w-4 h-4" />
+            ) : kind === "project" ? (
+              <FolderGit2 className="w-4 h-4" />
+            ) : (
+              <FileText className="w-4 h-4" />
+            )}
             What students see: {title}
           </DialogTitle>
         </DialogHeader>
@@ -69,6 +80,8 @@ export default function StudentPreviewDialog({ open, onOpenChange, kind, itemId,
           <p className="text-sm text-muted-foreground py-6">Nothing to preview.</p>
         ) : kind === "code" ? (
           <CodePreview problem={data} />
+        ) : kind === "project" ? (
+          <ProjectPreview project={data} />
         ) : (
           <FrqPreview assignment={data} />
         )}
@@ -96,6 +109,13 @@ function CodePreview({ problem }) {
           className="prose prose-sm max-w-none quill-render"
           dangerouslySetInnerHTML={{ __html: problem.description_html }}
         />
+      )}
+
+      {(problem.sample_outputs || []).length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-2">Sample output</p>
+          <SampleOutputs items={problem.sample_outputs} />
+        </div>
       )}
 
       {problem.starter_code && (
@@ -139,6 +159,70 @@ function CodePreview({ problem }) {
 
       <p className="text-xs text-muted-foreground border-t pt-3">
         Expected outputs and hidden-test details are absent above because the server strips them
+        before sending — this is the real student payload, not a mock-up.
+      </p>
+    </div>
+  );
+}
+
+function ProjectPreview({ project }) {
+  return (
+    <div className="space-y-5">
+      {project.due_date && (
+        <p className="text-sm text-muted-foreground">
+          Due {new Date(project.due_date).toLocaleString(undefined, {
+            weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+          })}
+        </p>
+      )}
+
+      {project.description_html && (
+        <div
+          className="prose prose-sm max-w-none quill-render"
+          dangerouslySetInnerHTML={{ __html: project.description_html }}
+        />
+      )}
+
+      {(project.sample_outputs || []).length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-2">Sample output</p>
+          <SampleOutputs items={project.sample_outputs} />
+        </div>
+      )}
+
+      {project.google_doc_url && (
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-medium text-muted-foreground">Assignment (Google Doc)</p>
+            <a
+              href={project.google_doc_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+            >
+              Open in new tab <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+          <iframe
+            src={googleDocEmbedUrl(project.google_doc_url)}
+            title="Assignment directions"
+            className="w-full rounded-lg border"
+            style={{ height: 400 }}
+          />
+        </div>
+      )}
+
+      {project.rubric_md && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-1">Rubric</p>
+          <div className="text-sm markdown-render border rounded-lg p-4">
+            <ReactMarkdown>{project.rubric_md}</ReactMarkdown>
+          </div>
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground border-t pt-3">
+        review_prompt (your AI review instructions) is absent above because the server strips it
         before sending — this is the real student payload, not a mock-up.
       </p>
     </div>

@@ -415,6 +415,13 @@ const Project = {
     return data.result;
   },
 
+  // For the teacher's "Preview as student" dialog - works whether or not the
+  // project is active, unlike filter({id}).
+  async previewAsStudent(id) {
+    const data = await callFunction('projects', { action: 'previewAsStudent', id });
+    return data.result;
+  },
+
   async delete(id) {
     await callFunction('projects', { action: 'delete', id });
   },

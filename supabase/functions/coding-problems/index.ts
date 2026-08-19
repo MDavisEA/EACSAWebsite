@@ -27,6 +27,9 @@ function sanitizeForStudent(problem: Record<string, any>) {
     // Students need to see how many practice runs they get; the cap itself is
     // enforced server-side in run-java-tests.
     max_test_runs: problem.max_test_runs,
+    // What the finished program should look like when it runs. Not gated -
+    // this describes the target, not a worked solution.
+    sample_outputs: problem.sample_outputs || [],
     // The answer key is the answer, so it is only ever included once the
     // teacher has released it. This function is an allowlist - a new column is
     // invisible to students until named here - so this is the one place that

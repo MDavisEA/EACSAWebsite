@@ -11,6 +11,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { a11yLightEditorTheme } from "@/lib/codeEditorThemes";
 import MethodEditor, { newMethod } from "./MethodEditor";
+import SampleOutputsEditor from "./SampleOutputsEditor";
 import TestCaseEditor, { newTestCase, generateKey } from "./TestCaseEditor";
 
 // Defined once at module scope, not inline in JSX - a new array reference
@@ -54,6 +55,7 @@ function defaultForm() {
     manual_points: 10,
     answer_key_code: "",
     answer_key_notes_html: "",
+    sample_outputs: [],
     due_date: "",
     max_test_runs: 5,
     is_active: true,
@@ -406,6 +408,14 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
             basicSetup={{ tabSize: 4 }}
           />
         </div>
+      </div>
+
+      {/* What the finished program should look like when it runs. Not gated
+          behind anything, unlike the answer key below - this describes the
+          target, not a worked solution. Offered for both kinds, same as the
+          key: useful whether it's autograded or graded by hand. */}
+      <div className="border-t pt-6">
+        <SampleOutputsEditor value={form.sample_outputs} onChange={(v) => updateField("sample_outputs", v)} />
       </div>
 
       {/* A reference solution. Kept out of everything students can reach until

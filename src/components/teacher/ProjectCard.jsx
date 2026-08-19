@@ -4,12 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Pencil, Trash2, CopyPlus, Link2, Users, ChevronDown, ChevronUp, Copy, Check , GripVertical, Ban } from "lucide-react";
+import { Pencil, Trash2, CopyPlus, Link2, Users, ChevronDown, ChevronUp, Copy, Check , GripVertical, Ban, Eye } from "lucide-react";
 import ProjectSubmissionViewer from "./ProjectSubmissionViewer";
+import StudentPreviewDialog from "./StudentPreviewDialog";
 
 export default function ProjectCard({ project, dragHandleProps, ungradedCount = 0, onEdit, onDelete, onToggleActive, onToggleGrading, onDuplicate }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
 
   const studentLink = `${window.location.origin}/project?id=${project.id}`;
 
@@ -66,6 +68,9 @@ export default function ProjectCard({ project, dragHandleProps, ungradedCount = 
             </div>
             <div className="flex items-center gap-1">
               <Switch checked={project.is_active} onCheckedChange={onToggleActive} className="mr-2" />
+              <Button variant="ghost" size="sm" onClick={() => setPreviewing(true)} title="Preview as student">
+                <Eye className="w-4 h-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -113,6 +118,14 @@ export default function ProjectCard({ project, dragHandleProps, ungradedCount = 
           )}
         </div>
       </CardContent>
+
+      <StudentPreviewDialog
+        open={previewing}
+        onOpenChange={setPreviewing}
+        kind="project"
+        itemId={project.id}
+        title={project.title}
+      />
     </Card>
   );
 }

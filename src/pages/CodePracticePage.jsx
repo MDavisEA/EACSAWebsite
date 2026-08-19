@@ -5,6 +5,7 @@ import { useGoogleSession } from "@/lib/useGoogleSession";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
+import SampleOutputs from "@/components/SampleOutputs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -249,6 +250,15 @@ export default function CodePracticePage() {
             className="prose prose-sm prose-invert max-w-none"
             dangerouslySetInnerHTML={{ __html: problem.description_html || "" }}
           />
+
+          {(problem.sample_outputs || []).length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                Sample output
+              </h3>
+              <SampleOutputs items={problem.sample_outputs} dark />
+            </div>
+          )}
 
           {isReviewKind && (
             <div>

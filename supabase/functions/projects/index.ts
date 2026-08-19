@@ -61,6 +61,25 @@ Deno.serve(async (req) => {
     const teacher = await getTeacherFromRequest(req, admin);
     if (!teacher) return json({ error: 'Unauthorized' }, 401);
 
+    // Same sanitizer the student endpoint uses, so what the teacher previews
+    // is byte-for-byte what a student would receive - review_prompt absent
+    // included. Unlike getActive this ignores is_active, since previewing is
+    // most useful before publishing. Mirrors coding-problems' previewAsStudent;
+    // this one was simply never added when Projects gained a preview-worthy
+    // description/sample-output section.
+    if (action === 'previewAsStudent') {
+      if (!(await teacherOwnsRow(admin, teacher.id, 'projects', body.id))) {
+        return json({ error: 'Not found' }, 404);
+      }
+      const { data, error } = await admin
+        .from('projects')
+        .select('*')
+        .eq('id', body.id)
+        .maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data ? sanitizeForStudent(data) : null });
+    }
+
     if (action === 'list') {
       const mine = await teacherCourseIds(admin, teacher.id);
       if (mine.length === 0) return json({ results: [] });
