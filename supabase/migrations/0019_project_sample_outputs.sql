@@ -1,0 +1,14 @@
+-- What the finished program should look like when it runs: screenshots of the
+-- output, or a link to a video walking through it. Shown to students alongside
+-- the project description, which is where the question "wait, what is this
+-- supposed to do?" actually gets asked.
+--
+-- An array rather than one image + one video field, because a single run is
+-- often several screenshots (the opening state, a win, a loss) and a teacher
+-- may want both a picture and a video on the same project. Each entry is
+-- { kind: 'image' | 'video', url, caption }.
+--
+-- Not gated behind anything: a sample of correct OUTPUT is the assignment
+-- telling you what to build, not the answer key telling you how - unlike
+-- coding_problems.answer_key_code, which is release-gated for that reason.
+alter table projects add column sample_outputs jsonb not null default '[]'::jsonb;

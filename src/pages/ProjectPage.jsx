@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ReactMarkdown from "react-markdown";
 import { googleDocEmbedUrl } from "@/lib/googleDoc";
+import { videoEmbedUrl } from "@/lib/videoEmbed";
 import { FolderGit2, AlertCircle, ChevronRight, LogIn, CheckCircle2, FileCode2, ExternalLink } from "lucide-react";
 
 export default function ProjectPage() {
@@ -207,6 +208,63 @@ export default function ProjectPage() {
             <p className="text-xs text-muted-foreground mt-2">
               If this does not load, ask your teacher to check the sharing settings.
             </p>
+          </div>
+        )}
+
+        {/* What it should look like when it runs. Sits right after the
+            directions, since that is the question these answer. */}
+        {(project.sample_outputs || []).length > 0 && (
+          <div className="bg-card rounded-xl border border-border p-6">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+              Sample Output
+            </h2>
+            <p className="text-xs text-muted-foreground mb-4">
+              What your finished program should look like when it runs. Yours does not have to match
+              word for word.
+            </p>
+            <div className="space-y-5">
+              {project.sample_outputs.map((s, i) => {
+                const embed = s.kind === "video" ? videoEmbedUrl(s.url) : null;
+                return (
+                  <div key={i}>
+                    {s.kind === "image" ? (
+                      <a href={s.url} target="_blank" rel="noopener noreferrer" className="block">
+                        <img
+                          src={s.url}
+                          alt={s.caption || `Sample output ${i + 1}`}
+                          className="max-w-full rounded-lg border border-border hover:opacity-95 transition-opacity"
+                        />
+                      </a>
+                    ) : embed ? (
+                      <div className="rounded-lg overflow-hidden border border-border bg-black">
+                        <iframe
+                          src={embed}
+                          title={s.caption || `Sample output video ${i + 1}`}
+                          className="w-full"
+                          style={{ aspectRatio: "16 / 9", border: 0 }}
+                          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : (
+                      /* Not a service we can embed - a plain link, rather than
+                         an iframe that would render as an empty box. */
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                      >
+                        Watch the sample output video <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                    {s.caption && (
+                      <p className="text-xs text-muted-foreground mt-2">{s.caption}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

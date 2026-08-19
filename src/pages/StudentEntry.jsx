@@ -56,6 +56,15 @@ export default function StudentEntry() {
     navigate(`/exam?id=${assignment.id}`);
   };
 
+  // Straight into the exam once we know who they are - see the matching note
+  // in CodePage. Nothing is created here, and ExamPage shows the signed-in
+  // name itself, so the extra click bought nothing.
+  useEffect(() => {
+    if (!sessionLoading && session && assignment) {
+      navigate(`/exam?id=${assignment.id}`, { replace: true });
+    }
+  }, [sessionLoading, session, assignment, navigate]);
+
   const handleSelectFeatured = (a) => {
     navigate(`/student?id=${a.id}`);
   };

@@ -5,10 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Upload, FileCode2, X, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { videoEmbedUrl } from "@/lib/videoEmbed";
 
 const QUILL_MODULES = {
   toolbar: [
@@ -47,6 +49,7 @@ function defaultForm() {
     rubric_md: "",
     starter_files: [],
     google_doc_url: "",
+    sample_outputs: [],
     course_id: null,
     unit_id: null,
     due_date: "",
@@ -89,6 +92,10 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
   const [gistError, setGistError] = useState("");
   const [previewing, setPreviewing] = useState(null);
   const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const [uploadingSample, setUploadingSample] = useState(false);
+  const [sampleVideoUrl, setSampleVideoUrl] = useState("");
+  const [sampleError, setSampleError] = useState("");
 
   const updateField = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -137,6 +144,47 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
     } finally {
       setFetchingGist(false);
     }
+  };
+
+  // Screenshots go through the same upload-file function the FRQ answer-key
+  // images use, so they land in Storage and survive the teacher's browser.
+  const handleSampleImageInput = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    setUploadingSample(true);
+    setSampleError("");
+    try {
+      const uploaded = [];
+      for (const file of files) {
+        const { file_url } = await base44.integrations.Core.UploadFile({ file });
+        uploaded.push({ kind: "image", url: file_url, caption: "" });
+      }
+      setForm((f) => ({ ...f, sample_outputs: [...f.sample_outputs, ...uploaded] }));
+    } catch (err) {
+      setSampleError(err.message || "Couldn't upload that image.");
+    } finally {
+      setUploadingSample(false);
+    }
+  };
+
+  const addSampleVideo = () => {
+    const url = sampleVideoUrl.trim();
+    if (!url) return;
+    setSampleError("");
+    setForm((f) => ({ ...f, sample_outputs: [...f.sample_outputs, { kind: "video", url, caption: "" }] }));
+    setSampleVideoUrl("");
+  };
+
+  const updateSampleOutput = (idx, patch) => {
+    setForm((f) => ({
+      ...f,
+      sample_outputs: f.sample_outputs.map((s, i) => (i === idx ? { ...s, ...patch } : s)),
+    }));
+  };
+
+  const removeSampleOutput = (idx) => {
+    setForm((f) => ({ ...f, sample_outputs: f.sample_outputs.filter((_, i) => i !== idx) }));
   };
 
   const removeFile = (filename) => {
@@ -237,6 +285,104 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
           For directions easier to write in Docs than the box above. Embedded on the student page and
           pulled into the review export - share it as "Anyone with the link - Viewer" first.
         </p>
+      </div>
+
+      {/* What the finished program should look like when it runs. Sits next to
+          the directions on the student page, which is where "what is this
+          supposed to do?" actually comes up. */}
+      <div className="space-y-2">
+        <Label>Sample output (optional)</Label>
+        <p className="text-xs text-muted-foreground">
+          Screenshots of the program running, or a link to a video of it. Students see these with
+          the directions. Add as many as you need &mdash; an opening state and a win, say.
+        </p>
+
+        {form.sample_outputs.length > 0 && (
+          <div className="space-y-2 pt-1">
+            {form.sample_outputs.map((s, i) => (
+              <div key={i} className="flex items-start gap-2 border rounded-lg p-2 bg-slate-50/60">
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] uppercase">
+                      {s.kind === "video" ? "Video" : "Image"}
+                    </Badge>
+                    {s.kind === "image" ? (
+                      <img
+                        src={s.url}
+                        alt={s.caption || "Sample output"}
+                        className="h-12 rounded border bg-white"
+                      />
+                    ) : (
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline truncate"
+                      >
+                        {s.url}
+                      </a>
+                    )}
+                  </div>
+                  <Input
+                    value={s.caption || ""}
+                    onChange={(e) => updateSampleOutput(i, { caption: e.target.value })}
+                    placeholder="Caption (optional) - e.g. 'a winning round'"
+                    className="h-8 text-xs"
+                  />
+                  {s.kind === "video" && !videoEmbedUrl(s.url) && (
+                    <p className="text-xs text-amber-700">
+                      Not a YouTube, Loom, or Drive link, so this will show as a link students click
+                      rather than a player on the page.
+                    </p>
+                  )}
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => removeSampleOutput(i)} title="Remove">
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleSampleImageInput}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={uploadingSample}
+          >
+            {uploadingSample ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Uploading...
+              </>
+            ) : (
+              <>
+                <Upload className="w-3.5 h-3.5 mr-1.5" /> Upload screenshot
+              </>
+            )}
+          </Button>
+          <div className="flex items-center gap-1.5">
+            <Input
+              value={sampleVideoUrl}
+              onChange={(e) => setSampleVideoUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addSampleVideo()}
+              placeholder="...or paste a video link"
+              className="h-9 w-64 text-sm"
+            />
+            <Button variant="outline" size="sm" onClick={addSampleVideo} disabled={!sampleVideoUrl.trim()}>
+              Add
+            </Button>
+          </div>
+        </div>
+        {sampleError && <p className="text-xs text-destructive">{sampleError}</p>}
       </div>
 
       <div className="space-y-2">

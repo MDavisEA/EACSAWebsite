@@ -53,6 +53,18 @@ export default function CodePage() {
     navigate(`/code-practice?id=${problem.id}`);
   };
 
+  // Straight into the editor once we know who they are. This screen used to be
+  // where a student typed their name; Google sign-in replaced that, leaving a
+  // page whose only remaining job was one extra click. It creates nothing, so
+  // there is no state to confirm before skipping it, and the editor itself
+  // shows who is signed in. Still rendered when NOT signed in - that is the
+  // sign-in prompt - and when no id is given, which is the problem picker.
+  useEffect(() => {
+    if (!sessionLoading && session && problem) {
+      navigate(`/code-practice?id=${problem.id}`, { replace: true });
+    }
+  }, [sessionLoading, session, problem, navigate]);
+
   const handleSelect = (p) => {
     navigate(`/code?id=${p.id}`);
   };
