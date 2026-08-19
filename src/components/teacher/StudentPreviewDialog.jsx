@@ -3,6 +3,17 @@ import { base44 } from "@/api/base44Client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, EyeOff, CheckCircle2, Code2, FileText } from "lucide-react";
+import CodeMirror from "@uiw/react-codemirror";
+import { java } from "@codemirror/lang-java";
+import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
+
+// Defined once at module scope, not inline in JSX - a new array reference on
+// every render makes @uiw/react-codemirror tear down and rebuild the editor's
+// state. Same extensions CodePracticePage.jsx gives the real editor, so this
+// preview is not just "another dark box" but the identical rendering a
+// student would actually see - a plain <pre> here previously showed the same
+// starter code with no syntax highlighting at all.
+const CODE_EXTENSIONS = [java(), ...a11yDarkEditorTheme];
 
 // Shows a teacher what a student is actually served for a problem or an
 // assignment. It deliberately re-fetches through the same code path the
@@ -90,9 +101,16 @@ function CodePreview({ problem }) {
       {problem.starter_code && (
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-1">Starter code</p>
-          <pre className="bg-slate-900 text-slate-100 rounded-lg p-3 text-xs overflow-x-auto">
-            {problem.starter_code}
-          </pre>
+          <div className="rounded-lg overflow-hidden border">
+            <CodeMirror
+              value={problem.starter_code}
+              editable={false}
+              theme="none"
+              extensions={CODE_EXTENSIONS}
+              maxHeight="400px"
+              basicSetup={{ tabSize: 4 }}
+            />
+          </div>
         </div>
       )}
 
