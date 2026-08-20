@@ -31,15 +31,25 @@ const QUILL_FORMATS = [
 function PdfPagePicker({ pdfUrl, onConfirm, onCancel }) {
   const [pageCount, setPageCount] = useState(null);
   const [loadingPages, setLoadingPages] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [selected, setSelected] = useState(new Set());
   const [extracting, setExtracting] = useState(false);
 
   useEffect(() => {
+    setLoadError("");
     // Use extractPdfText with no pages to get total_pages (mupdf is more robust)
     base44.functions.invoke("extractPdfText", { pdf_url: pdfUrl, pages: [] }).then((res) => {
       setPageCount(res.data.total_pages);
       setLoadingPages(false);
-    }).catch(() => setLoadingPages(false));
+    }).catch((e) => {
+      // Previously discarded here, so any real cause - a missing/misconfigured
+      // function, storage the server couldn't fetch from, a genuinely corrupt
+      // file - all looked identical: an unhelpful generic message with nothing
+      // to act on. This is also the only place that failure surfaces at all,
+      // since nothing else logs it.
+      setLoadError(e.message || "Unknown error.");
+      setLoadingPages(false);
+    });
   }, [pdfUrl]);
 
   const toggle = (page) => {
@@ -53,11 +63,18 @@ function PdfPagePicker({ pdfUrl, onConfirm, onCancel }) {
 
   const handleConfirm = async () => {
     setExtracting(true);
+    setLoadError("");
     const pages = Array.from(selected).sort((a, b) => a - b);
-    const res = await base44.functions.invoke("extractPdfText", { pdf_url: pdfUrl, pages });
-    setExtracting(false);
-    const urls = (res.data.file_urls || [res.data.file_url]).filter(Boolean);
-    onConfirm(urls);
+    try {
+      const res = await base44.functions.invoke("extractPdfText", { pdf_url: pdfUrl, pages });
+      const urls = (res.data.file_urls || [res.data.file_url]).filter(Boolean);
+      onConfirm(urls);
+    } catch (e) {
+      // Previously unhandled - a failure here left "Extracting..." spinning
+      // forever with no way out except reloading the page.
+      setLoadError(e.message || "Unknown error.");
+      setExtracting(false);
+    }
   };
 
   return (
@@ -80,7 +97,13 @@ function PdfPagePicker({ pdfUrl, onConfirm, onCancel }) {
               Detecting pages...
             </div>
           ) : !pageCount ? (
-            <p className="text-sm text-red-500">Could not read this PDF. Please try re-uploading it.</p>
+            <div className="text-sm text-red-500">
+              <p>Could not read this PDF.</p>
+              {loadError && <p className="text-xs text-red-400 mt-1">{loadError}</p>}
+              <p className="text-xs text-slate-500 mt-1">
+                Try re-uploading it, or a different export of the same file if you have one.
+              </p>
+            </div>
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -130,9 +153,14 @@ function PdfPagePicker({ pdfUrl, onConfirm, onCancel }) {
         </div>
 
         {pageCount && !loadingPages && (
-          <div className="border-t px-5 py-4 flex items-center justify-between">
-            <span className="text-sm text-slate-500">{selected.size} page{selected.size !== 1 ? "s" : ""} selected</span>
-            <div className="flex gap-2">
+          <div className="border-t px-5 py-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span className="text-sm text-slate-500">
+                {selected.size} page{selected.size !== 1 ? "s" : ""} selected
+              </span>
+              {loadError && <p className="text-xs text-red-500 mt-0.5">{loadError}</p>}
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
               <Button variant="outline" onClick={onCancel} disabled={extracting}>Cancel</Button>
               <Button onClick={handleConfirm} disabled={selected.size === 0 || extracting}>
                 {extracting ? (
