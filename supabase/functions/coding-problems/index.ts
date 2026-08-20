@@ -6,6 +6,7 @@ import {
   teacherOwnsCourse,
   teacherOwnsRow,
 } from '../_shared/teacherAuth.ts';
+import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 
 // Students get starter code, description, and the LABELS of test cases
 // (so they know what's being checked) but never expected_output, method_args,
@@ -105,7 +106,52 @@ Deno.serve(async (req) => {
         .eq('id', body.id)
         .maybeSingle();
       if (error) return json({ error: error.message }, 500);
-      return json({ result: data ? sanitizeForStudent(data) : null });
+      if (!data) return json({ result: null });
+
+      const sanitized = sanitizeForStudent(data);
+      if (!data.answer_key_released) return json({ result: sanitized });
+
+      // The answer key is the answer, so unlike everything else this action
+      // returns, it is only handed back to someone who can prove they already
+      // have a submission for this exact problem - the release flag alone is
+      // not that proof, since the problem id is not secret (it is sitting in
+      // the /code?id=... URL every student in the class already has, and this
+      // action itself does not check is_active). This was previously missing
+      // entirely: the design comment on the answer-key migration claimed "two
+      // independent gates," but only the release flag was ever checked
+      // server-side - anyone with the id could pull the key the moment a
+      // teacher released it, submission or not.
+      //
+      // Two ways to prove it, matching the two ways this action is actually
+      // reached: a signed-in student with their own row for this problem
+      // (StudentDashboard), or - MyScore's access-code lookup, which has no
+      // session - a submission id that genuinely belongs to this problem.
+      // Submission ids are random UUIDs nobody can guess, so knowing one
+      // already is the proof; no separate session_token check needed on top
+      // of it for a read-only, non-destructive lookup like this.
+      let hasSubmission = false;
+      const student = await getStudentFromRequest(req, admin);
+      if (student) {
+        const { data: sub } = await admin
+          .from('submissions')
+          .select('id')
+          .eq('coding_problem_id', body.id)
+          .eq('student_user_id', student.id)
+          .limit(1)
+          .maybeSingle();
+        hasSubmission = !!sub;
+      } else if (body.submission_id) {
+        const { data: sub } = await admin
+          .from('submissions')
+          .select('id')
+          .eq('id', body.submission_id)
+          .eq('coding_problem_id', body.id)
+          .maybeSingle();
+        hasSubmission = !!sub;
+      }
+      if (hasSubmission) return json({ result: sanitized });
+      const { answer_key_code, answer_key_notes_html, ...withheld } = sanitized;
+      return json({ result: withheld });
     }
 
     // ---- Teacher-only ----

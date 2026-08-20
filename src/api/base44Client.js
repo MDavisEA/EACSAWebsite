@@ -363,8 +363,12 @@ const CodingProblem = {
   // this does not require the problem still be active, so a released answer
   // key or a past grade stays visible after the teacher deactivates the
   // problem at the end of a unit.
-  async getForReview(id) {
-    const data = await callFunction('coding-problems', { action: 'getForReview', id });
+  // submission_id lets the server verify the caller actually owns a
+  // submission for this problem before it will hand back the answer key -
+  // required for the unauthenticated access-code path (MyScore); a
+  // signed-in student's own JWT already proves it without this.
+  async getForReview(id, submission_id) {
+    const data = await callFunction('coding-problems', { action: 'getForReview', id, submission_id });
     return data.result;
   },
 

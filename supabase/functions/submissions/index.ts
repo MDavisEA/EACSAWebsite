@@ -460,7 +460,24 @@ Deno.serve(async (req) => {
         ? admin.from('submissions').update(row).eq('id', existing.id)
         : admin.from('submissions').insert({ ...row, access_code: generateAccessCode() });
       const { data, error } = await query.select().single();
-      if (error) return json({ error: error.message }, 500);
+      if (error) {
+        // Lost a race with another request for the same student+project (a
+        // slow connection can mean startProject's initial row and a Submit
+        // click both try to create it around the same time) - the unique
+        // index (migration 0022) is what makes that safe to recover from:
+        // fall back to updating the row that won, same as startProject does.
+        if ((error as Record<string, any>).code === '23505') {
+          const { data: raced, error: racedErr } = await admin
+            .from('submissions')
+            .update(row)
+            .eq('project_id', project_id)
+            .eq('student_user_id', student.id)
+            .select()
+            .single();
+          if (!racedErr) return json({ result: raced });
+        }
+        return json({ error: error.message }, 500);
+      }
       return json({ result: data });
     }
 
@@ -742,6 +759,20 @@ Deno.serve(async (req) => {
 
     if (action === 'saveGrade') {
       if (!(await ownsSubmissionId(body.submission_id))) return json({ error: 'Not found' }, 404);
+
+      // Every existing grader (ByQuestionGrader, SubmissionViewer,
+      // CodeReviewGrader, CodingSubmissionViewer, ProjectSubmissionViewer)
+      // sends these fields back on every save, whether or not the teacher
+      // actually changed anything - clicking Next, or reopening a submission
+      // and closing it again, resaves the same values. So "is this field
+      // present in the request" cannot stand in for "did this field change";
+      // it has to be compared against what is actually stored.
+      const { data: before } = await admin
+        .from('submissions')
+        .select('score, question_scores, part_comments, style_score, style_comments, teacher_comments, line_comments')
+        .eq('id', body.submission_id)
+        .maybeSingle();
+
       const update: Record<string, unknown> = {};
       if (body.score !== undefined) update.score = body.score;
       if (body.question_scores !== undefined) update.question_scores = body.question_scores;
@@ -765,14 +796,19 @@ Deno.serve(async (req) => {
       // now and the rest later is two saves on the same submission.
       // grading_skipped and feedback_released alone are not feedback changes,
       // so they deliberately do not trigger it.
-      const changedFeedback =
-        body.score !== undefined ||
-        body.question_scores !== undefined ||
-        body.part_comments !== undefined ||
-        body.style_score !== undefined ||
-        body.style_comments !== undefined ||
-        body.teacher_comments !== undefined ||
-        body.line_comments !== undefined;
+      //
+      // Compared against `before`, not against "was this field sent" - see the
+      // comment above. JSON.stringify is enough here: these are all either
+      // primitives or plain objects/arrays with no key-order sensitivity that
+      // would produce a false mismatch.
+      const feedbackFields = [
+        'score', 'question_scores', 'part_comments', 'style_score', 'style_comments', 'teacher_comments', 'line_comments',
+      ] as const;
+      const changedFeedback = before
+        ? feedbackFields.some(
+            (f) => body[f] !== undefined && JSON.stringify(body[f]) !== JSON.stringify(before[f as keyof typeof before])
+          )
+        : feedbackFields.some((f) => body[f] !== undefined);
       if (changedFeedback) update.feedback_reviewed_at = null;
 
       const { data, error } = await admin
