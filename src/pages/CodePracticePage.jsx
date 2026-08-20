@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import InteractiveRunner from "@/components/InteractiveRunner";
-import { Play, Send, CheckCircle2, XCircle, EyeOff, Loader2, Trophy } from "lucide-react";
+import { Play, Send, CheckCircle2, XCircle, EyeOff, Loader2, Trophy, Home } from "lucide-react";
 
 // Defined once at module scope, not inline in JSX - a new array reference
 // on every render makes @uiw/react-codemirror tear down and rebuild the
@@ -35,6 +35,7 @@ export default function CodePracticePage() {
   const [results, setResults] = useState(null);
   const [runError, setRunError] = useState("");
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [finalized, setFinalized] = useState(false);
   // Practice runs already spent. Seeded from the resumed submission so the
   // count survives a reload, then kept in step with what the server reports.
@@ -113,6 +114,17 @@ export default function CodePracticePage() {
         // copy still has it, and Submit Final sends the code itself.
       });
     }, 3000);
+  };
+
+  const handleGoHome = () => {
+    // Same write the debounced autosave would have made - fired immediately
+    // instead of waiting out the timer, since we're not sure the tab will
+    // stick around long enough for it to fire on its own.
+    clearTimeout(draftTimer.current);
+    if (submissionRef.current) {
+      base44.entities.Submission.update(submissionRef.current.id, { code }).catch(() => {});
+    }
+    navigate("/");
   };
 
   const runTests = async (final) => {
@@ -225,6 +237,13 @@ export default function CodePracticePage() {
     <div className="h-screen flex flex-col bg-[#1e1e1e] text-slate-100 overflow-hidden">
       <header className="bg-[#252526] border-b border-slate-700 flex-shrink-0 px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => setShowLeaveConfirm(true)}
+            className="text-slate-400 hover:text-slate-200 flex-shrink-0"
+            title="Save and return to your dashboard"
+          >
+            <Home className="w-4 h-4" />
+          </button>
           <h1 className="font-semibold truncate text-slate-100">{problem.title}</h1>
           {/* Displaying the class name here reads as a requirement, which it
               is for an autograded problem but never was for a hand-graded
@@ -430,6 +449,23 @@ export default function CodePracticePage() {
           />
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showLeaveConfirm} onOpenChange={setShowLeaveConfirm}>
+        <AlertDialogContent className="bg-[#252526] border-slate-700 text-slate-100">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-slate-100">Leave this problem?</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              Your code is saved. You have not submitted yet - come back and finish anytime.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-slate-600 text-slate-100 hover:bg-slate-700 hover:text-slate-100">
+              Keep Working
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleGoHome}>Leave</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showSubmitConfirm} onOpenChange={setShowSubmitConfirm}>
         <AlertDialogContent className="bg-[#252526] border-slate-700 text-slate-100">

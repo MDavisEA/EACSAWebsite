@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { base44 } from "@/api/base44Client";
 import { Plus, Trash2, GripVertical, Upload, X, Image, FileText, Type, Check } from "lucide-react";
 import ReactQuill from "react-quill";
@@ -78,24 +78,25 @@ function PdfPagePicker({ pdfUrl, onConfirm, onCancel }) {
     }
   };
 
-  // Portaled to the document body: this is opened from inside a Radix Dialog
-  // (the assignment form), whose DialogContent is CSS-transformed for its open/
-  // close animation. A transform establishes a new containing block for
-  // position:fixed descendants, so without the portal this "fixed inset-0"
-  // would anchor to the dialog's own (scrollable, off-screen-when-scrolled) box
-  // instead of the real viewport - it would only be visible if the dialog
-  // happened to be scrolled to the top.
-  return createPortal(
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b">
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-red-500" />
-            <h2 className="font-semibold text-slate-800">Select PDF Pages</h2>
-          </div>
-          <button onClick={onCancel} className="text-slate-400 hover:text-slate-600">
-            <X className="w-5 h-5" />
-          </button>
+  // A real nested Dialog, not a hand-rolled "fixed inset-0" div: this opens
+  // from inside the assignment form's own Dialog. A plain fixed div here
+  // fails two different ways depending on how it's mounted - nested plainly,
+  // it inherits the outer DialogContent's CSS transform as its containing
+  // block and ends up anchored to that (scrollable, often off-screen-when-
+  // scrolled) box instead of the real viewport; portaled straight to
+  // document.body to dodge that, it falls outside Radix's own dialog-content
+  // tracking, so Radix's outside-click detection treats every click inside it
+  // as a click "outside" the assignment dialog and closes that dialog too
+  // (and separately inherits body's pointer-events:none while a Radix modal
+  // is open, since only Radix's own portaled content gets that re-enabled).
+  // A real Radix Dialog composes correctly with the outer one on all of
+  // these: proper portal, proper pointer-events, and layer-aware dismissal.
+  return (
+    <Dialog open onOpenChange={(isOpen) => { if (!isOpen) onCancel(); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b">
+          <FileText className="w-5 h-5 text-red-500" />
+          <DialogTitle className="font-semibold text-slate-800">Select PDF Pages</DialogTitle>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
@@ -180,9 +181,8 @@ function PdfPagePicker({ pdfUrl, onConfirm, onCancel }) {
             </div>
           </div>
         )}
-      </div>
-    </div>,
-    document.body
+      </DialogContent>
+    </Dialog>
   );
 }
 
