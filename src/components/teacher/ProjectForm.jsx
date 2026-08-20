@@ -10,6 +10,7 @@ import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Upload, FileCode2, X, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import SampleOutputsEditor from "./SampleOutputsEditor";
+import MarkdownToolbar, { useMarkdownShortcuts } from "./MarkdownToolbar";
 
 const QUILL_MODULES = {
   toolbar: [
@@ -91,6 +92,8 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
   const [gistError, setGistError] = useState("");
   const [previewing, setPreviewing] = useState(null);
   const fileInputRef = useRef(null);
+  const rubricRef = useRef(null);
+  const rubricShortcuts = useMarkdownShortcuts(rubricRef, form.rubric_md || "", (v) => updateField("rubric_md", v));
 
   const updateField = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -248,14 +251,25 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
 
       <div className="space-y-2">
         <Label>Rubric</Label>
-        <Textarea
-          value={form.rubric_md || ""}
-          onChange={(e) => updateField("rubric_md", e.target.value)}
-          placeholder={"Plain text or Markdown is fine, e.g.:\n\n- Uses at least one loop instead of repeated code (2 pts)\n- Variable and method names describe what they hold/do (2 pts)\n- No magic numbers - constants are named (1 pt)"}
-          className="font-mono text-sm min-h-[180px]"
-        />
+        <div>
+          <MarkdownToolbar
+            textareaRef={rubricRef}
+            value={form.rubric_md || ""}
+            onChange={(v) => updateField("rubric_md", v)}
+          />
+          <Textarea
+            ref={rubricRef}
+            value={form.rubric_md || ""}
+            onChange={(e) => updateField("rubric_md", e.target.value)}
+            onKeyDown={rubricShortcuts}
+            placeholder={"Plain text or Markdown is fine, e.g.:\n\n- Uses at least one loop instead of repeated code (2 pts)\n- Variable and method names describe what they hold/do (2 pts)\n- No magic numbers - constants are named (1 pt)"}
+            className="font-mono text-sm min-h-[180px] rounded-t-none"
+          />
+        </div>
         <p className="text-xs text-muted-foreground">
           Shown to students on their submission page, and included in the export for your AI review pass.
+          Bold/italic/bullets use plain Markdown (**bold**, - item) so it stays clean text for that export -
+          the toolbar and Cmd/Ctrl+B / Cmd/Ctrl+I just type the same characters for you.
         </p>
       </div>
 
