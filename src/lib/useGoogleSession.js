@@ -39,7 +39,21 @@ export function useGoogleSession() {
         return;
       }
       setDomainRejected(false);
-      setSession(newSession);
+      // Keep the SAME object when it is the same signed-in user. supabase-js
+      // re-checks the session whenever the tab regains focus and emits an
+      // auth event (TOKEN_REFRESHED) with a freshly built session object -
+      // so handing that straight to setSession changed the object's identity
+      // on every window switch. Pages key effects on `session`, so each
+      // switch away and back re-ran them: the dashboard refetched and flashed
+      // its spinner, and ProjectPage re-issued startProject, a write.
+      //
+      // Safe to hold a stale object because nothing reads a token off it -
+      // authHeader() always calls supabase.auth.getSession() for the current
+      // one, so requests still use a refreshed token even though this
+      // reference does not change.
+      setSession((prev) =>
+        prev && newSession && prev.user?.id === newSession.user?.id ? prev : newSession
+      );
     };
 
     supabase.auth.getSession().then(({ data }) => {
