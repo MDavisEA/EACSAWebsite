@@ -166,7 +166,13 @@ Deno.serve(async (req) => {
     for (const p of problems.data || []) {
       if (!visibleToMe(p.course_id)) continue;
       const sub = findSub('coding_problem_id', p.id);
-      const { status, score } = statusFor(sub, sub?.autograde_score ?? null, false);
+      // autograde_score for an autograded Mini Problem, `score` for a
+      // hand-graded Coding Assignment - the teacher marks those into `score`
+      // (see CodeReviewGrader/GradingQueue), so reading only autograde_score
+      // left every hand-graded submission stuck on "waiting on grade" forever,
+      // and the new-feedback/Reviewed flow unreachable for that whole kind.
+      // Matches what SubmissionDetail already does for the same row.
+      const { status, score } = statusFor(sub, sub?.autograde_score ?? sub?.score ?? null, false);
       items.push({
         kind: 'code',
         id: p.id,

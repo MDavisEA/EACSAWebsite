@@ -218,7 +218,22 @@ Deno.serve(async (req) => {
         })
         .select()
         .single();
-      if (error) return json({ error: error.message }, 500);
+      if (error) {
+        // Lost a race with another request for the same student+project (this
+        // fires on page load, so two quick loads can overlap). The unique index
+        // is what makes that safe; here it just means "someone else created it
+        // first", so hand back the row that won rather than erroring.
+        if ((error as Record<string, any>).code === '23505') {
+          const { data: raced } = await admin
+            .from('submissions')
+            .select('*')
+            .eq('project_id', project_id)
+            .eq('student_user_id', student.id)
+            .maybeSingle();
+          if (raced) return json({ result: withheldIfUnreleased(raced) });
+        }
+        return json({ error: error.message }, 500);
+      }
       return json({ result: data });
     }
 
@@ -417,12 +432,16 @@ Deno.serve(async (req) => {
       // Re-submitting (e.g. fixed a typo in the URL) overwrites the same row
       // rather than creating a second one - one submission per student per
       // project, always reflecting the last gist snapshot they submitted.
-      const { data: existing } = await admin
+      // Errors here used to be discarded, so any lookup failure fell through
+      // to the insert branch and added a second submitted row for the same
+      // student rather than overwriting the first.
+      const { data: existing, error: existingErr } = await admin
         .from('submissions')
         .select('id')
         .eq('project_id', project_id)
         .eq('student_user_id', student.id)
         .maybeSingle();
+      if (existingErr) return json({ error: existingErr.message }, 500);
 
       const row = {
         project_id,
@@ -737,6 +756,25 @@ Deno.serve(async (req) => {
       // who dropped. Leaves score untouched: this removes it from the pile,
       // it does not grade it as a zero.
       if (body.grading_skipped !== undefined) update.grading_skipped = body.grading_skipped;
+
+      // Changing the grade or the written feedback makes it new to the student
+      // again, so it comes back out of the Reviewed shelf on their dashboard
+      // and counts as "new feedback" once more. Without this, a student who
+      // marked the first pass as read would never be told the mark changed -
+      // which the normal FRQ flow hits directly, since grading a few questions
+      // now and the rest later is two saves on the same submission.
+      // grading_skipped and feedback_released alone are not feedback changes,
+      // so they deliberately do not trigger it.
+      const changedFeedback =
+        body.score !== undefined ||
+        body.question_scores !== undefined ||
+        body.part_comments !== undefined ||
+        body.style_score !== undefined ||
+        body.style_comments !== undefined ||
+        body.teacher_comments !== undefined ||
+        body.line_comments !== undefined;
+      if (changedFeedback) update.feedback_reviewed_at = null;
+
       const { data, error } = await admin
         .from('submissions')
         .update(update)
