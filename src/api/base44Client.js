@@ -501,6 +501,13 @@ const Course = {
     return { roster: data.roster || [], units: data.units || [] };
   },
 
+  // Removes one student from a roster - their existing submissions are
+  // untouched, since those are matched by email/name at read time rather
+  // than linked to the roster row itself.
+  async removeRosterStudent(id) {
+    await callFunction('courses', { action: 'removeRosterStudent', id });
+  },
+
   // Replaces the whole roster rather than appending, so re-uploading a
   // corrected CSV is the natural way to fix a mistake.
   // section_id scopes the replace to one period; without it the whole roster

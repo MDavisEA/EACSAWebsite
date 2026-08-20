@@ -6,6 +6,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Pencil, Trash2, Users, ChevronDown, ChevronUp, Upload, Loader2, Mail, AlertTriangle, Check, ChevronRight } from "lucide-react";
 import { parseRosterCsv } from "@/lib/rosterCsv";
 import NamedListEditor from "./NamedListEditor";
@@ -22,6 +26,21 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, o
   const [rosterUnits, setRosterUnits] = useState([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [viewingStudent, setViewingStudent] = useState(null);
+  const [removingStudent, setRemovingStudent] = useState(null);
+  const [removing, setRemoving] = useState(false);
+
+  const confirmRemoveStudent = async () => {
+    if (!removingStudent) return;
+    setRemoving(true);
+    try {
+      await base44.entities.Course.removeRosterStudent(removingStudent.id);
+      setRemovingStudent(null);
+      loadRoster();
+      onRosterChange?.();
+    } finally {
+      setRemoving(false);
+    }
+  };
 
   const [showUpload, setShowUpload] = useState(false);
   const [csvText, setCsvText] = useState("");
@@ -156,7 +175,7 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, o
                         <TableHead>Email</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Turned in work</TableHead>
-                        <TableHead className="w-8" />
+                        <TableHead className="w-16" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -203,7 +222,14 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, o
                                 <span className="text-xs text-muted-foreground">Not yet</span>
                               )}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="flex items-center gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setRemovingStudent(s); }}
+                                title="Remove from this class"
+                                className="text-slate-300 hover:text-destructive transition-colors p-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                               <ChevronRight className="w-4 h-4 text-muted-foreground" />
                             </TableCell>
                           </TableRow>
@@ -311,6 +337,25 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, o
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!removingStudent} onOpenChange={(v) => !v && setRemovingStudent(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {removingStudent?.student_name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              They will stop seeing this class's work on their dashboard. Anything they already
+              turned in stays exactly as it is - this only removes them from the roster, not their
+              submissions or grades.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveStudent} disabled={removing}>
+              {removing ? "Removing..." : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <StudentRosterDetail
         open={!!viewingStudent}

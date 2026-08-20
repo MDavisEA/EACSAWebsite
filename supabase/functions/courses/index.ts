@@ -221,6 +221,20 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Removing one student from a roster - a transfer out, a schedule
+    // change, a name entered twice. Only removes the roster row itself;
+    // anything they already submitted stays exactly as it is (submissions
+    // are matched by email/name at read time, not linked to this row by a
+    // foreign key), so this cannot make a grade or a turned-in project
+    // disappear along with them.
+    if (action === 'removeRosterStudent') {
+      const { data: row } = await admin.from('roster_students').select('course_id').eq('id', body.id).maybeSingle();
+      if (!row || !(await owns(row.course_id))) return json({ error: 'Not found' }, 404);
+      const { error } = await admin.from('roster_students').delete().eq('id', body.id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ success: true });
+    }
+
     // The roster, but with each student's status on every active piece of
     // work in this course - "who hasn't turned in" answered per student
     // instead of per assignment. Built on the exact same status rules a
