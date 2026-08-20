@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,7 +78,14 @@ function PdfPagePicker({ pdfUrl, onConfirm, onCancel }) {
     }
   };
 
-  return (
+  // Portaled to the document body: this is opened from inside a Radix Dialog
+  // (the assignment form), whose DialogContent is CSS-transformed for its open/
+  // close animation. A transform establishes a new containing block for
+  // position:fixed descendants, so without the portal this "fixed inset-0"
+  // would anchor to the dialog's own (scrollable, off-screen-when-scrolled) box
+  // instead of the real viewport - it would only be visible if the dialog
+  // happened to be scrolled to the top.
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b">
@@ -173,7 +181,8 @@ function PdfPagePicker({ pdfUrl, onConfirm, onCancel }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

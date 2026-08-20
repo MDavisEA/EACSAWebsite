@@ -38,6 +38,7 @@ export default function ExamPage() {
   const [showNavigator, setShowNavigator] = useState(false);
   const [showReference, setShowReference] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showBlankWarning, setShowBlankWarning] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -279,6 +280,11 @@ export default function ExamPage() {
     });
   };
 
+  const handleGoHome = () => {
+    saveToDb();
+    navigate("/");
+  };
+
   const handleSubmitClick = () => {
     const hasAnyContent = Object.values(responses).some((v) => v?.trim());
     if (!hasAnyContent) {
@@ -359,6 +365,7 @@ export default function ExamPage() {
         onToggleDirections={() => setShowDirections(!showDirections)}
         hasTimer={!!assignment.time_limit_minutes}
         onOpenReference={() => setShowReference(true)}
+        onGoHome={() => setShowLeaveConfirm(true)}
       />
 
       {/* Draft recovered banner */}
@@ -441,6 +448,22 @@ export default function ExamPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Continue Working</AlertDialogCancel>
             <AlertDialogAction onClick={() => handleSubmit()}>Submit</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showLeaveConfirm} onOpenChange={setShowLeaveConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave this assignment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your answers are saved. You have not submitted yet - come back and finish
+              anytime before the due date.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Working</AlertDialogCancel>
+            <AlertDialogAction onClick={handleGoHome}>Leave</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

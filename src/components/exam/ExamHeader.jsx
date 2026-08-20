@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronDown, BookOpen } from "lucide-react";
+import { ChevronDown, BookOpen, Home } from "lucide-react";
 
 export default function ExamHeader({
   title,
@@ -10,6 +10,7 @@ export default function ExamHeader({
   hasTimer,
   onOpenReference,
   hasReference,
+  onGoHome,
 }) {
   const formatTime = (seconds) => {
     if (seconds == null) return "";
@@ -25,6 +26,13 @@ export default function ExamHeader({
       <div className="flex items-center justify-between px-4 h-12">
         {/* Left */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={onGoHome}
+            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+            title="Save and return to your dashboard"
+          >
+            <Home className="w-3.5 h-3.5" />
+          </button>
           <span className="font-semibold text-sm text-slate-800">Section II</span>
           {directions && (
             <button
