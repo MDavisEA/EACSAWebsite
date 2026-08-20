@@ -1,0 +1,11 @@
+-- Whether the student has said "I've read this feedback". Distinct from
+-- feedback_released (the teacher letting it out) and from having a score at
+-- all: a graded piece of work sits in the student's "new feedback" pile until
+-- they mark it themselves, then moves to a Reviewed section at the bottom of
+-- their dashboard so a year's worth of finished work stops crowding out what
+-- still needs attention.
+--
+-- A timestamp rather than a boolean - "when did they look at it" is the more
+-- useful thing to have later (e.g. did they read the feedback before the next
+-- assignment was due), and null/not-null covers the boolean case anyway.
+alter table submissions add column feedback_reviewed_at timestamptz;

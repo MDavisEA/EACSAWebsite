@@ -11,7 +11,10 @@ import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 // that need the full item still fetch it through the existing per-type
 // endpoints, which do their own stripping.
 
-type Status = 'not_started' | 'in_progress' | 'submitted' | 'graded';
+// The five states a student's dashboard sorts work into. 'graded' means
+// "scored, and they have not told us they read the feedback yet"; 'reviewed'
+// is that same work after they mark it, which moves it out of the main list.
+type Status = 'not_started' | 'in_progress' | 'submitted' | 'graded' | 'reviewed';
 
 interface WorkItem {
   kind: 'frq' | 'code' | 'project';
@@ -23,6 +26,17 @@ interface WorkItem {
   points_possible: number | null;
   submitted_at: string | null;
   is_late: boolean;
+  // Needed so the dashboard can mark feedback reviewed without a second
+  // round-trip to find which submission row this item belongs to.
+  submission_id: string | null;
+  // Where it sits in the course, for grouping. unit_id is null for work the
+  // teacher never filed under a unit.
+  course_id: string | null;
+  unit_id: string | null;
+  // The teacher's own ordering within a unit, used as the tie-break once
+  // items are sorted by status - so equal-status work stays in the order the
+  // teacher arranged it rather than jumping around.
+  sort_order: number | null;
 }
 
 Deno.serve(async (req) => {
@@ -60,14 +74,22 @@ Deno.serve(async (req) => {
     // for students on that roster.
     const visibleToMe = (courseId: string | null) => courseId === null || myCourseIds.includes(courseId);
 
-    const [assignments, problems, projects, subs] = await Promise.all([
-      admin.from('assignments').select('id, title, due_date, course_id, questions').eq('is_active', true),
-      admin.from('coding_problems').select('id, title, due_date, course_id, points_possible').eq('is_active', true),
-      admin.from('projects').select('id, title, due_date, course_id').eq('is_active', true),
+    const [assignments, problems, projects, subs, units, courses] = await Promise.all([
+      admin.from('assignments').select('id, title, due_date, course_id, unit_id, sort_order, questions').eq('is_active', true),
+      admin.from('coding_problems').select('id, title, due_date, course_id, unit_id, sort_order, points_possible').eq('is_active', true),
+      admin.from('projects').select('id, title, due_date, course_id, unit_id, sort_order').eq('is_active', true),
       admin.from('submissions').select('*').eq('student_user_id', student.id),
+      // Only this student's own courses' units/names are ever returned, since
+      // everything below is filtered by visibleToMe.
+      myCourseIds.length > 0
+        ? admin.from('units').select('id, course_id, name, position').in('course_id', myCourseIds)
+        : Promise.resolve({ data: [], error: null }),
+      myCourseIds.length > 0
+        ? admin.from('courses').select('id, name').in('id', myCourseIds)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    for (const r of [assignments, problems, projects, subs]) {
+    for (const r of [assignments, problems, projects, subs, units, courses]) {
       if (r.error) return json({ error: r.error.message }, 500);
     }
 
@@ -101,7 +123,13 @@ Deno.serve(async (req) => {
       if (!sub) return { status: 'not_started', score: null };
       if (!sub.submitted) return { status: 'in_progress', score: null };
       const visibleScore = gated && !sub.feedback_released ? null : score;
-      if (visibleScore !== null && visibleScore !== undefined) return { status: 'graded', score: visibleScore };
+      if (visibleScore !== null && visibleScore !== undefined) {
+        // Only work whose feedback they can actually see can be marked read,
+        // so 'reviewed' is checked inside the scored branch rather than up
+        // front - a project still awaiting release stays 'submitted' even if
+        // the flag somehow got set.
+        return { status: sub.feedback_reviewed_at ? 'reviewed' : 'graded', score: visibleScore };
+      }
       return { status: 'submitted', score: null };
     }
 
@@ -128,6 +156,10 @@ Deno.serve(async (req) => {
         points_possible: maxScore || null,
         submitted_at: sub?.submitted_at ?? null,
         is_late: !!(a.due_date && sub?.submitted_at && new Date(sub.submitted_at) > new Date(a.due_date)),
+        submission_id: sub?.id ?? null,
+        course_id: a.course_id ?? null,
+        unit_id: a.unit_id ?? null,
+        sort_order: a.sort_order ?? null,
       });
     }
 
@@ -145,6 +177,10 @@ Deno.serve(async (req) => {
         points_possible: p.points_possible ?? null,
         submitted_at: sub?.submitted_at ?? null,
         is_late: !!(p.due_date && sub?.submitted_at && new Date(sub.submitted_at) > new Date(p.due_date)),
+        submission_id: sub?.id ?? null,
+        course_id: p.course_id ?? null,
+        unit_id: p.unit_id ?? null,
+        sort_order: p.sort_order ?? null,
       });
     }
 
@@ -162,10 +198,21 @@ Deno.serve(async (req) => {
         points_possible: null,
         submitted_at: sub?.submitted_at ?? null,
         is_late: !!(pr.due_date && sub?.submitted_at && new Date(sub.submitted_at) > new Date(pr.due_date)),
+        submission_id: sub?.id ?? null,
+        course_id: pr.course_id ?? null,
+        unit_id: pr.unit_id ?? null,
+        sort_order: pr.sort_order ?? null,
       });
     }
 
-    return json({ results: items, student_name: student.name });
+    return json({
+      results: items,
+      student_name: student.name,
+      units: units.data || [],
+      // Only used to label unit headings when a student is on more than one
+      // course's roster - otherwise the course name is redundant.
+      courses: courses.data || [],
+    });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);
   }

@@ -293,6 +293,24 @@ const Submission = {
     return data.result;
   },
 
+  // Records that the student has opened a project, so it reads as "working on
+  // it" rather than untouched. Idempotent - returns the existing row if there
+  // already is one, and null for a project no longer accepting work.
+  async startProject(project_id) {
+    const data = await callFunction('submissions', { action: 'startProject', project_id });
+    return data.result;
+  },
+
+  // The student marking (or unmarking) "I have read this feedback".
+  async markFeedbackReviewed(submission_id, reviewed = true) {
+    const data = await callFunction('submissions', {
+      action: 'markFeedbackReviewed',
+      submission_id,
+      reviewed,
+    });
+    return data.result;
+  },
+
   // Teacher-only: seed a project's submissions from a name,gist_url list -
   // no student sign-in needed. Returns a per-row {student_name, status,
   // error?} so the caller can show which ones failed and why.
@@ -577,7 +595,12 @@ const Teacher = {
 const StudentWork = {
   async myAssignedWork() {
     const data = await callFunction('student-work', { action: 'myAssignedWork' });
-    return { items: data.results, studentName: data.student_name };
+    return {
+      items: data.results,
+      studentName: data.student_name,
+      units: data.units || [],
+      courses: data.courses || [],
+    };
   },
 };
 

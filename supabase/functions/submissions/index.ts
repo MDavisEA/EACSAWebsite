@@ -175,6 +175,77 @@ Deno.serve(async (req) => {
       return json({ result: withheldIfUnreleased(data) });
     }
 
+    // Opening a project now records that they started it, the same way
+    // startFresh/startCoding already do for an FRQ or a coding problem -
+    // without this a project is indistinguishable from untouched work until
+    // the moment a gist is submitted, so "hasn't opened it" and "working on
+    // it" collapsed into one state for projects only.
+    //
+    // Idempotent: returns the existing row (submitted or not) rather than ever
+    // creating a second one, which matters because submitProject looks its own
+    // row up with maybeSingle() and would throw on a duplicate.
+    if (action === 'startProject') {
+      const { project_id } = body;
+      if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      if (!project_id) return json({ error: 'project_id is required' }, 400);
+
+      const { data: existing } = await admin
+        .from('submissions')
+        .select('*')
+        .eq('project_id', project_id)
+        .eq('student_user_id', student.id)
+        .maybeSingle();
+      if (existing) return json({ result: withheldIfUnreleased(existing) });
+
+      // Only for a project they can actually still work on - a direct link to
+      // a deactivated project should not create anything.
+      const { data: proj } = await admin
+        .from('projects')
+        .select('is_active')
+        .eq('id', project_id)
+        .maybeSingle();
+      if (!proj || !proj.is_active) return json({ result: null });
+
+      const { data, error } = await admin
+        .from('submissions')
+        .insert({
+          project_id,
+          student_name: student.name,
+          student_user_id: student.id,
+          student_email: student.email,
+          submitted: false,
+          access_code: generateAccessCode(),
+        })
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
+    // The student saying "I have read this feedback", which moves the item into
+    // the Reviewed section of their dashboard. Their own flag on their own
+    // submission - it changes no score and no teacher-visible grading state,
+    // and is reversible, so a mis-tap is not destructive.
+    if (action === 'markFeedbackReviewed') {
+      const { submission_id, reviewed } = body;
+      if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      if (!submission_id) return json({ error: 'submission_id is required' }, 400);
+
+      // Ownership is the whole security boundary here: without it any signed-in
+      // student could flip this on somebody else's submission.
+      const owned = await verifyOwnership(admin, submission_id, body.session_token || '', student);
+      if (!owned) return json({ error: 'Not found' }, 404);
+
+      const { data, error } = await admin
+        .from('submissions')
+        .update({ feedback_reviewed_at: reviewed === false ? null : new Date().toISOString() })
+        .eq('id', submission_id)
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: withheldIfUnreleased(data) });
+    }
+
     if (action === 'myScores') {
       if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
       const { data, error } = await admin

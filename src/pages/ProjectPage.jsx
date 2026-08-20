@@ -71,7 +71,11 @@ export default function ProjectPage() {
   // rather than blocking the whole page behind an error.
   const loadMySubmission = async () => {
     try {
-      const sub = await base44.entities.Submission.getMyProjectSubmission(projectId);
+      // startProject both records that they have opened this (so the dashboard
+      // can tell "working on it" from "never touched") and hands back the
+      // existing row when there is one, so this stays a single round trip.
+      // Idempotent, and a no-op returning null for a deactivated project.
+      const sub = await base44.entities.Submission.startProject(projectId);
       setMySubmission(sub);
       if (sub?.gist_url) setGistUrl(sub.gist_url);
     } catch {
@@ -284,7 +288,7 @@ export default function ProjectPage() {
                 Signed in as <span className="font-medium text-foreground">{user.user_metadata?.full_name || user.email}</span>
               </p>
 
-              {mySubmission && (
+              {mySubmission?.submitted && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 space-y-2">
                   <div className="flex items-center gap-2 text-emerald-700 font-medium text-sm">
                     <CheckCircle2 className="w-4 h-4" /> Submitted
@@ -304,7 +308,7 @@ export default function ProjectPage() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium block">
-                  {mySubmission ? "Resubmit with a different gist URL" : "Your Gist URL"}
+                  {mySubmission?.submitted ? "Resubmit with a different gist URL" : "Your Gist URL"}
                 </label>
                 <Input
                   placeholder="https://gist.github.com/yourname/abc123..."
@@ -317,7 +321,7 @@ export default function ProjectPage() {
               {error && <p className="text-sm text-destructive">{error}</p>}
 
               <Button onClick={handleSubmit} disabled={submitting || !gistUrl.trim()} className="w-full" size="lg">
-                {submitting ? "Submitting..." : mySubmission ? "Resubmit" : "Submit"}
+                {submitting ? "Submitting..." : mySubmission?.submitted ? "Resubmit" : "Submit"}
               </Button>
               <p className="text-xs text-center text-muted-foreground">
                 Use a secret (not public) gist. Resubmitting overwrites your previous submission.

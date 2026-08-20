@@ -10,26 +10,82 @@ import { format, isPast } from "date-fns";
 import {
   BookOpen, Code2, FolderGit2, LogIn, LogOut, ChevronRight,
   CheckCircle2, Clock, CircleDashed, Star, Loader2, RotateCcw,
+  CheckCheck, ChevronDown, ChevronUp,
 } from "lucide-react";
 
-// The three kinds of work, in the order a student sees them. `route` is where
-// clicking a row takes them; the destination pages fetch the full item
-// themselves through their existing (answer-key-stripping) endpoints.
-const GROUPS = [
-  { kind: "frq", label: "FRQ Practice", icon: BookOpen, route: (id) => `/student?id=${id}`,
+// Per-kind presentation. Work is grouped by UNIT now rather than by kind, so
+// the kind survives only as the icon on each row plus where clicking it goes -
+// the destination pages fetch the full item themselves through their existing
+// (answer-key-stripping) endpoints.
+const KINDS = {
+  frq: { label: "FRQ", icon: BookOpen, route: (id) => `/student?id=${id}`,
     accent: "text-primary", chip: "bg-blue-50" },
-  { kind: "code", label: "Code Practice", icon: Code2, route: (id) => `/code?id=${id}`,
+  code: { label: "Code", icon: Code2, route: (id) => `/code?id=${id}`,
     accent: "text-emerald-600", chip: "bg-emerald-50" },
-  { kind: "project", label: "Projects", icon: FolderGit2, route: (id) => `/project?id=${id}`,
+  project: { label: "Project", icon: FolderGit2, route: (id) => `/project?id=${id}`,
     accent: "text-violet-600", chip: "bg-violet-50" },
-];
+};
+
+// The five states, in the order they appear inside a unit: whatever needs the
+// student's attention first, work that is genuinely finished last. 'reviewed'
+// is not in this list because it leaves the main view entirely (see the
+// Reviewed section at the bottom of the page).
+const STATUS_ORDER = ["graded", "in_progress", "not_started", "submitted"];
 
 const STATUS = {
-  not_started: { label: "Not started", icon: CircleDashed, className: "bg-slate-100 text-slate-600" },
-  in_progress: { label: "In progress", icon: Clock, className: "bg-amber-100 text-amber-800" },
-  submitted: { label: "Turned in", icon: CheckCircle2, className: "bg-blue-100 text-blue-800" },
-  graded: { label: "Graded", icon: Star, className: "bg-emerald-100 text-emerald-800" },
+  not_started: { label: "Not opened", icon: CircleDashed, className: "bg-slate-100 text-slate-600" },
+  in_progress: { label: "Working on it", icon: Clock, className: "bg-amber-100 text-amber-800" },
+  // Deliberately says what the student is waiting FOR, rather than "Turned in"
+  // - the distinction that matters to them is that there is nothing to do yet.
+  submitted: { label: "Waiting on grade", icon: CheckCircle2, className: "bg-blue-100 text-blue-800" },
+  graded: { label: "New feedback", icon: Star, className: "bg-emerald-100 text-emerald-800" },
+  reviewed: { label: "Reviewed", icon: CheckCheck, className: "bg-slate-100 text-slate-500" },
 };
+
+// One row of work. Shared so the main unit lists and the Reviewed section at
+// the bottom cannot drift into two slightly different renderings.
+function WorkRow({ item, onOpen }) {
+  const kind = KINDS[item.kind];
+  const Icon = kind.icon;
+  const overdue =
+    item.due_date &&
+    isPast(new Date(item.due_date)) &&
+    (item.status === "not_started" || item.status === "in_progress");
+  return (
+    <button
+      onClick={() => onOpen(item, kind.route)}
+      className="w-full text-left bg-white border rounded-xl p-4 hover:shadow-md hover:border-primary/30 transition-all group flex items-center gap-4"
+    >
+      <div className={`flex-shrink-0 w-9 h-9 rounded-lg ${kind.chip} flex items-center justify-center`}>
+        <Icon className={`w-4 h-4 ${kind.accent}`} />
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <p className="font-medium truncate group-hover:text-primary transition-colors">{item.title}</p>
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          <StatusBadge status={item.status} />
+          {item.due_date && (
+            <span className={`text-xs ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+              {overdue ? "Was due " : "Due "}
+              {format(new Date(item.due_date), "MMM d")}
+            </span>
+          )}
+          {item.is_late && <span className="text-xs text-amber-700">Turned in late</span>}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {(item.status === "graded" || item.status === "reviewed") && item.score != null && (
+          <span className={`text-sm font-semibold ${item.status === "reviewed" ? "text-muted-foreground" : ""}`}>
+            {item.score}
+            {item.points_possible ? `/${item.points_possible}` : ""}
+          </span>
+        )}
+        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+      </div>
+    </button>
+  );
+}
 
 function StatusBadge({ status }) {
   const meta = STATUS[status] || STATUS.not_started;
@@ -46,6 +102,10 @@ export default function StudentDashboard() {
   const { session, user, loading: sessionLoading, domainRejected } = useGoogleSession();
 
   const [items, setItems] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [showReviewed, setShowReviewed] = useState(false);
+  const [markingReviewed, setMarkingReviewed] = useState(false);
   const [studentName, setStudentName] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -69,7 +129,7 @@ export default function StudentDashboard() {
   // Clicking work you have finished should show you what you handed in, not
   // silently start it over - which is what navigating to the work route did.
   const openItem = async (item, route) => {
-    if (item.status !== "submitted" && item.status !== "graded") {
+    if (item.status !== "submitted" && item.status !== "graded" && item.status !== "reviewed") {
       navigate(route(item.id));
       return;
     }
@@ -120,7 +180,7 @@ export default function StudentDashboard() {
     setDetailError("");
     try {
       await base44.entities.Submission.reopenMine(detail.submission.id);
-      const route = GROUPS.find((g) => g.kind === detail.item.kind)?.route;
+      const route = KINDS[detail.item.kind]?.route;
       setDetail(null);
       if (route) navigate(route(detail.item.id));
     } catch (e) {
@@ -130,12 +190,32 @@ export default function StudentDashboard() {
     }
   };
 
+  // "I have read this feedback" - moves the item down into Reviewed. Reversible
+  // from the same button, so a mis-tap is not a one-way door.
+  const toggleReviewed = async (nextReviewed) => {
+    if (!detail?.submission) return;
+    setMarkingReviewed(true);
+    setDetailError("");
+    try {
+      await base44.entities.Submission.markFeedbackReviewed(detail.submission.id, nextReviewed);
+      setDetail(null);
+      await load();
+    } catch (e) {
+      setDetailError(e.message || "Couldn't save that.");
+    } finally {
+      setMarkingReviewed(false);
+    }
+  };
+
   const load = async () => {
     setLoading(true);
     setLoadError("");
     try {
-      const { items: fetched, studentName: name } = await base44.entities.StudentWork.myAssignedWork();
+      const { items: fetched, studentName: name, units: u, courses: c } =
+        await base44.entities.StudentWork.myAssignedWork();
       setItems(fetched);
+      setUnits(u || []);
+      setCourses(c || []);
       setStudentName(name || "");
     } catch (e) {
       setLoadError(e.message || "Couldn't load your work. Check your connection and try again.");
@@ -178,6 +258,56 @@ export default function StudentDashboard() {
   }
 
   const todo = items.filter((i) => i.status === "not_started" || i.status === "in_progress").length;
+  const needsLook = items.filter((i) => i.status === "graded").length;
+
+  // Reviewed work leaves the unit lists entirely - by June there will be a lot
+  // of it, and the point of the section is that finished work stops competing
+  // for attention with work that still needs something.
+  const active = items.filter((i) => i.status !== "reviewed");
+  const reviewed = items.filter((i) => i.status === "reviewed");
+
+  const courseName = (id) => courses.find((c) => c.id === id)?.name || "";
+  // Only worth labelling the course when they are on more than one roster -
+  // otherwise every heading repeats the same class name.
+  const showCourse = courses.length > 1;
+
+  const unitById = new Map(units.map((u) => [u.id, u]));
+  const byStatusThenTeacherOrder = (a, b) =>
+    STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) ||
+    (a.sort_order ?? 9999) - (b.sort_order ?? 9999) ||
+    (a.title || "").localeCompare(b.title || "");
+
+  // One group per unit, ordered by course then the teacher's own unit order.
+  // Work the teacher never filed under a unit collects in a trailing group
+  // rather than vanishing.
+  const groupWork = (list) => {
+    const map = new Map();
+    for (const item of list) {
+      const key = `${item.course_id ?? "none"}::${item.unit_id ?? "unfiled"}`;
+      if (!map.has(key)) {
+        const unit = item.unit_id ? unitById.get(item.unit_id) : null;
+        map.set(key, {
+          key,
+          label: unit?.name || "Other work",
+          course: courseName(item.course_id),
+          position: unit?.position ?? 9999,
+          items: [],
+        });
+      }
+      map.get(key).items.push(item);
+    }
+    return [...map.values()]
+      .map((g) => ({ ...g, items: g.items.sort(byStatusThenTeacherOrder) }))
+      .sort(
+        (a, b) =>
+          a.course.localeCompare(b.course) ||
+          a.position - b.position ||
+          a.label.localeCompare(b.label)
+      );
+  };
+
+  const groups = groupWork(active);
+  const reviewedGroups = groupWork(reviewed);
 
   return (
     <div className="min-h-screen bg-slate-50/50">
@@ -212,81 +342,73 @@ export default function StudentDashboard() {
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
-              {todo === 0
+              {todo === 0 && needsLook === 0
                 ? "You're all caught up."
-                : `${todo} thing${todo === 1 ? "" : "s"} still to do.`}
+                : [
+                    todo > 0 ? `${todo} thing${todo === 1 ? "" : "s"} still to do` : null,
+                    needsLook > 0 ? `${needsLook} with new feedback` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(", ") + "."}
             </p>
 
-            {GROUPS.map(({ kind, label, icon: Icon, route, accent, chip }) => {
-              const group = items.filter((i) => i.kind === kind);
-              if (group.length === 0) return null;
+            {groups.map((g) => (
+              <section key={g.key}>
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide">{g.label}</h2>
+                  {showCourse && g.course && (
+                    <span className="text-xs text-muted-foreground">{g.course}</span>
+                  )}
+                  <Badge variant="outline" className="text-xs">{g.items.length}</Badge>
+                </div>
+                <div className="space-y-2">
+                  {g.items.map((item) => (
+                    <WorkRow key={`${item.kind}-${item.id}`} item={item} onOpen={openItem} />
+                  ))}
+                </div>
+              </section>
+            ))}
 
-              // Soonest deadline first; undated work sinks to the bottom.
-              const sorted = [...group].sort((a, b) => {
-                if (!a.due_date && !b.due_date) return a.title.localeCompare(b.title);
-                if (!a.due_date) return 1;
-                if (!b.due_date) return -1;
-                return new Date(a.due_date) - new Date(b.due_date);
-              });
-
-              return (
-                <section key={kind}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Icon className={`w-4 h-4 ${accent}`} />
-                    <h2 className="text-sm font-semibold uppercase tracking-wide">{label}</h2>
-                    <Badge variant="outline" className="text-xs">{group.length}</Badge>
+            {reviewed.length > 0 && (
+              <section className="pt-2 border-t">
+                <button
+                  onClick={() => setShowReviewed((v) => !v)}
+                  className="w-full flex items-center gap-2 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <CheckCheck className="w-4 h-4" />
+                  <span className="font-semibold uppercase tracking-wide">Reviewed</span>
+                  <Badge variant="outline" className="text-xs">{reviewed.length}</Badge>
+                  <span className="ml-auto">
+                    {showReviewed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </span>
+                </button>
+                {showReviewed ? (
+                  <div className="space-y-6">
+                    {reviewedGroups.map((g) => (
+                      <div key={g.key}>
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            {g.label}
+                          </h3>
+                          {showCourse && g.course && (
+                            <span className="text-xs text-muted-foreground">{g.course}</span>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          {g.items.map((item) => (
+                            <WorkRow key={`${item.kind}-${item.id}`} item={item} onOpen={openItem} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-
-                  <div className="space-y-2">
-                    {sorted.map((item) => {
-                      const overdue =
-                        item.due_date &&
-                        isPast(new Date(item.due_date)) &&
-                        (item.status === "not_started" || item.status === "in_progress");
-                      return (
-                        <button
-                          key={`${item.kind}-${item.id}`}
-                          onClick={() => openItem(item, route)}
-                          className="w-full text-left bg-white border rounded-xl p-4 hover:shadow-md hover:border-primary/30 transition-all group flex items-center gap-4"
-                        >
-                          <div className={`flex-shrink-0 w-9 h-9 rounded-lg ${chip} flex items-center justify-center`}>
-                            <Icon className={`w-4 h-4 ${accent}`} />
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate group-hover:text-primary transition-colors">
-                              {item.title}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <StatusBadge status={item.status} />
-                              {item.due_date && (
-                                <span className={`text-xs ${overdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                                  {overdue ? "Was due " : "Due "}
-                                  {format(new Date(item.due_date), "MMM d")}
-                                </span>
-                              )}
-                              {item.is_late && (
-                                <span className="text-xs text-amber-700">Turned in late</span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {item.status === "graded" && (
-                              <span className="text-sm font-semibold">
-                                {item.score}
-                                {item.points_possible ? `/${item.points_possible}` : ""}
-                              </span>
-                            )}
-                            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
+                ) : (
+                  <p className="text-xs text-muted-foreground pb-3">
+                    Work you have marked as read. Tap to look at any of it again.
+                  </p>
+                )}
+              </section>
+            )}
           </>
         )}
 
@@ -353,6 +475,42 @@ export default function StudentDashboard() {
                     Reopens this with your work still in it. Once your teacher has graded it you
                     will need to ask them.
                   </span>
+                </div>
+              )}
+
+              {/* The point of the whole Reviewed section: once they have
+                  actually read the feedback they say so, and it moves out of
+                  the way. Offered only on graded work, since there is nothing
+                  to have read otherwise. */}
+              {(detail.item.status === "graded" || detail.item.status === "reviewed") && (
+                <div className="border-t pt-3 flex items-center gap-3 flex-wrap">
+                  {detail.item.status === "reviewed" ? (
+                    <>
+                      <Button variant="outline" onClick={() => toggleReviewed(false)} disabled={markingReviewed}>
+                        {markingReviewed ? (
+                          <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Saving...</>
+                        ) : (
+                          "Move back to my list"
+                        )}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        You marked this as read, so it sits under Reviewed.
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Button onClick={() => toggleReviewed(true)} disabled={markingReviewed}>
+                        {markingReviewed ? (
+                          <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Saving...</>
+                        ) : (
+                          <><CheckCheck className="w-4 h-4 mr-1.5" /> I&rsquo;ve read this feedback</>
+                        )}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        Moves this into Reviewed at the bottom. You can always open it again.
+                      </span>
+                    </>
+                  )}
                 </div>
               )}
             </div>
