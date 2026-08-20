@@ -12,6 +12,7 @@ import InteractiveRunner from "@/components/InteractiveRunner";
 import AnnotatedCodeView from "./AnnotatedCodeView";
 import AnswerKeyPanel from "./AnswerKeyPanel";
 import HighlightedCode from "@/components/HighlightedCode";
+import ResizableDivider from "@/components/exam/ResizableDivider";
 import GradesDialog from "./GradesDialog";
 import { groupByStudent } from "@/lib/groupSubmissionsByStudent";
 import {
@@ -49,6 +50,10 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  // How much of the row the code gets vs. the key/feedback column, as a
+  // percent - dragged via ResizableDivider, same mechanism as the FRQ exam
+  // page's split. Defaults to roughly the old fixed 1.5fr:1fr ratio.
+  const [splitPercent, setSplitPercent] = useState(60);
 
   useEffect(() => { load(); }, [problem.id]);
 
@@ -447,9 +452,9 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 items-start">
+                <div id="review-grader-split" className="flex items-start">
                   {/* The code, with a clickable gutter. */}
-                  <div className="border rounded-lg overflow-hidden">
+                  <div className="border rounded-lg overflow-hidden min-w-0" style={{ width: `${splitPercent}%` }}>
                     <div className="bg-slate-100 px-3 py-1.5 text-xs text-muted-foreground border-b">
                       {hasCode ? "Click any line to comment on it" : "Nothing was turned in"}
                     </div>
@@ -470,7 +475,13 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                     )}
                   </div>
 
-                  <div className="space-y-3">
+                  <ResizableDivider
+                    containerId="review-grader-split"
+                    leftPercent={splitPercent}
+                    onResize={setSplitPercent}
+                  />
+
+                  <div className="space-y-3 min-w-0" style={{ width: `${100 - splitPercent}%` }}>
                     {/* Your own solution, to grade against. Foldable for the
                         same reason as the FRQ keys: needed for the first few,
                         then not. */}

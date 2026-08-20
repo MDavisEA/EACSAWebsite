@@ -1,7 +1,7 @@
 import React, { useRef, useCallback } from "react";
 import { GripVertical } from "lucide-react";
 
-export default function ResizableDivider({ leftPercent, onResize }) {
+export default function ResizableDivider({ leftPercent, onResize, containerId = "exam-split-container" }) {
   const dragging = useRef(false);
 
   const onMouseDown = useCallback((e) => {
@@ -10,7 +10,7 @@ export default function ResizableDivider({ leftPercent, onResize }) {
 
     const onMouseMove = (e) => {
       if (!dragging.current) return;
-      const container = document.getElementById("exam-split-container");
+      const container = document.getElementById(containerId);
       if (!container) return;
       const rect = container.getBoundingClientRect();
       const newPercent = ((e.clientX - rect.left) / rect.width) * 100;
@@ -25,7 +25,7 @@ export default function ResizableDivider({ leftPercent, onResize }) {
 
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-  }, [onResize]);
+  }, [onResize, containerId]);
 
   return (
     <div
