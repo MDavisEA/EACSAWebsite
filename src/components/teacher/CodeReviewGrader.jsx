@@ -11,6 +11,7 @@ import CommentBank from "./CommentBank";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import AnnotatedCodeView from "./AnnotatedCodeView";
 import AnswerKeyPanel from "./AnswerKeyPanel";
+import HighlightedCode from "@/components/HighlightedCode";
 import GradesDialog from "./GradesDialog";
 import { groupByStudent } from "@/lib/groupSubmissionsByStudent";
 import {
@@ -490,12 +491,10 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                         {showKey && (
                           <div className="p-2 space-y-2">
                             {problem.answer_key_code && (
-                              <pre
-                                className="text-xs font-mono rounded p-2 overflow-x-auto max-h-56 overflow-y-auto"
-                                style={{ background: "#282c34", color: "#abb2bf" }}
-                              >
-                                {problem.answer_key_code}
-                              </pre>
+                              <HighlightedCode
+                                code={problem.answer_key_code}
+                                className="rounded p-2 overflow-x-auto max-h-56 overflow-y-auto"
+                              />
                             )}
                             <AnswerKeyPanel keyHtml={problem.answer_key_notes_html} />
                           </div>
