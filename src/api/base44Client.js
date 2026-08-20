@@ -508,6 +508,22 @@ const Course = {
     await callFunction('courses', { action: 'removeRosterStudent', id });
   },
 
+  // Adds one student without touching the rest of the roster - unlike
+  // replaceRoster, which wipes and re-inserts (a whole section of) it.
+  async addRosterStudent(course_id, { student_name, email, section_id } = {}) {
+    const data = await callFunction('courses', {
+      action: 'addRosterStudent', course_id, student_name, email, section_id,
+    });
+    return data.result;
+  },
+
+  // Corrects a roster row, or moves it - to a different section, or (by
+  // passing course_id) to a different one of the teacher's own courses.
+  async updateRosterStudent(id, patch) {
+    const data = await callFunction('courses', { action: 'updateRosterStudent', id, ...patch });
+    return data.result;
+  },
+
   // Replaces the whole roster rather than appending, so re-uploading a
   // corrected CSV is the natural way to fix a mistake.
   // section_id scopes the replace to one period; without it the whole roster

@@ -614,6 +614,7 @@ export default function TeacherDashboard() {
               <TabsContent value="people">
                 <CourseCard
                   course={openCourse}
+                  allCourses={courses}
                   showUnits={false}
                   startExpanded
                   onEdit={() => { setEditingCourse(openCourse); setShowCourseForm(true); }}

@@ -221,6 +221,53 @@ Deno.serve(async (req) => {
       });
     }
 
+    // One student added by hand - a late transfer in, a name missed on the
+    // original CSV. Distinct from replaceRoster on purpose: that action wipes
+    // and re-inserts a whole roster (or a whole section of one), which would
+    // be a strange way to add a single person.
+    if (action === 'addRosterStudent') {
+      const { course_id, student_name, email, section_id } = body;
+      if (!(await owns(course_id))) return json({ error: 'Not found' }, 404);
+      const name = (student_name || '').trim();
+      if (!name) return json({ error: 'A name is required.' }, 400);
+      const { data, error } = await admin
+        .from('roster_students')
+        .insert({ course_id, student_name: name, email: (email || '').trim() || null, section_id: section_id || null })
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
+    // Correcting a roster row, or moving it - to a different section (a
+    // period change) or a different course entirely (a transfer between two
+    // of the teacher's own classes). Ownership is checked on the CURRENT
+    // course, and again on the new one if course_id is actually changing, so
+    // this can never be used to move a student into (or out of) a course
+    // that isn't the teacher's own.
+    if (action === 'updateRosterStudent') {
+      const { id, student_name, email, section_id, course_id } = body;
+      const { data: existing } = await admin.from('roster_students').select('course_id').eq('id', id).maybeSingle();
+      if (!existing || !(await owns(existing.course_id))) return json({ error: 'Not found' }, 404);
+      if (course_id && course_id !== existing.course_id && !(await owns(course_id))) {
+        return json({ error: 'Pick one of your own courses.' }, 403);
+      }
+
+      const update: Record<string, unknown> = {};
+      if (student_name !== undefined) {
+        const name = student_name.trim();
+        if (!name) return json({ error: 'A name is required.' }, 400);
+        update.student_name = name;
+      }
+      if (email !== undefined) update.email = (email || '').trim() || null;
+      if (section_id !== undefined) update.section_id = section_id || null;
+      if (course_id !== undefined) update.course_id = course_id;
+
+      const { data, error } = await admin.from('roster_students').update(update).eq('id', id).select().single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
     // Removing one student from a roster - a transfer out, a schedule
     // change, a name entered twice. Only removes the roster row itself;
     // anything they already submitted stays exactly as it is (submissions

@@ -10,17 +10,18 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Trash2, Users, ChevronDown, ChevronUp, Upload, Loader2, Mail, AlertTriangle, Check, ChevronRight } from "lucide-react";
+import { Pencil, Trash2, Users, ChevronDown, ChevronUp, Upload, Loader2, Mail, AlertTriangle, Check, ChevronRight, UserPlus } from "lucide-react";
 import { parseRosterCsv } from "@/lib/rosterCsv";
 import NamedListEditor from "./NamedListEditor";
 import StudentRosterDetail from "./StudentRosterDetail";
+import RosterStudentDialog from "./RosterStudentDialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // showUnits is off inside a class, where units are managed next to the work
 // they hold rather than here; startExpanded skips the collapse toggle when
 // this IS the page rather than one card in a list.
-export default function CourseCard({ course, onEdit, onDelete, onRosterChange, onOpenGrading, showUnits = true, startExpanded = false }) {
+export default function CourseCard({ course, allCourses = [], onEdit, onDelete, onRosterChange, onOpenGrading, showUnits = true, startExpanded = false }) {
   const [expanded, setExpanded] = useState(startExpanded);
   const [roster, setRoster] = useState([]);
   const [rosterUnits, setRosterUnits] = useState([]);
@@ -28,6 +29,8 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, o
   const [viewingStudent, setViewingStudent] = useState(null);
   const [removingStudent, setRemovingStudent] = useState(null);
   const [removing, setRemoving] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [addingStudent, setAddingStudent] = useState(false);
 
   const confirmRemoveStudent = async () => {
     if (!removingStudent) return;
@@ -112,6 +115,9 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, o
             )}
           </div>
           <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" onClick={() => setAddingStudent(true)}>
+              <UserPlus className="w-4 h-4 mr-1.5" /> Add Student
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setShowUpload(true)}>
               <Upload className="w-4 h-4 mr-1.5" /> Upload Roster
             </Button>
@@ -163,9 +169,12 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, o
               {loadingRoster ? (
                 <p className="text-sm text-muted-foreground text-center py-4">Loading roster...</p>
               ) : roster.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No students on this roster yet.
-                </p>
+                <div className="text-center py-4 space-y-2">
+                  <p className="text-sm text-muted-foreground">No students on this roster yet.</p>
+                  <Button variant="outline" size="sm" onClick={() => setAddingStudent(true)}>
+                    <UserPlus className="w-4 h-4 mr-1.5" /> Add Student
+                  </Button>
+                </div>
               ) : (
                 <>
                   <Table>
@@ -175,7 +184,7 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, o
                         <TableHead>Email</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Turned in work</TableHead>
-                        <TableHead className="w-16" />
+                        <TableHead className="w-24" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -223,6 +232,13 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, o
                               )}
                             </TableCell>
                             <TableCell className="flex items-center gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditingStudent(s); }}
+                                title="Edit or move"
+                                className="text-slate-300 hover:text-foreground transition-colors p-1"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); setRemovingStudent(s); }}
                                 title="Remove from this class"
@@ -356,6 +372,24 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, o
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <RosterStudentDialog
+        open={addingStudent}
+        onOpenChange={setAddingStudent}
+        mode="add"
+        course={course}
+        onSaved={() => { loadRoster(); onRosterChange?.(); }}
+      />
+
+      <RosterStudentDialog
+        open={!!editingStudent}
+        onOpenChange={(v) => !v && setEditingStudent(null)}
+        mode="edit"
+        course={course}
+        allCourses={allCourses}
+        student={editingStudent}
+        onSaved={() => { loadRoster(); onRosterChange?.(); }}
+      />
 
       <StudentRosterDetail
         open={!!viewingStudent}
