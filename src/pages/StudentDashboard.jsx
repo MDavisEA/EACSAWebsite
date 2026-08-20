@@ -89,6 +89,10 @@ export default function StudentDashboard() {
   const [studentName, setStudentName] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  // Which class to show, for a student on more than one roster - "" means
+  // all of them together. Remembered per-student so switching classes to
+  // organize their work sticks across visits instead of resetting every time.
+  const [courseFilter, setCourseFilter] = useState("");
 
   // Looking at something already turned in. Fetched on demand rather than with
   // the dashboard: these rows carry the full code and every response, which is
@@ -105,6 +109,21 @@ export default function StudentDashboard() {
     if (!session) { setLoading(false); return; }
     load();
   }, [sessionLoading, session]);
+
+  // Remember which class they were looking at, per student, so it sticks
+  // across visits. Read once the courses list is in, so a stale id from a
+  // class they are no longer on (or that hasn't loaded yet) cannot leave the
+  // dashboard stuck showing nothing.
+  useEffect(() => {
+    if (!user || courses.length === 0) return;
+    const saved = localStorage.getItem(`dashboard_course_${user.id}`);
+    if (saved && courses.some((c) => c.id === saved)) setCourseFilter(saved);
+  }, [user, courses]);
+
+  useEffect(() => {
+    if (!user) return;
+    localStorage.setItem(`dashboard_course_${user.id}`, courseFilter);
+  }, [user, courseFilter]);
 
   // Clicking work you have finished should show you what you handed in, not
   // silently start it over - which is what navigating to the work route did.
@@ -237,16 +256,23 @@ export default function StudentDashboard() {
     );
   }
 
-  const todo = items.filter((i) => i.status === "not_started" || i.status === "in_progress").length;
-  const needsLook = items.filter((i) => i.status === "graded").length;
+  // Scoped to the selected class before anything else is computed, so the
+  // counts at the top and the "all caught up" line match what is actually
+  // shown below rather than counting work from a class that is toggled off.
+  const visible = courseFilter ? items.filter((i) => i.course_id === courseFilter) : items;
+
+  const todo = visible.filter((i) => i.status === "not_started" || i.status === "in_progress").length;
+  const needsLook = visible.filter((i) => i.status === "graded").length;
 
   // Reviewed work leaves the unit lists entirely - by June there will be a lot
   // of it, and the point of the section is that finished work stops competing
   // for attention with work that still needs something.
-  const active = items.filter((i) => i.status !== "reviewed");
-  const reviewed = items.filter((i) => i.status === "reviewed");
+  const active = visible.filter((i) => i.status !== "reviewed");
+  const reviewed = visible.filter((i) => i.status === "reviewed");
 
-  const showCourse = courses.length > 1;
+  // Once a single class is picked, its name on every unit heading is just
+  // noise - it was only there to tell units from different classes apart.
+  const showCourse = courses.length > 1 && !courseFilter;
   const groups = groupWorkByUnit(active, units, courses);
   const reviewedGroups = groupWorkByUnit(reviewed, units, courses);
 
@@ -270,14 +296,46 @@ export default function StudentDashboard() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+        {/* Only worth showing once there is more than one class to pick
+            between - a student on a single roster never sees this. */}
+        {courses.length > 1 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={() => setCourseFilter("")}
+              className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                courseFilter === ""
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "hover:bg-slate-50 text-slate-600"
+              }`}
+            >
+              All classes
+            </button>
+            {courses.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setCourseFilter(c.id)}
+                className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                  courseFilter === c.id
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "hover:bg-slate-50 text-slate-600"
+                }`}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         {loadError ? (
           <div className="text-center bg-white border rounded-xl p-8 space-y-3">
             <p className="text-sm text-destructive">{loadError}</p>
             <Button variant="outline" size="sm" onClick={load}>Try again</Button>
           </div>
-        ) : items.length === 0 ? (
+        ) : visible.length === 0 ? (
           <div className="text-center text-muted-foreground bg-white border rounded-xl p-10">
-            <p className="text-sm">Nothing assigned right now.</p>
+            <p className="text-sm">
+              {courseFilter ? "Nothing assigned in this class right now." : "Nothing assigned right now."}
+            </p>
             <p className="text-xs mt-1">Check back later, or ask your teacher for a link.</p>
           </div>
         ) : (
