@@ -1,5 +1,6 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest, teacherOwnsCourse } from '../_shared/teacherAuth.ts';
+import { buildWorkItems } from '../_shared/workItems.ts';
 
 // Courses and rosters exist purely so the teacher can see who has NOT turned
 // work in. Nothing here is student-facing - every action is teacher-only.
@@ -218,6 +219,80 @@ Deno.serve(async (req) => {
           has_signed_in: seenEmails.has((r.email || '').toLowerCase()),
         })),
       });
+    }
+
+    // The roster, but with each student's status on every active piece of
+    // work in this course - "who hasn't turned in" answered per student
+    // instead of per assignment. Built on the exact same status rules a
+    // student's own dashboard uses (see _shared/workItems.ts), just applied
+    // to a roster row's identity instead of the caller's own.
+    if (action === 'rosterWithStatus') {
+      if (!(await owns(body.course_id))) return json({ error: 'Not found' }, 404);
+      const course_id = body.course_id;
+
+      const [rosterRes, assignments, problems, projects, units] = await Promise.all([
+        admin.from('roster_students').select('*').eq('course_id', course_id).order('student_name', { ascending: true }),
+        admin.from('assignments').select('id, title, due_date, course_id, unit_id, sort_order, questions').eq('course_id', course_id).eq('is_active', true),
+        admin.from('coding_problems').select('id, title, due_date, course_id, unit_id, sort_order, points_possible').eq('course_id', course_id).eq('is_active', true),
+        admin.from('projects').select('id, title, due_date, course_id, unit_id, sort_order').eq('course_id', course_id).eq('is_active', true),
+        admin.from('units').select('id, course_id, name, position').eq('course_id', course_id),
+      ]);
+      for (const r of [rosterRes, assignments, problems, projects, units]) {
+        if (r.error) return json({ error: r.error.message }, 500);
+      }
+
+      const activeAssignments = assignments.data || [];
+      const activeProblems = problems.data || [];
+      const activeProjects = projects.data || [];
+
+      // Same "has this email ever submitted anything at all" check listRoster
+      // already does, kept separate from and unrelated to the course-scoped
+      // submissions pulled below - has_signed_in is deliberately whole-site,
+      // not "have they done THIS class's work."
+      const { data: seen } = await admin.from('submissions').select('student_email').not('student_email', 'is', null);
+      const seenEmails = new Set((seen || []).map((s: Record<string, any>) => (s.student_email || '').toLowerCase()));
+
+      const workIds = [
+        ...activeAssignments.map((a: Record<string, any>) => a.id),
+        ...activeProblems.map((p: Record<string, any>) => p.id),
+        ...activeProjects.map((p: Record<string, any>) => p.id),
+      ];
+      let courseSubs: Record<string, any>[] = [];
+      if (workIds.length > 0) {
+        // Chunked the same way unscoredSubmissionsFor (submissions/index.ts)
+        // is - these ids ride in an .or() filter that would eventually
+        // overflow a URL for a course with a very large amount of work.
+        const CHUNK = 100;
+        for (let i = 0; i < workIds.length; i += CHUNK) {
+          const slice = workIds.slice(i, i + CHUNK).join(',');
+          const { data, error } = await admin
+            .from('submissions')
+            .select('*')
+            .or(`assignment_id.in.(${slice}),coding_problem_id.in.(${slice}),project_id.in.(${slice})`);
+          if (error) return json({ error: error.message }, 500);
+          courseSubs.push(...(data || []));
+        }
+      }
+
+      // Matches the roster CSV's own stated preference: email first (exact,
+      // what Google sign-in gives us), falling back to name only for a
+      // roster row that never had an email attached at all.
+      const subsForRow = (row: Record<string, any>) => {
+        if (row.email) {
+          const email = row.email.toLowerCase();
+          return courseSubs.filter((s) => (s.student_email || '').toLowerCase() === email);
+        }
+        const name = (row.student_name || '').trim().toLowerCase();
+        return courseSubs.filter((s) => !s.student_email && (s.student_name || '').trim().toLowerCase() === name);
+      };
+
+      const roster = (rosterRes.data || []).map((r: Record<string, any>) => ({
+        ...r,
+        has_signed_in: seenEmails.has((r.email || '').toLowerCase()),
+        items: buildWorkItems(activeAssignments, activeProblems, activeProjects, subsForRow(r)),
+      }));
+
+      return json({ roster, units: units.data || [] });
     }
 
     // Replaces the whole roster for a course rather than appending, so

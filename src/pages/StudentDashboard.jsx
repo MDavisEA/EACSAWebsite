@@ -8,38 +8,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import SubmissionDetail from "@/components/SubmissionDetail";
 import { format, isPast } from "date-fns";
 import {
-  BookOpen, Code2, FolderGit2, LogIn, LogOut, ChevronRight,
-  CheckCircle2, Clock, CircleDashed, Star, Loader2, RotateCcw,
-  CheckCheck, ChevronDown, ChevronUp,
+  BookOpen, LogIn, LogOut, ChevronRight, Loader2, RotateCcw, CheckCheck, ChevronDown, ChevronUp,
 } from "lucide-react";
+import { WORK_KIND_META, STATUS, groupWorkByUnit } from "@/lib/workStatus";
 
-// Per-kind presentation. Work is grouped by UNIT now rather than by kind, so
-// the kind survives only as the icon on each row plus where clicking it goes -
-// the destination pages fetch the full item themselves through their existing
-// (answer-key-stripping) endpoints.
+// Per-kind presentation, plus where clicking a row navigates to - only the
+// student page needs a route (the teacher's roster detail opens a grading
+// tool instead), so `route` is added here rather than living in the shared
+// WORK_KIND_META both pages use for the icon/color choices.
 const KINDS = {
-  frq: { label: "FRQ", icon: BookOpen, route: (id) => `/student?id=${id}`,
-    accent: "text-primary", chip: "bg-blue-50" },
-  code: { label: "Code", icon: Code2, route: (id) => `/code?id=${id}`,
-    accent: "text-emerald-600", chip: "bg-emerald-50" },
-  project: { label: "Project", icon: FolderGit2, route: (id) => `/project?id=${id}`,
-    accent: "text-violet-600", chip: "bg-violet-50" },
-};
-
-// The five states, in the order they appear inside a unit: whatever needs the
-// student's attention first, work that is genuinely finished last. 'reviewed'
-// is not in this list because it leaves the main view entirely (see the
-// Reviewed section at the bottom of the page).
-const STATUS_ORDER = ["graded", "in_progress", "not_started", "submitted"];
-
-const STATUS = {
-  not_started: { label: "Not opened", icon: CircleDashed, className: "bg-slate-100 text-slate-600" },
-  in_progress: { label: "Working on it", icon: Clock, className: "bg-amber-100 text-amber-800" },
-  // Deliberately says what the student is waiting FOR, rather than "Turned in"
-  // - the distinction that matters to them is that there is nothing to do yet.
-  submitted: { label: "Waiting on grade", icon: CheckCircle2, className: "bg-blue-100 text-blue-800" },
-  graded: { label: "New feedback", icon: Star, className: "bg-emerald-100 text-emerald-800" },
-  reviewed: { label: "Reviewed", icon: CheckCheck, className: "bg-slate-100 text-slate-500" },
+  frq: { ...WORK_KIND_META.frq, route: (id) => `/student?id=${id}` },
+  code: { ...WORK_KIND_META.code, route: (id) => `/code?id=${id}` },
+  project: { ...WORK_KIND_META.project, route: (id) => `/project?id=${id}` },
 };
 
 // One row of work. Shared so the main unit lists and the Reviewed section at
@@ -266,58 +246,9 @@ export default function StudentDashboard() {
   const active = items.filter((i) => i.status !== "reviewed");
   const reviewed = items.filter((i) => i.status === "reviewed");
 
-  const courseName = (id) => courses.find((c) => c.id === id)?.name || "";
-  // Only worth labelling the course when they are on more than one roster -
-  // otherwise every heading repeats the same class name.
   const showCourse = courses.length > 1;
-
-  const unitById = new Map(units.map((u) => [u.id, u]));
-  // Status first (what needs attention), then the teacher's own ordering,
-  // then - the one thing dropped when this became unit-grouped instead of
-  // type-grouped - soonest deadline first among ties, undated work sinking
-  // to the bottom. Without this, two same-status items with no sort_order
-  // (the common case: it is only ever set for newly-created work, not
-  // backfilled onto everything already there) fell back straight to
-  // alphabetical, so a due-in-2-weeks item could render above a due-tomorrow
-  // one with nothing to say otherwise.
-  const byStatusThenTeacherOrder = (a, b) =>
-    STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) ||
-    (a.sort_order ?? 9999) - (b.sort_order ?? 9999) ||
-    (a.due_date ? new Date(a.due_date).getTime() : Infinity) -
-      (b.due_date ? new Date(b.due_date).getTime() : Infinity) ||
-    (a.title || "").localeCompare(b.title || "");
-
-  // One group per unit, ordered by course then the teacher's own unit order.
-  // Work the teacher never filed under a unit collects in a trailing group
-  // rather than vanishing.
-  const groupWork = (list) => {
-    const map = new Map();
-    for (const item of list) {
-      const key = `${item.course_id ?? "none"}::${item.unit_id ?? "unfiled"}`;
-      if (!map.has(key)) {
-        const unit = item.unit_id ? unitById.get(item.unit_id) : null;
-        map.set(key, {
-          key,
-          label: unit?.name || "Other work",
-          course: courseName(item.course_id),
-          position: unit?.position ?? 9999,
-          items: [],
-        });
-      }
-      map.get(key).items.push(item);
-    }
-    return [...map.values()]
-      .map((g) => ({ ...g, items: g.items.sort(byStatusThenTeacherOrder) }))
-      .sort(
-        (a, b) =>
-          a.course.localeCompare(b.course) ||
-          a.position - b.position ||
-          a.label.localeCompare(b.label)
-      );
-  };
-
-  const groups = groupWork(active);
-  const reviewedGroups = groupWork(reviewed);
+  const groups = groupWorkByUnit(active, units, courses);
+  const reviewedGroups = groupWorkByUnit(reviewed, units, courses);
 
   return (
     <div className="min-h-screen bg-slate-50/50">

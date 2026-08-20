@@ -30,6 +30,17 @@ export default function TeacherDashboard() {
   const [openCourseId, setOpenCourseId] = useState(null);
   const [showNeedsGrading, setShowNeedsGrading] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  // Set when the queue is opened on one specific submission - from a
+  // student's roster detail - rather than the general "everything waiting on
+  // me" pile. Cleared whenever the queue is opened the normal way, so
+  // reopening "Start grading" later does not silently stay in single-item
+  // mode from a previous click.
+  const [gradeSubmissionId, setGradeSubmissionId] = useState(null);
+
+  const openGradingFor = (submissionId) => {
+    setGradeSubmissionId(submissionId);
+    setShowQueue(true);
+  };
   const [topTab, setTopTab] = useState("classes");
   const [courseTab, setCourseTab] = useState("assignments");
   const [deletingUnit, setDeletingUnit] = useState(null);
@@ -482,7 +493,7 @@ export default function TeacherDashboard() {
           </button>
           <div className="flex items-center gap-2">
             {ungradedTotal > 0 && (
-              <Button size="sm" onClick={() => setShowQueue(true)}>
+              <Button size="sm" onClick={() => { setGradeSubmissionId(null); setShowQueue(true); }}>
                 Start grading
                 <span className="ml-1.5 rounded-full bg-white/25 px-1.5 text-[10px] font-semibold">
                   {ungradedTotal}
@@ -608,6 +619,7 @@ export default function TeacherDashboard() {
                   onEdit={() => { setEditingCourse(openCourse); setShowCourseForm(true); }}
                   onDelete={() => setDeletingCourse(openCourse)}
                   onRosterChange={loadCourses}
+                  onOpenGrading={openGradingFor}
                 />
               </TabsContent>
             </Tabs>
@@ -645,8 +657,9 @@ export default function TeacherDashboard() {
 
       <GradingQueue
         open={showQueue}
-        onOpenChange={setShowQueue}
+        onOpenChange={(v) => { setShowQueue(v); if (!v) setGradeSubmissionId(null); }}
         onChanged={loadGradingCounts}
+        initialSubmissionId={gradeSubmissionId}
       />
 
       <NeedsGradingPanel

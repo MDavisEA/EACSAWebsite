@@ -6,19 +6,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Pencil, Trash2, Users, ChevronDown, ChevronUp, Upload, Loader2, Mail, AlertTriangle, Check } from "lucide-react";
+import { Pencil, Trash2, Users, ChevronDown, ChevronUp, Upload, Loader2, Mail, AlertTriangle, Check, ChevronRight } from "lucide-react";
 import { parseRosterCsv } from "@/lib/rosterCsv";
 import NamedListEditor from "./NamedListEditor";
+import StudentRosterDetail from "./StudentRosterDetail";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // showUnits is off inside a class, where units are managed next to the work
 // they hold rather than here; startExpanded skips the collapse toggle when
 // this IS the page rather than one card in a list.
-export default function CourseCard({ course, onEdit, onDelete, onRosterChange, showUnits = true, startExpanded = false }) {
+export default function CourseCard({ course, onEdit, onDelete, onRosterChange, onOpenGrading, showUnits = true, startExpanded = false }) {
   const [expanded, setExpanded] = useState(startExpanded);
   const [roster, setRoster] = useState([]);
+  const [rosterUnits, setRosterUnits] = useState([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
+  const [viewingStudent, setViewingStudent] = useState(null);
 
   const [showUpload, setShowUpload] = useState(false);
   const [csvText, setCsvText] = useState("");
@@ -34,7 +37,9 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, s
   const loadRoster = async () => {
     setLoadingRoster(true);
     try {
-      setRoster(await base44.entities.Course.listRoster(course.id));
+      const { roster: r, units } = await base44.entities.Course.rosterWithStatus(course.id);
+      setRoster(r);
+      setRosterUnits(units);
     } finally {
       setLoadingRoster(false);
     }
@@ -149,27 +154,61 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, s
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
+                        <TableHead>Status</TableHead>
                         <TableHead className="text-right">Turned in work</TableHead>
+                        <TableHead className="w-8" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {roster.map((s) => (
-                        <TableRow key={s.id}>
-                          <TableCell className="font-medium">{s.student_name}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {s.email || <span className="italic">no email</span>}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {s.has_signed_in ? (
-                              <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-                                <Check className="w-3.5 h-3.5" /> Yes
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">Not yet</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {roster.map((s) => {
+                        const items = s.items || [];
+                        const missing = items.filter((i) => i.status === "not_started").length;
+                        const inProgress = items.filter((i) => i.status === "in_progress").length;
+                        const newFeedback = items.filter((i) => i.status === "graded").length;
+                        return (
+                          <TableRow
+                            key={s.id}
+                            className="cursor-pointer hover:bg-slate-50/70"
+                            onClick={() => setViewingStudent(s)}
+                          >
+                            <TableCell className="font-medium">{s.student_name}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {s.email || <span className="italic">no email</span>}
+                            </TableCell>
+                            <TableCell>
+                              {missing === 0 && inProgress === 0 ? (
+                                <span className="text-xs text-emerald-600">All caught up</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  {[
+                                    missing > 0 ? `${missing} missing` : null,
+                                    inProgress > 0 ? `${inProgress} in progress` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(", ")}
+                                </span>
+                              )}
+                              {newFeedback > 0 && (
+                                <span className="text-xs text-emerald-700 ml-2">
+                                  {newFeedback} new feedback
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {s.has_signed_in ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                  <Check className="w-3.5 h-3.5" /> Yes
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Not yet</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                   {roster.some((s) => !s.has_signed_in) && (
@@ -272,6 +311,18 @@ export default function CourseCard({ course, onEdit, onDelete, onRosterChange, s
           </div>
         </DialogContent>
       </Dialog>
+
+      <StudentRosterDetail
+        open={!!viewingStudent}
+        onOpenChange={(v) => !v && setViewingStudent(null)}
+        student={viewingStudent}
+        units={rosterUnits}
+        courses={[course]}
+        onOpenGrading={(submissionId) => {
+          setViewingStudent(null);
+          onOpenGrading?.(submissionId);
+        }}
+      />
     </Card>
   );
 }

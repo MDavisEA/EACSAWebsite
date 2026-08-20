@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Check, Loader2 } from "lucide-react";
+import { Copy, Check, Loader2, Mail } from "lucide-react";
 import { latestPerStudent } from "@/lib/groupSubmissionsByStudent";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
 
@@ -80,6 +80,7 @@ export default function GradesDialog({
     const notIn = missing.map((r) => ({
       key: `missing-${r.email || r.student_name}`,
       name: r.student_name || r.email,
+      email: r.email || null,
       score: null,
       turnedIn: false,
       submittedAt: null,
@@ -98,6 +99,22 @@ export default function GradesDialog({
   }, [submissions, roster, sortBy, scoreOf]);
 
   const gradedCount = rows.filter((r) => r.score != null).length;
+
+  // Only real addresses - a roster row with no email (matched by name only)
+  // has nothing to send to.
+  const missingEmails = rows.filter((r) => !r.turnedIn && r.email).map((r) => r.email);
+  // bcc, not to: - so students missing the same assignment do not see each
+  // other's email addresses. A mailto: link opens the teacher's own mail
+  // client with a draft; it does not send anything itself, and the teacher
+  // reviews and sends it themselves.
+  const reminderHref =
+    missingEmails.length > 0
+      ? `mailto:?bcc=${encodeURIComponent(missingEmails.join(","))}&subject=${encodeURIComponent(
+          `Missing: ${title}`
+        )}&body=${encodeURIComponent(
+          `Hi,\n\nOur records show you haven't turned in "${title}" yet. Please submit it when you can.\n\nThanks!`
+        )}`
+      : null;
 
   // Tab-separated so it lands in one column per field if pasted into a
   // spreadsheet, and reads cleanly if pasted anywhere else.
@@ -139,7 +156,15 @@ export default function GradesDialog({
               </button>
             ))}
           </div>
-          <Button variant="outline" size="sm" onClick={copyAll} className="ml-auto">
+          {reminderHref && (
+            <Button variant="outline" size="sm" asChild>
+              <a href={reminderHref}>
+                <Mail className="w-4 h-4 mr-1.5" />
+                Email {missingEmails.length} missing student{missingEmails.length === 1 ? "" : "s"}
+              </a>
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={copyAll} className={reminderHref ? "" : "ml-auto"}>
             {copied ? <Check className="w-4 h-4 mr-1.5 text-emerald-600" /> : <Copy className="w-4 h-4 mr-1.5" />}
             {copied ? "Copied" : "Copy all"}
           </Button>

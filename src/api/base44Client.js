@@ -493,6 +493,14 @@ const Course = {
     return data.results;
   },
 
+  // Same roster rows as listRoster, plus each student's status on every
+  // active piece of work in the course - powers "who hasn't turned in"
+  // across the whole class rather than one assignment at a time.
+  async rosterWithStatus(course_id) {
+    const data = await callFunction('courses', { action: 'rosterWithStatus', course_id });
+    return { roster: data.roster || [], units: data.units || [] };
+  },
+
   // Replaces the whole roster rather than appending, so re-uploading a
   // corrected CSV is the natural way to fix a mistake.
   // section_id scopes the replace to one period; without it the whole roster
