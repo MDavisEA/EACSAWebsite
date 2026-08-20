@@ -272,9 +272,19 @@ export default function StudentDashboard() {
   const showCourse = courses.length > 1;
 
   const unitById = new Map(units.map((u) => [u.id, u]));
+  // Status first (what needs attention), then the teacher's own ordering,
+  // then - the one thing dropped when this became unit-grouped instead of
+  // type-grouped - soonest deadline first among ties, undated work sinking
+  // to the bottom. Without this, two same-status items with no sort_order
+  // (the common case: it is only ever set for newly-created work, not
+  // backfilled onto everything already there) fell back straight to
+  // alphabetical, so a due-in-2-weeks item could render above a due-tomorrow
+  // one with nothing to say otherwise.
   const byStatusThenTeacherOrder = (a, b) =>
     STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) ||
     (a.sort_order ?? 9999) - (b.sort_order ?? 9999) ||
+    (a.due_date ? new Date(a.due_date).getTime() : Infinity) -
+      (b.due_date ? new Date(b.due_date).getTime() : Infinity) ||
     (a.title || "").localeCompare(b.title || "");
 
   // One group per unit, ordered by course then the teacher's own unit order.
