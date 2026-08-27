@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import AnnotatedCodeView from "./AnnotatedCodeView";
 import AnswerKeyPanel from "./AnswerKeyPanel";
 import HighlightedCode from "@/components/HighlightedCode";
 import ResizableDivider from "@/components/exam/ResizableDivider";
+import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 import GradesDialog from "./GradesDialog";
 import { groupByStudent } from "@/lib/groupSubmissionsByStudent";
 import {
@@ -32,8 +33,11 @@ import {
 const TOGGLE_HINT = "⌘⇧F";
 
 export default function CodeReviewGrader({ problem, onGraded }) {
-  const [submissions, setSubmissions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const LIST_KEY = { coding_problem_id: problem.id, submitted: true };
+  // Paints from whatever was shown last time, then the fetch below
+  // replaces it - so re-opening this card is instant instead of blank.
+  const [submissions, setSubmissions] = useState(() => getCachedList(LIST_KEY) || []);
+  const [loading, setLoading] = useState(() => !getCachedList(LIST_KEY));
 
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0); // which student
@@ -54,12 +58,25 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   // percent - dragged via ResizableDivider, same mechanism as the FRQ exam
   // page's split. Defaults to roughly the old fixed 1.5fr:1fr ratio.
   const [splitPercent, setSplitPercent] = useState(60);
+  // Ids whose full row has already been pulled in, so paging back and forth
+  // between students does not refetch.
+  const fullFetched = useRef(new Set());
 
   useEffect(() => { load(); }, [problem.id]);
 
   // Only while the window is open, and note it cannot fire while the cursor is
   // inside the runner: browsers do not deliver keystrokes from a cross-origin
   // frame to the page around it. The tab buttons stay clickable for that case.
+  // Whatever is on screen is what a re-open should paint first - including
+  // edits made locally after saving a grade, so this syncs on every change
+  // rather than only on fetch.
+  useEffect(() => {
+    if (!loading) setCachedList(LIST_KEY, submissions);
+    // LIST_KEY is rebuilt each render, so the id it is derived from is the
+    // real dependency here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [problem.id, submissions, loading]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => {
@@ -75,7 +92,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const load = async () => {
     setLoading(true);
     try {
-      const rows = await base44.entities.Submission.filter(
+      const rows = await base44.entities.Submission.filterSummary(
         { coding_problem_id: problem.id, submitted: true },
         "-submitted_at"
       );
@@ -92,6 +109,26 @@ export default function CodeReviewGrader({ problem, onGraded }) {
     setGradingSkipped(!!s.grading_skipped);
     setSaved(false);
     setError("");
+    loadFull(s);
+  };
+
+  // The student's code and line comments are not in the list payload - they
+  // are the bulk of it, and only ever needed for whoever is open. Fetched
+  // once per student and merged into `submissions`, so `current` (derived
+  // from it) becomes the full row and paging back to someone already looked
+  // at costs nothing.
+  const loadFull = async (row) => {
+    if (!row || fullFetched.current.has(row.id)) return;
+    try {
+      const full = await base44.entities.Submission.getFull(row.id);
+      fullFetched.current.add(full.id);
+      setSubmissions((prev) => prev.map((x) => (x.id === full.id ? { ...x, ...full } : x)));
+      // Only when nothing has been typed yet, so a slow response cannot wipe
+      // out a comment the teacher started while it was in flight.
+      setLineComments((cur) => (cur.length === 0 ? full.line_comments || [] : cur));
+    } catch (e) {
+      setError(e.message || "Couldn't load the rest of this submission.");
+    }
   };
 
   // One row per STUDENT, not per row in the table. A student can end up with
@@ -151,7 +188,14 @@ export default function CodeReviewGrader({ problem, onGraded }) {
       setSubmissions((prev) =>
         prev.map((s) =>
           s.id === current.id
-            ? { ...s, score: parsed, teacher_comments: comments, line_comments: lineComments, grading_skipped: gradingSkipped }
+            ? {
+                ...s,
+                score: parsed,
+                teacher_comments: comments,
+                line_comments: lineComments,
+                line_comment_count: lineComments.length,
+                grading_skipped: gradingSkipped,
+              }
             : s
         )
       );
@@ -199,7 +243,10 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const gradedCount = groups.filter((g) => g.latest.score != null).length;
   const maxPoints = problem.manual_points ?? problem.points_possible ?? null;
 
-  const hasCode = !!(current?.code || "").trim();
+  // Until the full row lands, `code` is absent - fall back to the summary's
+  // own has_code so the panel does not flash "Nothing was turned in".
+  const codeLoaded = current?.code !== undefined;
+  const hasCode = codeLoaded ? !!String(current.code || "").trim() : !!current?.has_code;
 
   return (
     <div className="py-2">
@@ -235,7 +282,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
         {groups.map((g, i) => {
           const s = g.latest;
           const late = problem.due_date && s.submitted_at && new Date(s.submitted_at) > new Date(problem.due_date);
-          const noCode = !(s.code || "").trim();
+          const noCode = !s.has_code;
           const attempts = g.all.length;
           return (
             <button
@@ -262,10 +309,10 @@ export default function CodeReviewGrader({ problem, onGraded }) {
               )}
 
               <span className="ml-auto flex items-center gap-2 flex-shrink-0">
-                {(s.line_comments || []).length > 0 && (
+                {(s.line_comment_count ?? 0) > 0 && (
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <MessageSquare className="w-3 h-3" />
-                    {(s.line_comments || []).length}
+                    {s.line_comment_count}
                   </span>
                 )}
                 {/* problem.grading_skipped (the whole assignment) takes
@@ -434,7 +481,12 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                       Already loaded. Press Run, then type answers straight into the console.
                     </span>
                   </div>
-                  {hasCode ? (
+                  {hasCode && !codeLoaded ? (
+                    <p className="text-sm text-muted-foreground p-6 text-center flex items-center justify-center gap-2">
+                      <span className="w-4 h-4 border-2 border-slate-300 border-t-primary rounded-full animate-spin" />
+                      Loading their code...
+                    </p>
+                  ) : hasCode ? (
                     <InteractiveRunner
                       code={current.code}
                       fileName={`${problem.class_name || "Main"}.java`}
@@ -458,7 +510,12 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                     <div className="bg-slate-100 px-3 py-1.5 text-xs text-muted-foreground border-b">
                       {hasCode ? "Click any line to comment on it" : "Nothing was turned in"}
                     </div>
-                    {hasCode ? (
+                    {hasCode && !codeLoaded ? (
+                      <p className="text-sm text-muted-foreground p-6 text-center flex items-center justify-center gap-2">
+                        <span className="w-4 h-4 border-2 border-slate-300 border-t-primary rounded-full animate-spin" />
+                        Loading their code...
+                      </p>
+                    ) : hasCode ? (
                       <AnnotatedCodeView
                         key={current.id}
                         code={current.code}

@@ -16,6 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { FileDown, Trash2, ExternalLink, Loader2, Upload, CheckCircle2, XCircle, AlertTriangle, RefreshCw, UserX, ChevronDown, ChevronUp, Clock, Send } from "lucide-react";
 import { exportProjectForReview } from "@/lib/exportProjectZip";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
+import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 
 // Matches the plain `name,gist_url` per line format already used by the
 // MOSS-checking script's gists.csv - one comma splits name from URL, the
@@ -34,9 +35,12 @@ function parseGistCsv(text) {
 }
 
 export default function ProjectSubmissionViewer({ project }) {
-  const [submissions, setSubmissions] = useState([]);
+  const LIST_KEY = { project_id: project.id, submitted: true };
+  // Paints from whatever was shown last time, then the fetch below
+  // replaces it - so re-opening this card is instant instead of blank.
+  const [submissions, setSubmissions] = useState(() => getCachedList(LIST_KEY) || []);
   const [roster, setRoster] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !getCachedList(LIST_KEY));
   const [loadError, setLoadError] = useState("");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
@@ -58,6 +62,19 @@ export default function ProjectSubmissionViewer({ project }) {
   const [activeFile, setActiveFile] = useState(null);
   const [savingReview, setSavingReview] = useState(false);
   const [gradesOpen, setGradesOpen] = useState(false);
+  // The opened submission's files, still arriving (they are not in the list).
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+
+  // Whatever is on screen is what a re-open should paint first - including
+  // edits made locally after saving a grade, so this syncs on every change
+  // rather than only on fetch.
+  useEffect(() => {
+    if (!loading) setCachedList(LIST_KEY, submissions);
+    // LIST_KEY is rebuilt each render, so the id it is derived from is the
+    // real dependency here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id, submissions, loading]);
 
   useEffect(() => {
     loadAll();
@@ -66,7 +83,7 @@ export default function ProjectSubmissionViewer({ project }) {
   const loadAll = async () => {
     setLoadError("");
     try {
-      const subs = await base44.entities.Submission.filter(
+      const subs = await base44.entities.Submission.filterSummary(
         { project_id: project.id, submitted: true },
         "-submitted_at"
       );
@@ -102,7 +119,15 @@ export default function ProjectSubmissionViewer({ project }) {
         const result = await base44.entities.Project.fetchGoogleDocText(project.google_doc_url);
         googleDocText = result.text;
       }
-      await exportProjectForReview(project, submissions, { googleDocText });
+      // The zip is one folder of real .java files per student, so this is the
+      // one place that genuinely needs every submission's file contents - the
+      // list itself only carries filenames. Re-fetched in full here rather
+      // than making every "View Submissions" click pay for it.
+      const full = await base44.entities.Submission.filter(
+        { project_id: project.id, submitted: true },
+        "-submitted_at"
+      );
+      await exportProjectForReview(project, full, { googleDocText });
     } catch (e) {
       setExportError(e.message || "Couldn't build the export.");
     } finally {
@@ -147,17 +172,33 @@ export default function ProjectSubmissionViewer({ project }) {
     setImportResults(null);
   };
 
-  const openReview = (s) => {
+  // The list carries filenames only - the snapshotted file CONTENTS are the
+  // bulk of a project submission (roughly three quarters of it, measured), and
+  // are only ever read for the one submission being reviewed. Opens on the
+  // summary immediately and fills in the files as they arrive.
+  const openReview = async (s) => {
     setReviewTarget(s);
     setReviewDraft({
       teacher_comments: s.teacher_comments || "",
       score: s.score ?? "",
       feedback_released: !!s.feedback_released,
     });
-    setLineComments(s.line_comments || []);
+    setLineComments([]);
+    setReviewError("");
     // Open on their first file rather than nothing, so the code is visible
     // without a click - a Project is usually one main class plus helpers.
-    setActiveFile((s.files || [])[0]?.filename ?? null);
+    setActiveFile((s.file_names || [])[0] ?? null);
+    setFilesLoading(true);
+    try {
+      const full = await base44.entities.Submission.getFull(s.id);
+      // Dropped if the teacher has already moved on to someone else.
+      setReviewTarget((cur) => (cur && cur.id === full.id ? { ...cur, ...full } : cur));
+      setLineComments((cur) => (cur.length === 0 ? full.line_comments || [] : cur));
+    } catch (e) {
+      setReviewError(e.message || "Couldn't load this submission's files.");
+    } finally {
+      setFilesLoading(false);
+    }
   };
 
   // A Project is several files, so which file a comment sits on has to be part
@@ -346,7 +387,7 @@ export default function ProjectSubmissionViewer({ project }) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{(s.files || []).length}</Badge>
+                    <Badge variant="outline">{(s.file_names || []).length}</Badge>
                   </TableCell>
                   <TableCell>
                     <button
@@ -424,40 +465,52 @@ export default function ProjectSubmissionViewer({ project }) {
               lines - the same thing Coding Assignments have. Before this the
               only way to say anything about a Project was one block of prose,
               which is a poor fit for "line 34 of Board.java is the problem". */}
-          {(reviewTarget?.files || []).length > 0 && (
+          {(reviewTarget?.file_names || reviewTarget?.files || []).length > 0 && (
             <div className="border rounded-lg overflow-hidden">
               <div className="bg-slate-100 border-b px-2 py-1.5 flex items-center gap-1 flex-wrap">
-                {(reviewTarget.files || []).map((f) => {
-                  const count = lineComments.filter((c) => (c.file ?? null) === f.filename).length;
-                  return (
-                    <button
-                      key={f.filename}
-                      onClick={() => setActiveFile(f.filename)}
-                      className={`text-xs font-mono rounded px-2 py-1 transition-colors ${
-                        activeFile === f.filename
-                          ? "bg-white shadow-sm font-semibold"
-                          : "text-slate-500 hover:text-slate-800"
-                      }`}
-                    >
-                      {f.filename}
-                      {count > 0 && <span className="ml-1.5 text-amber-600">{count}</span>}
-                    </button>
-                  );
-                })}
+                {(reviewTarget.file_names ?? (reviewTarget.files || []).map((f) => f.filename)).map(
+                  (filename) => {
+                    const count = lineComments.filter((c) => (c.file ?? null) === filename).length;
+                    return (
+                      <button
+                        key={filename}
+                        onClick={() => setActiveFile(filename)}
+                        className={`text-xs font-mono rounded px-2 py-1 transition-colors ${
+                          activeFile === filename
+                            ? "bg-white shadow-sm font-semibold"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        {filename}
+                        {count > 0 && <span className="ml-1.5 text-amber-600">{count}</span>}
+                      </button>
+                    );
+                  }
+                )}
                 <span className="text-xs text-muted-foreground ml-auto pr-1">
                   Click any line to comment on it
                 </span>
               </div>
-              <AnnotatedCodeView
-                key={activeFile}
-                code={(reviewTarget.files || []).find((f) => f.filename === activeFile)?.content || ""}
-                file={activeFile}
-                comments={lineComments}
-                onAdd={addLineComment}
-                onRemove={removeLineComment}
-                commentScope={{ project_id: project.id }}
-                maxHeight="45vh"
-              />
+              {filesLoading && reviewTarget.files === undefined ? (
+                <p className="text-sm text-muted-foreground p-6 text-center flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-slate-300 border-t-primary rounded-full animate-spin" />
+                  Loading their files...
+                </p>
+              ) : (
+                <AnnotatedCodeView
+                  key={activeFile}
+                  code={(reviewTarget.files || []).find((f) => f.filename === activeFile)?.content || ""}
+                  file={activeFile}
+                  comments={lineComments}
+                  onAdd={addLineComment}
+                  onRemove={removeLineComment}
+                  commentScope={{ project_id: project.id }}
+                  maxHeight="45vh"
+                />
+              )}
+              {reviewError && (
+                <p className="text-sm text-destructive px-3 py-2 border-t">{reviewError}</p>
+              )}
             </div>
           )}
 

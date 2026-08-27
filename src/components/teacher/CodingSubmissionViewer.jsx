@@ -13,20 +13,19 @@ import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
 import AnnotatedCodeView from "./AnnotatedCodeView";
 import GradesDialog from "./GradesDialog";
+import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 
-// Derived from a submission's run_history (one entry per Run/Submit click,
-// each carrying a full code snapshot, compile status, and per-check
-// results) - not stored separately, since everything here falls out of
-// that one array.
-function computeAttemptStats(submission) {
-  const history = submission.run_history || [];
-  const totalAttempts = history.length;
-  const firstFullPassIdx = history.findIndex((h) => h.tests_total > 0 && h.tests_passed === h.tests_total);
-  const compileErrorCount = history.filter((h) => h.compile_error).length;
+// Attempt counts come off `run_stats`, which the server derives from
+// run_history for the list. run_history itself (a full code snapshot per Run
+// click) is only fetched for the one student the teacher opens - it was two
+// thirds of what this list used to download, and none of it is on screen
+// until then.
+function attemptStats(submission) {
+  const s = submission?.run_stats || {};
   return {
-    totalAttempts,
-    attemptsToFirstPass: firstFullPassIdx === -1 ? null : firstFullPassIdx + 1,
-    compileErrorCount,
+    totalAttempts: s.total_attempts ?? 0,
+    attemptsToFirstPass: s.attempts_to_first_pass ?? null,
+    compileErrorCount: s.compile_error_count ?? 0,
   };
 }
 
@@ -35,8 +34,11 @@ function computeAttemptStats(submission) {
 const SCORE_OF_AUTOGRADED = (s) => s.autograde_score ?? s.score ?? null;
 
 export default function CodingSubmissionViewer({ problem }) {
-  const [submissions, setSubmissions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const LIST_KEY = { coding_problem_id: problem.id, submitted: true };
+  // Paints from whatever was shown last time, then the fetch below
+  // replaces it - so re-opening this card is instant instead of blank.
+  const [submissions, setSubmissions] = useState(() => getCachedList(LIST_KEY) || []);
+  const [loading, setLoading] = useState(() => !getCachedList(LIST_KEY));
   const [loadError, setLoadError] = useState("");
   const [selected, setSelected] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
@@ -56,6 +58,18 @@ export default function CodingSubmissionViewer({ problem }) {
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
+  // The code/attempt-history half of an opened submission, still on its way.
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // Whatever is on screen is what a re-open should paint first - including
+  // edits made locally after saving a grade, so this syncs on every change
+  // rather than only on fetch.
+  useEffect(() => {
+    if (!loading) setCachedList(LIST_KEY, submissions);
+    // LIST_KEY is rebuilt each render, so the id it is derived from is the
+    // real dependency here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [problem.id, submissions, loading]);
 
   useEffect(() => {
     loadSubmissions();
@@ -64,7 +78,7 @@ export default function CodingSubmissionViewer({ problem }) {
   const loadSubmissions = async () => {
     setLoadError("");
     try {
-      const results = await base44.entities.Submission.filter(
+      const results = await base44.entities.Submission.filterSummary(
         { coding_problem_id: problem.id, submitted: true },
         "-submitted_at"
       );
@@ -91,14 +105,31 @@ export default function CodingSubmissionViewer({ problem }) {
     return sortOrder === "newest" ? bTime - aTime : aTime - bTime;
   });
 
-  const openSubmission = (s, index) => {
+  // The list row is a summary, so the code, per-attempt history, and line
+  // comments arrive here rather than with the list. Shows the row we already
+  // have straight away and fills in the rest, so the dialog opens instantly
+  // instead of waiting on a fetch first.
+  const openSubmission = async (s, index) => {
     setSelected(s);
     setSelectedIndex(index ?? sortedSubmissions.findIndex((x) => x.id === s.id));
     setExpandedAttempt(null);
-    setLineComments(s.line_comments || []);
+    setLineComments([]);
     setComments(s.teacher_comments || "");
     setSavedFeedback(false);
     setFeedbackError("");
+    setDetailLoading(true);
+    try {
+      const full = await base44.entities.Submission.getFull(s.id);
+      // Ignore a fetch that finished after the teacher moved to another
+      // student - otherwise the slower response overwrites the newer one.
+      setSelected((cur) => (cur && cur.id === full.id ? { ...cur, ...full } : cur));
+      setLineComments(full.line_comments || []);
+      setComments(full.teacher_comments || "");
+    } catch (e) {
+      setFeedbackError(e.message || "Couldn't load the rest of this submission.");
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   const addLineComment = (line, body) => {
@@ -124,7 +155,9 @@ export default function CodingSubmissionViewer({ problem }) {
       });
       setSubmissions((prev) =>
         prev.map((s) =>
-          s.id === selected.id ? { ...s, teacher_comments: comments, line_comments: lineComments } : s
+          s.id === selected.id
+            ? { ...s, teacher_comments: comments, line_comment_count: lineComments.length }
+            : s
         )
       );
       setSelected((prev) => ({ ...prev, teacher_comments: comments, line_comments: lineComments }));
@@ -162,7 +195,7 @@ export default function CodingSubmissionViewer({ problem }) {
     const rows = visible.map((s) => {
       const passed = (s.test_results || []).filter((r) => r.passed).length;
       const total = (s.test_results || []).length;
-      const stats = computeAttemptStats(s);
+      const stats = attemptStats(s);
       return [
         s.student_name,
         s.submitted_at ? format(new Date(s.submitted_at), "yyyy-MM-dd HH:mm") : "",
@@ -203,11 +236,11 @@ export default function CodingSubmissionViewer({ problem }) {
 
   const avgAttempts =
     visible.length > 0
-      ? visible.reduce((sum, s) => sum + (s.run_history?.length || 0), 0) / visible.length
+      ? visible.reduce((sum, s) => sum + attemptStats(s).totalAttempts, 0) / visible.length
       : 0;
   const compileErrorRate =
     visible.length > 0
-      ? visible.filter((s) => (s.run_history || []).some((h) => h.compile_error)).length / visible.length
+      ? visible.filter((s) => attemptStats(s).compileErrorCount > 0).length / visible.length
       : 0;
 
   if (loading) {
@@ -225,7 +258,7 @@ export default function CodingSubmissionViewer({ problem }) {
     );
   }
 
-  const selectedStats = selected ? computeAttemptStats(selected) : null;
+  const selectedStats = selected ? attemptStats(selected) : null;
 
   return (
     <div>
@@ -296,7 +329,7 @@ export default function CodingSubmissionViewer({ problem }) {
           </TableHeader>
           <TableBody>
             {sortedSubmissions.map((s, i) => {
-              const stats = computeAttemptStats(s);
+              const stats = attemptStats(s);
               return (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.student_name}</TableCell>
@@ -458,7 +491,12 @@ export default function CodingSubmissionViewer({ problem }) {
                       </span>
                     )}
                   </p>
-                  {(selected.code || "").trim() ? (
+                  {detailLoading && selected.code === undefined ? (
+                    <div className="border rounded-lg p-4 flex items-center gap-2 text-sm text-muted-foreground">
+                      <div className="w-4 h-4 border-2 border-slate-300 border-t-primary rounded-full animate-spin" />
+                      Loading their code...
+                    </div>
+                  ) : (selected.code || "").trim() ? (
                     <div className="border rounded-lg overflow-hidden">
                       <AnnotatedCodeView
                         key={selected.id}
@@ -616,8 +654,15 @@ export default function CodingSubmissionViewer({ problem }) {
                       </div>
                     );
                   })}
-                  {(!selected.run_history || selected.run_history.length === 0) && (
-                    <p className="text-sm text-muted-foreground">No attempt history recorded.</p>
+                  {detailLoading && selected.run_history === undefined ? (
+                    <p className="text-sm text-muted-foreground flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-slate-300 border-t-primary rounded-full animate-spin" />
+                      Loading their attempts...
+                    </p>
+                  ) : (
+                    (!selected.run_history || selected.run_history.length === 0) && (
+                      <p className="text-sm text-muted-foreground">No attempt history recorded.</p>
+                    )
                   )}
                 </div>
               </div>

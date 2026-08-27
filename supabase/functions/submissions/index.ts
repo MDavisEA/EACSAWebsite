@@ -574,14 +574,69 @@ Deno.serve(async (req) => {
       return !!ownsSubmissionRow(data, await myWorkIds());
     };
 
+    // Everything a submission LIST needs, and nothing it doesn't. The columns
+    // left out here are the ones that carry the bulk: `run_history` (a full
+    // code snapshot per Run click, so it grows every time a student presses the
+    // button), `files` (whole snapshotted gist contents), `code`, `responses`,
+    // `line_comments`, `compile_error`. Measured on this project's real data,
+    // those made up roughly two thirds of what a "View Submissions" click
+    // downloaded - and none of it is rendered until the teacher opens one
+    // specific student, which now fetches that row on its own (getFullOne).
+    //
+    // The few things the list genuinely shows from those fields are sent as
+    // derived scalars instead: whether there is any code at all, how many line
+    // comments are attached, the attempt counts, the filenames.
+    const summarizeForList = (s: Record<string, any>) => {
+      const history = Array.isArray(s.run_history) ? s.run_history : [];
+      const firstPassIdx = history.findIndex(
+        (h: Record<string, any>) => h.tests_total > 0 && h.tests_passed === h.tests_total
+      );
+      const files = Array.isArray(s.files) ? s.files : [];
+      const lineComments = Array.isArray(s.line_comments) ? s.line_comments : [];
+      const {
+        run_history: _rh,
+        files: _files,
+        code,
+        responses: _responses,
+        line_comments: _lc,
+        compile_error,
+        session_token: _st,
+        ...rest
+      } = s;
+      return {
+        ...rest,
+        has_code: !!String(code || '').trim(),
+        has_compile_error: !!compile_error,
+        line_comment_count: lineComments.length,
+        file_names: files.map((f: Record<string, any>) => f?.filename).filter(Boolean),
+        run_stats: {
+          total_attempts: history.length,
+          attempts_to_first_pass: firstPassIdx === -1 ? null : firstPassIdx + 1,
+          compile_error_count: history.filter((h: Record<string, any>) => h.compile_error).length,
+        },
+      };
+    };
+
     if (action === 'listForAssignment') {
-      const ids = await myWorkIds();
+      // Ownership by way of the ONE work item being asked about, rather than
+      // building the whole index of everything this teacher owns: that meant
+      // three table scans (every assignment, problem, and project across all
+      // their courses) just to answer "is this one id mine?".
+      const table = body.assignment_id
+        ? 'assignments'
+        : body.coding_problem_id
+        ? 'coding_problems'
+        : body.project_id
+        ? 'projects'
+        : null;
       const requested = body.assignment_id || body.coding_problem_id || body.project_id;
-      const allowed =
-        (body.assignment_id && ids.assignments.includes(body.assignment_id)) ||
-        (body.coding_problem_id && ids.coding.includes(body.coding_problem_id)) ||
-        (body.project_id && ids.projects.includes(body.project_id));
-      if (!requested || !allowed) return json({ results: [] });
+      if (!table || !requested) return json({ results: [] });
+      const { data: workRow } = await admin
+        .from(table)
+        .select('course_id')
+        .eq('id', requested)
+        .maybeSingle();
+      if (!workRow || !myCourses.includes(workRow.course_id)) return json({ results: [] });
 
       const column = body.sort?.column || 'submitted_at';
       const ascending = body.sort?.ascending ?? false;
@@ -591,7 +646,44 @@ Deno.serve(async (req) => {
       if (body.project_id) query = query.eq('project_id', body.project_id);
       const { data, error } = await query.order(column, { ascending });
       if (error) return json({ error: error.message }, 500);
-      return json({ results: data || [] });
+      const rows = data || [];
+      // Opt-in so anything still asking for whole rows (the CSV exports, which
+      // genuinely need every response) keeps working unchanged.
+      return json({ results: body.summary ? rows.map(summarizeForList) : rows });
+    }
+
+    // One full submission row, for when the teacher actually opens a student.
+    // Deliberately narrower than getForGrading, which also fetches the parent
+    // assignment/problem/project - the per-work viewers already hold that, so
+    // re-fetching it would be a second query for something they have.
+    if (action === 'getFullOne') {
+      const { data, error } = await admin
+        .from('submissions')
+        .select('*')
+        .eq('id', body.submission_id)
+        .maybeSingle();
+      if (error) return json({ error: error.message }, 500);
+      if (!data) return json({ error: 'Not found' }, 404);
+
+      // Ownership off the row we already have, rather than ownsSubmissionId ->
+      // myWorkIds, which would scan every piece of work this teacher owns. The
+      // teacher clicks through students one at a time while grading, so this is
+      // a hot path: two queries total instead of four.
+      const table = data.assignment_id
+        ? 'assignments'
+        : data.coding_problem_id
+        ? 'coding_problems'
+        : 'projects';
+      const workId = data.assignment_id || data.coding_problem_id || data.project_id;
+      if (!workId) return json({ error: 'Not found' }, 404);
+      const { data: workRow } = await admin
+        .from(table)
+        .select('course_id')
+        .eq('id', workId)
+        .maybeSingle();
+      if (!workRow || !myCourses.includes(workRow.course_id)) return json({ error: 'Not found' }, 404);
+
+      return json({ result: data });
     }
 
     if (action === 'listAllSubmitted') {

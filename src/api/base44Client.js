@@ -203,6 +203,31 @@ const Submission = {
     throw new Error(`Submission.filter: unsupported criteria shape {${keys}}`);
   },
 
+  // The same list as filter({<work>_id, submitted: true}) but list-shaped: the
+  // fields a table of students actually renders, with the bulky ones
+  // (run_history, files, code, responses, line_comments) replaced by the
+  // derived scalars the list shows instead - has_code, line_comment_count,
+  // file_names, run_stats. Use this for a submissions LIST and getFull(id) for
+  // whichever student the teacher then opens; the whole rows are worth roughly
+  // three times the bytes and none of the difference is on screen until then.
+  async filterSummary(criteria = {}, sort) {
+    const data = await callFunction('submissions', {
+      action: 'listForAssignment',
+      assignment_id: criteria.assignment_id,
+      coding_problem_id: criteria.coding_problem_id,
+      project_id: criteria.project_id,
+      sort: parseSort(sort),
+      summary: true,
+    });
+    return data.results;
+  },
+
+  // One complete submission row, for the student the teacher just opened.
+  async getFull(id) {
+    const data = await callFunction('submissions', { action: 'getFullOne', submission_id: id });
+    return data.result;
+  },
+
   // { byAssignment: {id: n}, byProject: {id: n} } - submitted work with no
   // score yet, i.e. what is waiting on the teacher.
   async gradingCounts() {

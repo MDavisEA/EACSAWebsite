@@ -60,6 +60,36 @@ function sanitizeForStudent(problem: Record<string, any>) {
   };
 }
 
+// `points_possible` is the denominator students see on their score, and it is
+// stored rather than computed on read - so anything that writes a problem
+// without it leaves work that is worth "0 pts" to every student, quietly and
+// wrongly. Derived here instead of trusting the caller to have done the sum:
+// the teacher form always did, but nothing made that a rule, and a problem
+// created any other way (a direct API call, a future importer) had no points
+// at all.
+//
+// Only touched when the write actually carries the fields it is derived from,
+// so a partial patch - flipping is_active, releasing a key - cannot zero it.
+function withDerivedPoints(data: Record<string, any> | undefined) {
+  if (!data) return data;
+  const isReview = data.grading_kind === 'review';
+  if (isReview) {
+    if (!('manual_points' in data)) return data;
+    return { ...data, points_possible: Number(data.manual_points) || 0 };
+  }
+  if (!Array.isArray(data.methods)) return data;
+  const total = data.methods.reduce(
+    (sum: number, m: Record<string, any>) =>
+      sum +
+      (Array.isArray(m?.test_cases) ? m.test_cases : []).reduce(
+        (s: number, tc: Record<string, any>) => s + (Number(tc?.points) || 0),
+        0
+      ),
+    0
+  );
+  return { ...data, points_possible: total };
+}
+
 Deno.serve(async (req) => {
   const preflight = handleOptions(req);
   if (preflight) return preflight;
@@ -237,7 +267,11 @@ Deno.serve(async (req) => {
       if (!(await teacherOwnsCourse(admin, teacher.id, body.data?.course_id))) {
         return json({ error: 'Pick one of your own courses for this problem.' }, 403);
       }
-      const { data, error } = await admin.from('coding_problems').insert(body.data).select().single();
+      const { data, error } = await admin
+        .from('coding_problems')
+        .insert(withDerivedPoints(body.data))
+        .select()
+        .single();
       if (error) return json({ error: error.message }, 500);
       return json({ result: data });
     }
@@ -257,7 +291,7 @@ Deno.serve(async (req) => {
       }
       const { data, error } = await admin
         .from('coding_problems')
-        .update(body.data)
+        .update(withDerivedPoints(body.data))
         .eq('id', body.id)
         .select()
         .single();

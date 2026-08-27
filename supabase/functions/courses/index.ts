@@ -323,12 +323,16 @@ Deno.serve(async (req) => {
         // Chunked the same way unscoredSubmissionsFor (submissions/index.ts)
         // is - these ids ride in an .or() filter that would eventually
         // overflow a URL for a course with a very large amount of work.
+      // buildWorkItems only reads statuses, scores, and dates - the columns
+      // left out here (code, run_history, files, responses) are the bulk of a
+      // submission row and would be fetched for every student on the roster
+      // just to work out who has turned what in.
         const CHUNK = 100;
         for (let i = 0; i < workIds.length; i += CHUNK) {
           const slice = workIds.slice(i, i + CHUNK).join(',');
           const { data, error } = await admin
             .from('submissions')
-            .select('*')
+            .select('id, assignment_id, coding_problem_id, project_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, feedback_released, feedback_reviewed_at')
             .or(`assignment_id.in.(${slice}),coding_problem_id.in.(${slice}),project_id.in.(${slice})`);
           if (error) return json({ error: error.message }, 500);
           courseSubs.push(...(data || []));
