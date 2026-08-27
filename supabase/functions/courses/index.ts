@@ -1,5 +1,10 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
-import { createAdminClient, getTeacherFromRequest, teacherOwnsCourse } from '../_shared/teacherAuth.ts';
+import {
+  createAdminClient,
+  getTeacherFromRequest,
+  teacherCourseIds,
+  teacherOwnsCourse,
+} from '../_shared/teacherAuth.ts';
 import { buildWorkItems } from '../_shared/workItems.ts';
 
 // Courses and rosters exist purely so the teacher can see who has NOT turned
@@ -21,6 +26,16 @@ Deno.serve(async (req) => {
     // would be a hole in all of it.
     const owns = (courseId: string | null | undefined) =>
       teacherOwnsCourse(admin, teacher.id, courseId);
+
+    // The cross-course actions (listMyStudents, myStudentWork) need the whole
+    // set rather than one id at a time. Memoized because both of them use it
+    // more than once and it is the boundary that keeps another teacher's
+    // students out of either result.
+    let myCoursesCache: string[] | null = null;
+    const myCourseIds = async () => {
+      if (!myCoursesCache) myCoursesCache = await teacherCourseIds(admin, teacher.id);
+      return myCoursesCache;
+    };
 
     if (action === 'list') {
       const { data, error } = await admin
@@ -218,6 +233,168 @@ Deno.serve(async (req) => {
           ...r,
           has_signed_in: seenEmails.has((r.email || '').toLowerCase()),
         })),
+      });
+    }
+
+    // Every student across ALL of this teacher's classes, as one list of
+    // people rather than one list per roster. Scoped to `myCourses` the same
+    // way everything else here is, so another teacher's students are not in
+    // it - not even a student the two of them share, whose row in the other
+    // teacher's course is simply not part of this result.
+    //
+    // Deduplicated into one entry per person: a student on two of this
+    // teacher's rosters is one kid to click on, carrying the list of classes
+    // they are in. Keyed on email where there is one (exact, and what Google
+    // sign-in matches on) and on name otherwise, mirroring subsForRow below.
+    if (action === 'listMyStudents') {
+      const myCourses = await myCourseIds();
+      if (myCourses.length === 0) return json({ results: [] });
+      const [rosterRes, coursesRes] = await Promise.all([
+        admin
+          .from('roster_students')
+          .select('id, course_id, section_id, student_name, email')
+          .in('course_id', myCourses)
+          .order('student_name', { ascending: true }),
+        admin.from('courses').select('id, name').in('id', myCourses),
+      ]);
+      if (rosterRes.error) return json({ error: rosterRes.error.message }, 500);
+      if (coursesRes.error) return json({ error: coursesRes.error.message }, 500);
+
+      const courseName = new Map(
+        (coursesRes.data || []).map((c: Record<string, any>) => [c.id, c.name])
+      );
+
+      const byPerson = new Map<string, Record<string, any>>();
+      for (const r of rosterRes.data || []) {
+        const key = (r.email || '').toLowerCase() || `name:${(r.student_name || '').trim().toLowerCase()}`;
+        if (!key) continue;
+        const existing = byPerson.get(key);
+        const entry = existing || {
+          key,
+          student_name: r.student_name,
+          email: r.email || null,
+          courses: [] as Record<string, any>[],
+        };
+        entry.courses.push({
+          roster_id: r.id,
+          course_id: r.course_id,
+          course_name: courseName.get(r.course_id) || '',
+          section_id: r.section_id || null,
+        });
+        // Prefer a spelling that came with an email over one that did not -
+        // the email-matched row is the one that will actually line up with
+        // their submissions.
+        if (!entry.email && r.email) {
+          entry.email = r.email;
+          entry.student_name = r.student_name;
+        }
+        byPerson.set(key, entry);
+      }
+
+      const results = [...byPerson.values()].sort((a, b) =>
+        (a.student_name || '').localeCompare(b.student_name || '')
+      );
+      return json({ results });
+    }
+
+    // Everything one student has done across every class of this teacher's
+    // they are on - the per-student mirror of a work list, built from the same
+    // buildWorkItems the student's own dashboard and the roster detail use, so
+    // "graded" means the same thing in all three.
+    //
+    // Identified by email (or name, for a roster row that never had one)
+    // rather than by roster id, because the point is the person: a student on
+    // two of these classes should show both classes' work in one place.
+    if (action === 'myStudentWork') {
+      const myCourses = await myCourseIds();
+      if (myCourses.length === 0) return json({ result: null });
+      const email = (body.email || '').trim().toLowerCase();
+      const name = (body.student_name || '').trim().toLowerCase();
+      if (!email && !name) return json({ error: 'A student email or name is required' }, 400);
+
+      // Which of MY courses this student is actually on. Everything below is
+      // filtered to these, so work from a class they are not in cannot leak
+      // in, and neither can another teacher's class.
+      const { data: theirRows, error: rosterErr } = await admin
+        .from('roster_students')
+        .select('course_id, student_name, email')
+        .in('course_id', myCourses);
+      if (rosterErr) return json({ error: rosterErr.message }, 500);
+      const mine = (theirRows || []).filter((r: Record<string, any>) =>
+        email
+          ? (r.email || '').toLowerCase() === email
+          : !r.email && (r.student_name || '').trim().toLowerCase() === name
+      );
+      if (mine.length === 0) return json({ result: null });
+      const theirCourseIds = [...new Set(mine.map((r: Record<string, any>) => r.course_id))];
+
+      const [assignments, problems, projects, units, coursesRes] = await Promise.all([
+        admin
+          .from('assignments')
+          .select('id, title, due_date, course_id, unit_id, sort_order, questions, is_active')
+          .in('course_id', theirCourseIds),
+        admin
+          .from('coding_problems')
+          .select('id, title, due_date, course_id, unit_id, sort_order, points_possible, is_active')
+          .in('course_id', theirCourseIds),
+        admin
+          .from('projects')
+          .select('id, title, due_date, course_id, unit_id, sort_order, is_active')
+          .in('course_id', theirCourseIds),
+        admin.from('units').select('id, course_id, name, position').in('course_id', theirCourseIds),
+        admin.from('courses').select('id, name').in('id', theirCourseIds),
+      ]);
+      for (const r of [assignments, problems, projects, units, coursesRes]) {
+        if (r.error) return json({ error: r.error.message }, 500);
+      }
+
+      // Inactive work included on purpose: this view is the whole year for one
+      // student, and a teacher deactivating a finished unit should not erase
+      // it from their record. The per-assignment roster view stays
+      // active-only, since that one is about what is outstanding now.
+      const allWork = [
+        ...(assignments.data || []).map((a: Record<string, any>) => a.id),
+        ...(problems.data || []).map((p: Record<string, any>) => p.id),
+        ...(projects.data || []).map((p: Record<string, any>) => p.id),
+      ];
+
+      let theirSubs: Record<string, any>[] = [];
+      if (allWork.length > 0) {
+        const CHUNK = 100;
+        for (let i = 0; i < allWork.length; i += CHUNK) {
+          const slice = allWork.slice(i, i + CHUNK).join(',');
+          // Same narrow column list as rosterWithStatus - statuses and scores,
+          // not code or file contents.
+          let q = admin
+            .from('submissions')
+            .select(
+              'id, assignment_id, coding_problem_id, project_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, feedback_released, feedback_reviewed_at'
+            )
+            .or(`assignment_id.in.(${slice}),coding_problem_id.in.(${slice}),project_id.in.(${slice})`);
+          q = email
+            ? q.ilike('student_email', email)
+            : q.is('student_email', null).ilike('student_name', name);
+          const { data, error } = await q;
+          if (error) return json({ error: error.message }, 500);
+          theirSubs.push(...(data || []));
+        }
+      }
+
+      const items = buildWorkItems(
+        assignments.data || [],
+        problems.data || [],
+        projects.data || [],
+        theirSubs
+      );
+
+      return json({
+        result: {
+          student_name: mine[0].student_name,
+          email: mine[0].email || null,
+          items,
+          units: units.data || [],
+          courses: coursesRes.data || [],
+        },
       });
     }
 

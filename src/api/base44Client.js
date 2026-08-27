@@ -526,6 +526,26 @@ const Course = {
     return { roster: data.roster || [], units: data.units || [] };
   },
 
+  // Every student across all of this teacher's classes, one entry per person
+  // (not per roster row), each carrying the classes they are in. Scoped
+  // server-side to courses this teacher owns.
+  async listMyStudents() {
+    const data = await callFunction('courses', { action: 'listMyStudents' });
+    return data.results;
+  },
+
+  // One student's whole record across every class of this teacher's they are
+  // on - active and inactive work both, since this is the year's picture
+  // rather than what is outstanding today.
+  async myStudentWork({ email, student_name }) {
+    const data = await callFunction('courses', {
+      action: 'myStudentWork',
+      email: email || null,
+      student_name: student_name || null,
+    });
+    return data.result;
+  },
+
   // Removes one student from a roster - their existing submissions are
   // untouched, since those are matched by email/name at read time rather
   // than linked to the roster row itself.

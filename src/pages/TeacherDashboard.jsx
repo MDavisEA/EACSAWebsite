@@ -15,6 +15,7 @@ import CourseForm from "@/components/teacher/CourseForm";
 import CourseCard from "@/components/teacher/CourseCard";
 import TeachersPanel from "@/components/teacher/TeachersPanel";
 import GlobalCommentsPanel from "@/components/teacher/GlobalCommentsPanel";
+import MyStudentsDialog from "@/components/teacher/MyStudentsDialog";
 import NeedsGradingPanel from "@/components/teacher/NeedsGradingPanel";
 import GradingQueue from "@/components/teacher/GradingQueue";
 import TeacherHome from "@/components/teacher/TeacherHome";
@@ -29,6 +30,7 @@ export default function TeacherDashboard() {
   // dashboard is one authenticated page.
   const [openCourseId, setOpenCourseId] = useState(null);
   const [showNeedsGrading, setShowNeedsGrading] = useState(false);
+  const [showStudents, setShowStudents] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   // Set when the queue is opened on one specific submission - from a
   // student's roster detail - rather than the general "everything waiting on
@@ -512,6 +514,9 @@ export default function TeacherDashboard() {
                 </span>
               )}
             </Button>
+            <Button variant="outline" size="sm" onClick={() => setShowStudents(true)}>
+              Students
+            </Button>
             <Button
               variant={openCourseId ? "ghost" : "outline"}
               size="sm"
@@ -662,6 +667,8 @@ export default function TeacherDashboard() {
         onChanged={loadGradingCounts}
         initialSubmissionId={gradeSubmissionId}
       />
+
+      <MyStudentsDialog open={showStudents} onOpenChange={setShowStudents} />
 
       <NeedsGradingPanel
         open={showNeedsGrading}
