@@ -41,6 +41,7 @@ async function callFunction(name, body) {
     // supabase-js only gives a generic "non-2xx status code" message by
     // default - the actual { error: "..." } body our functions return is
     // parked on error.context (a Response), so unwrap it when present.
+    let message = error.message;
     if (error.context?.json) {
       let parsed;
       try {
@@ -48,9 +49,24 @@ async function callFunction(name, body) {
       } catch {
         // body wasn't JSON - fall through to the generic error below
       }
-      if (parsed?.error) throw new Error(parsed.error);
+      if (parsed?.error) message = parsed.error;
     }
-    throw error;
+
+    // Every Edge Function returns exactly this status when the caller's own
+    // session is the problem (expired, revoked, or missing the
+    // teacher_profiles/domain check) - never for anything about the request
+    // itself, which always gets its own status and message. Previously every
+    // caller across the app surfaced that as a bare, dead-end "Unauthorized"
+    // and left the stale session sitting there to fail the same way again on
+    // the next click. Handled once, here, instead of in every catch block
+    // that calls this: drop the dead session and send them back to a real
+    // sign-in, where the actual problem is obvious.
+    if (error.context?.status === 401) {
+      await supabase.auth.signOut();
+      if (typeof window !== 'undefined') window.location.reload();
+    }
+
+    throw new Error(message);
   }
   if (data?.error) throw new Error(data.error);
   return data;

@@ -66,6 +66,9 @@ export default function TeacherDashboard() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  // A non-auth failure loading the dashboard itself (network blip, server
+  // error) - distinct from loginError, which is about the sign-in form.
+  const [dashboardLoadError, setDashboardLoadError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
 
   const [codingProblems, setCodingProblems] = useState([]);
@@ -105,11 +108,19 @@ export default function TeacherDashboard() {
     setBackfillDone(missing.length);
   };
 
-  // Having a valid Supabase session is NOT enough to be a teacher - the
-  // Edge Functions also require a teacher_profiles row (defense in depth), so
-  // these loads can fail for a perfectly valid login. Surfacing that as a
-  // message beats leaving the page on a spinner forever.
+  // A session that genuinely is not a teacher's (expired, revoked, or - a
+  // Supabase login on its own grants nothing - missing the teacher_profiles
+  // row) is handled once, centrally, in callFunction: it signs out and
+  // reloads to a clean sign-in the moment any call comes back 401. What
+  // lands here is everything else - a network blip, a real server error -
+  // and those are not evidence the account is not a teacher, so this used
+  // to be wrong every time it fired: it force-signed out a perfectly valid
+  // teacher over what might just be a dropped connection, and told them
+  // their account was not registered. Stay signed in and offer a retry
+  // instead; the 401 case never reaches here anymore because the page has
+  // already started reloading by the time this catch would run.
   const loadAll = async () => {
+    setDashboardLoadError("");
     try {
       await Promise.all([
         loadCodingProblems(),
@@ -118,14 +129,9 @@ export default function TeacherDashboard() {
         loadGradingCounts(),
         loadAssignments(),
       ]);
-    } catch {
-      // Sign them back out rather than leaving a live session: the shim treats
-      // any password-established session as a teacher session, so a dangling
-      // one would make the rest of the app take teacher-only branches.
-      await supabase.auth.signOut();
+    } catch (e) {
       setLoading(false);
-      setAuthed(false);
-      setLoginError("That account isn't set up as a teacher on this site.");
+      setDashboardLoadError(e.message || "Couldn't load the dashboard. Check your connection and try again.");
     }
   };
 
@@ -441,6 +447,19 @@ export default function TeacherDashboard() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (dashboardLoadError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="text-center max-w-sm space-y-3">
+          <p className="text-sm text-destructive">{dashboardLoadError}</p>
+          <Button variant="outline" onClick={() => { setLoading(true); loadAll(); }}>
+            Try again
+          </Button>
+        </div>
       </div>
     );
   }
