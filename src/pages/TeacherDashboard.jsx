@@ -674,10 +674,7 @@ export default function TeacherDashboard() {
         open={showNeedsGrading}
         onOpenChange={setShowNeedsGrading}
         onChanged={loadGradingCounts}
-        onNavigate={(courseId) => {
-          setOpenCourseId(courseId);
-          setCourseTab("assignments");
-        }}
+        onGrade={openGradingFor}
       />
 
       <AlertDialog open={!!deletingUnit} onOpenChange={() => setDeletingUnit(null)}>

@@ -17,7 +17,7 @@ const KIND_LABEL = { frq: "FRQ", review: "Coding Assignment", project: "Project"
 // score: a duplicate, an empty placeholder, a student who dropped. Those move
 // to their own section here rather than vanishing, so marking one is easy to
 // undo if it turns out to have been a mistake.
-export default function NeedsGradingPanel({ open, onOpenChange, onNavigate, onChanged }) {
+export default function NeedsGradingPanel({ open, onOpenChange, onGrade, onChanged }) {
   const [items, setItems] = useState(null); // null = not loaded yet
   const [error, setError] = useState("");
   const [showSkipped, setShowSkipped] = useState(false);
@@ -50,8 +50,13 @@ export default function NeedsGradingPanel({ open, onOpenChange, onNavigate, onCh
     }
   };
 
+  // Straight into the grading tool on this exact submission - it used to
+  // just open the course and land on its Assignments tab, leaving the
+  // teacher to find the right card, click "View Submissions", and find the
+  // right student all over again. That defeated the point of a queue that
+  // already knew exactly who and what.
   const goGrade = (item) => {
-    onNavigate(item.course_id);
+    onGrade(item.id);
     onOpenChange(false);
   };
 
