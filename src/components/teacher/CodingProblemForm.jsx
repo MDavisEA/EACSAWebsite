@@ -13,6 +13,7 @@ import { a11yLightEditorTheme } from "@/lib/codeEditorThemes";
 import MethodEditor, { newMethod } from "./MethodEditor";
 import SampleOutputsEditor from "./SampleOutputsEditor";
 import TestCaseEditor, { newTestCase, generateKey } from "./TestCaseEditor";
+import DueTimeQuickPicks from "./DueTimeQuickPicks";
 
 // Defined once at module scope, not inline in JSX - a new array reference
 // on every render makes @uiw/react-codemirror tear down and rebuild the
@@ -340,6 +341,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
             value={form.due_date || ""}
             onChange={(e) => updateField("due_date", e.target.value)}
           />
+          <DueTimeQuickPicks value={form.due_date} onPick={(v) => updateField("due_date", v)} />
           <p className="text-xs text-muted-foreground">Optional — shown to students.</p>
         </div>
       </div>

@@ -11,6 +11,7 @@ import "react-quill/dist/quill.snow.css";
 import { Upload, FileCode2, X, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import SampleOutputsEditor from "./SampleOutputsEditor";
 import MarkdownToolbar, { useMarkdownShortcuts } from "./MarkdownToolbar";
+import DueTimeQuickPicks from "./DueTimeQuickPicks";
 
 const QUILL_MODULES = {
   toolbar: [
@@ -211,6 +212,7 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
             value={form.due_date || ""}
             onChange={(e) => updateField("due_date", e.target.value)}
           />
+          <DueTimeQuickPicks value={form.due_date} onPick={(v) => updateField("due_date", v)} />
           <p className="text-xs text-muted-foreground">
             Optional. Submissions after this are flagged late - it does not block them.
           </p>

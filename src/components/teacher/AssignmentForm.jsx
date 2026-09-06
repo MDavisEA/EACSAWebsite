@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import QuestionEditor from "./QuestionEditor";
+import DueTimeQuickPicks from "./DueTimeQuickPicks";
 
 function generateId() {
   return Math.random().toString(36).substr(2, 9);
@@ -210,6 +211,7 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
             value={form.due_date || ""}
             onChange={(e) => updateField("due_date", e.target.value)}
           />
+          <DueTimeQuickPicks value={form.due_date} onPick={(v) => updateField("due_date", v)} />
         </div>
       </div>
 
