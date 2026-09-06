@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { supabase } from "@/api/supabaseClient";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { BookOpen, LogOut, Lock, ChevronLeft } from "lucide-react";
+import { BookOpen, LogOut, Lock, ChevronLeft, Archive, ArchiveRestore } from "lucide-react";
 import AssignmentForm from "@/components/teacher/AssignmentForm";
 import CodingProblemForm from "@/components/teacher/CodingProblemForm";
 import ProjectForm from "@/components/teacher/ProjectForm";
@@ -397,6 +398,15 @@ export default function TeacherDashboard() {
     }
   };
 
+  // Archiving only ever flips this one flag - everything else about the
+  // course (units, roster, assignments, submissions, grades) is untouched,
+  // and it stays reachable from the collapsed Archived section on My
+  // Classes. Distinct from Delete, which is the actual data-loss action.
+  const handleToggleArchived = async (course) => {
+    await base44.entities.Course.update(course.id, { archived: !course.archived });
+    loadCourses();
+  };
+
   const handleDuplicateProject = async (project) => {
     const { id, created_at, updated_at, ...data } = project;
     await base44.entities.Project.create({
@@ -568,14 +578,37 @@ export default function TeacherDashboard() {
                 <ChevronLeft className="w-4 h-4" /> My Classes
               </button>
               <div className="flex items-center justify-between gap-3">
-                <h1 className="text-2xl font-bold tracking-tight">{openCourse.name}</h1>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { setEditingCourse(openCourse); setShowCourseForm(true); }}
-                >
-                  Rename
-                </Button>
+                <div className="flex items-center gap-2 min-w-0">
+                  <h1 className="text-2xl font-bold tracking-tight truncate">{openCourse.name}</h1>
+                  {openCourse.archived && (
+                    <Badge variant="outline" className="text-muted-foreground flex-shrink-0">Archived</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleToggleArchived(openCourse)}
+                    title={
+                      openCourse.archived
+                        ? "Bring this class back to My Classes"
+                        : "Hide this class from My Classes - nothing about it changes"
+                    }
+                  >
+                    {openCourse.archived ? (
+                      <><ArchiveRestore className="w-4 h-4 mr-1.5" /> Unarchive</>
+                    ) : (
+                      <><Archive className="w-4 h-4 mr-1.5" /> Archive</>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setEditingCourse(openCourse); setShowCourseForm(true); }}
+                  >
+                    Rename
+                  </Button>
+                </div>
               </div>
             </div>
 
