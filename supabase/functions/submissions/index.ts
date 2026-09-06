@@ -537,16 +537,31 @@ Deno.serve(async (req) => {
       if (workIndexCache) return workIndexCache;
       const index = new Map<string, Record<string, any>>();
       if (myCourses.length === 0) { workIndexCache = index; return index; }
-      const [a, c, p] = await Promise.all([
+      const [a, c, p, coursesRes] = await Promise.all([
         admin.from('assignments').select('id, title, course_id, grading_skipped').in('course_id', myCourses),
         admin
           .from('coding_problems')
           .select('id, title, course_id, grading_skipped, grading_kind')
           .in('course_id', myCourses),
         admin.from('projects').select('id, title, course_id, grading_skipped').in('course_id', myCourses),
+        // Only read here for the `archived` flag on each entry below - every
+        // other consumer of this index (ownership checks, listForAssignment,
+        // getFullOne) still needs archived courses' work included, since a
+        // teacher can still open and grade something from one on purpose.
+        // Only gradingCounts/listNeedsGrading actually filter on it.
+        admin.from('courses').select('id, archived').in('id', myCourses),
       ]);
+      const archivedCourseIds = new Set(
+        (coursesRes.data || []).filter((c: Record<string, any>) => c.archived).map((c: Record<string, any>) => c.id)
+      );
       for (const r of a.data || []) {
-        index.set(r.id, { kind: 'frq', title: r.title, course_id: r.course_id, gradable: !r.grading_skipped });
+        index.set(r.id, {
+          kind: 'frq',
+          title: r.title,
+          course_id: r.course_id,
+          gradable: !r.grading_skipped,
+          archived: archivedCourseIds.has(r.course_id),
+        });
       }
       for (const r of c.data || []) {
         // An autograded Mini Problem is scored the instant it is submitted, so
@@ -558,10 +573,17 @@ Deno.serve(async (req) => {
           title: r.title,
           course_id: r.course_id,
           gradable: isReview && !r.grading_skipped,
+          archived: archivedCourseIds.has(r.course_id),
         });
       }
       for (const r of p.data || []) {
-        index.set(r.id, { kind: 'project', title: r.title, course_id: r.course_id, gradable: !r.grading_skipped });
+        index.set(r.id, {
+          kind: 'project',
+          title: r.title,
+          course_id: r.course_id,
+          gradable: !r.grading_skipped,
+          archived: archivedCourseIds.has(r.course_id),
+        });
       }
       workIndexCache = index;
       return index;
@@ -761,7 +783,7 @@ Deno.serve(async (req) => {
     // nag at them from every badge in the app.
     if (action === 'gradingCounts') {
       const index = await myWorkIndex();
-      const gradableIds = [...index.entries()].filter(([, m]) => m.gradable).map(([id]) => id);
+      const gradableIds = [...index.entries()].filter(([, m]) => m.gradable && !m.archived).map(([id]) => id);
       if (gradableIds.length === 0) {
         return json({ result: { byAssignment: {}, byProject: {}, byCodingProblem: {} } });
       }
@@ -796,7 +818,7 @@ Deno.serve(async (req) => {
     // worth surfacing for review.
     if (action === 'listNeedsGrading') {
       const index = await myWorkIndex();
-      const gradableIds = [...index.entries()].filter(([, m]) => m.gradable).map(([id]) => id);
+      const gradableIds = [...index.entries()].filter(([, m]) => m.gradable && !m.archived).map(([id]) => id);
       if (gradableIds.length === 0) return json({ results: [] });
       const rows = await unscoredSubmissionsFor(
         gradableIds,
