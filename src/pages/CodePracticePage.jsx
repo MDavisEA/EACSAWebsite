@@ -472,8 +472,9 @@ export default function CodePracticePage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-slate-100">Submit Final?</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              This runs your code against all checks (including hidden ones) one last time and locks in your score.
-              You won't be able to make further changes. Are you sure?
+              {isReviewKind
+                ? "This locks in your code for your teacher to grade. You won't be able to make further changes. Are you sure?"
+                : "This runs your code against all checks (including hidden ones) one last time and locks in your score. You won't be able to make further changes. Are you sure?"}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
