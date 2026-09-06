@@ -291,6 +291,10 @@ const Submission = {
         // submission reached the teacher empty.
         code: fields.code,
         time_spent_seconds: fields.time_spent_seconds,
+        // Required only for a Coding Assignment (ignored server-side for an
+        // FRQ) - the yes/no-plus-link AI-help disclosure.
+        ai_help_used: fields.ai_help_used,
+        ai_help_link: fields.ai_help_link,
       });
       return data.result;
     }
@@ -324,8 +328,14 @@ const Submission = {
   // snapshot them" action rather than an in-browser editor session, so they
   // don't fit the create/filter/update shape above - two dedicated methods
   // instead.
-  async submitGist(project_id, gist_url) {
-    const data = await callFunction('submissions', { action: 'submitProject', project_id, gist_url });
+  async submitGist(project_id, gist_url, ai_help_used, ai_help_link) {
+    const data = await callFunction('submissions', {
+      action: 'submitProject',
+      project_id,
+      gist_url,
+      ai_help_used,
+      ai_help_link,
+    });
     return data.result;
   },
 

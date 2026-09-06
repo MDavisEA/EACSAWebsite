@@ -8,6 +8,8 @@ import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import SampleOutputs from "@/components/SampleOutputs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import InteractiveRunner from "@/components/InteractiveRunner";
@@ -36,6 +38,10 @@ export default function CodePracticePage() {
   const [runError, setRunError] = useState("");
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  // "I got AI help" disclosure - null means unanswered, which blocks the
+  // actual submit even though the confirm dialog can still be opened.
+  const [aiHelpUsed, setAiHelpUsed] = useState(null);
+  const [aiHelpLink, setAiHelpLink] = useState("");
   const [finalized, setFinalized] = useState(false);
   // Practice runs already spent. Seeded from the resumed submission so the
   // count survives a reload, then kept in step with what the server reports.
@@ -135,6 +141,9 @@ export default function CodePracticePage() {
       coding_problem_id: problemId,
       code,
       final,
+      // Only meaningful (and only validated server-side) on a final submit -
+      // a practice run has nothing to disclose yet.
+      ...(final ? { ai_help_used: aiHelpUsed, ai_help_link: aiHelpLink.trim() || null } : {}),
     });
     return res.data;
   };
@@ -180,6 +189,8 @@ export default function CodePracticePage() {
           code,
           submitted: true,
           submitted_at: new Date().toISOString(),
+          ai_help_used: aiHelpUsed,
+          ai_help_link: aiHelpLink.trim() || null,
         });
         if (draftKey) localStorage.removeItem(draftKey);
         setFinalized(true);
@@ -213,6 +224,8 @@ export default function CodePracticePage() {
   }
 
   const isReviewKind = problem.grading_kind === "review";
+
+  const aiHelpAnswered = aiHelpUsed !== null && (aiHelpUsed === false || aiHelpLink.trim() !== "");
 
   // null when the problem has no cap, so the counter stays hidden entirely.
   const runsLeft =
@@ -476,11 +489,47 @@ export default function CodePracticePage() {
               You won't be able to make further changes. Are you sure?
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          <div className="space-y-2 border-t border-slate-700 pt-4">
+            <Label className="text-slate-200">Did you get help from an AI chatbot on this?</Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={aiHelpUsed === false ? "default" : "outline"}
+                size="sm"
+                className={aiHelpUsed === false ? "" : "bg-transparent border-slate-600 text-slate-100 hover:bg-slate-700 hover:text-slate-100"}
+                onClick={() => { setAiHelpUsed(false); setAiHelpLink(""); }}
+              >
+                No
+              </Button>
+              <Button
+                type="button"
+                variant={aiHelpUsed === true ? "default" : "outline"}
+                size="sm"
+                className={aiHelpUsed === true ? "" : "bg-transparent border-slate-600 text-slate-100 hover:bg-slate-700 hover:text-slate-100"}
+                onClick={() => setAiHelpUsed(true)}
+              >
+                Yes
+              </Button>
+            </div>
+            {aiHelpUsed === true && (
+              <Input
+                autoFocus
+                placeholder="Paste a link to your AI conversation..."
+                value={aiHelpLink}
+                onChange={(e) => setAiHelpLink(e.target.value)}
+                className="bg-[#1e1e1e] border-slate-600 text-slate-100 placeholder:text-slate-500"
+              />
+            )}
+          </div>
+
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-transparent border-slate-600 text-slate-100 hover:bg-slate-700 hover:text-slate-100">
               Keep Working
             </AlertDialogCancel>
-            <AlertDialogAction onClick={handleSubmitFinal}>Submit</AlertDialogAction>
+            <AlertDialogAction onClick={handleSubmitFinal} disabled={!aiHelpAnswered}>
+              Submit
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

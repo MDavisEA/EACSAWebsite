@@ -42,7 +42,8 @@ export async function exportProjectForReview(project, submissions, options = {})
       `## Layout\n` +
       (hasStarterCode ? `- \`starter/\` — the starter code given to every student\n` : "") +
       `- \`submissions/\` — one folder per student, containing their .java files\n` +
-      `- \`_meta.json\` in each folder — gist URL and submission time\n` +
+      `- \`_meta.json\` in each folder — gist URL, submission time, and whether the student disclosed ` +
+      `using an AI chatbot (\`ai_help_used\`) plus a link to that conversation (\`ai_help_link\`) if so\n` +
       `- \`roster.csv\` — every student who submitted, for cross-reference\n`
   );
   zip.file("rubric.md", rubric);
@@ -52,7 +53,7 @@ export async function exportProjectForReview(project, submissions, options = {})
     project.starter_files.forEach((f) => starterFolder.file(f.filename, f.content));
   }
 
-  const rosterRows = ["name,submitted_at,gist_url,file_count"];
+  const rosterRows = ["name,submitted_at,gist_url,file_count,ai_help_used,ai_help_link"];
   const submissionsFolder = zip.folder("submissions");
 
   submissions.forEach((s, i) => {
@@ -67,13 +68,17 @@ export async function exportProjectForReview(project, submissions, options = {})
           gist_url: s.gist_url,
           submitted_at: s.submitted_at,
           gist_captured_at: s.gist_captured_at,
+          ai_help_used: s.ai_help_used ?? null,
+          ai_help_link: s.ai_help_link ?? null,
         },
         null,
         2
       )
     );
     rosterRows.push(
-      [s.student_name, s.submitted_at, s.gist_url, (s.files || []).length].map(toCsvField).join(",")
+      [s.student_name, s.submitted_at, s.gist_url, (s.files || []).length, s.ai_help_used ?? "", s.ai_help_link ?? ""]
+        .map(toCsvField)
+        .join(",")
     );
   });
 

@@ -1,6 +1,7 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
+import { validateAiHelp } from '../_shared/aiHelp.ts';
 
 const PISTON_URL = 'https://emkc.org/api/v2/piston/execute';
 
@@ -479,6 +480,15 @@ Deno.serve(async (req) => {
       return json({ error: 'This submission has already been finalized' }, 409);
     }
 
+    // Only a final submit locks the AI-help disclosure in - a practice run
+    // has nothing to disclose yet.
+    let aiHelp: { ai_help_used: boolean; ai_help_link: string | null } | null = null;
+    if (final) {
+      const validated = validateAiHelp(payload);
+      if ('error' in validated) return json({ error: validated.error }, 400);
+      aiHelp = validated;
+    }
+
     const { data: problems, error: probErr } = await admin
       .from('coding_problems')
       .select('*')
@@ -789,6 +799,8 @@ Deno.serve(async (req) => {
       update.autograde_score = autograde_score;
       update.submitted = true;
       update.submitted_at = new Date().toISOString();
+      update.ai_help_used = aiHelp!.ai_help_used;
+      update.ai_help_link = aiHelp!.ai_help_link;
     }
     await admin.from('submissions').update(update).eq('id', submission_id);
 
