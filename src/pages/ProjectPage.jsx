@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { useGoogleSession, ALLOWED_STUDENT_DOMAIN } from "@/lib/useGoogleSession";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
 import { googleDocEmbedUrl } from "@/lib/googleDoc";
 import SampleOutputs from "@/components/SampleOutputs";
@@ -19,6 +20,9 @@ export default function ProjectPage() {
   const [activeProjects, setActiveProjects] = useState([]);
   const [mySubmission, setMySubmission] = useState(null);
   const [gistUrl, setGistUrl] = useState("");
+  // "I got AI help" disclosure - null means unanswered, which blocks submit.
+  const [aiHelpUsed, setAiHelpUsed] = useState(null);
+  const [aiHelpLink, setAiHelpLink] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -78,17 +82,28 @@ export default function ProjectPage() {
       const sub = await base44.entities.Submission.startProject(projectId);
       setMySubmission(sub);
       if (sub?.gist_url) setGistUrl(sub.gist_url);
+      if (sub?.ai_help_used != null) {
+        setAiHelpUsed(sub.ai_help_used);
+        setAiHelpLink(sub.ai_help_link || "");
+      }
     } catch {
       // ignored on purpose
     }
   };
 
+  const aiHelpAnswered = aiHelpUsed !== null && (aiHelpUsed === false || aiHelpLink.trim() !== "");
+
   const handleSubmit = async () => {
-    if (!gistUrl.trim()) return;
+    if (!gistUrl.trim() || !aiHelpAnswered) return;
     setSubmitting(true);
     setError("");
     try {
-      const sub = await base44.entities.Submission.submitGist(projectId, gistUrl.trim());
+      const sub = await base44.entities.Submission.submitGist(
+        projectId,
+        gistUrl.trim(),
+        aiHelpUsed,
+        aiHelpLink.trim() || null
+      );
       setMySubmission(sub);
     } catch (e) {
       setError(e.message || "Something went wrong submitting your gist. Please try again.");
@@ -318,9 +333,44 @@ export default function ProjectPage() {
                 />
               </div>
 
+              <div className="space-y-2 border-t pt-4">
+                <Label>Did you get help from an AI chatbot on this?</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={aiHelpUsed === false ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => { setAiHelpUsed(false); setAiHelpLink(""); }}
+                  >
+                    No
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={aiHelpUsed === true ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setAiHelpUsed(true)}
+                  >
+                    Yes
+                  </Button>
+                </div>
+                {aiHelpUsed === true && (
+                  <Input
+                    autoFocus
+                    placeholder="Paste a link to your AI conversation..."
+                    value={aiHelpLink}
+                    onChange={(e) => setAiHelpLink(e.target.value)}
+                  />
+                )}
+              </div>
+
               {error && <p className="text-sm text-destructive">{error}</p>}
 
-              <Button onClick={handleSubmit} disabled={submitting || !gistUrl.trim()} className="w-full" size="lg">
+              <Button
+                onClick={handleSubmit}
+                disabled={submitting || !gistUrl.trim() || !aiHelpAnswered}
+                className="w-full"
+                size="lg"
+              >
                 {submitting ? "Submitting..." : mySubmission?.submitted ? "Resubmit" : "Submit"}
               </Button>
               <p className="text-xs text-center text-muted-foreground">

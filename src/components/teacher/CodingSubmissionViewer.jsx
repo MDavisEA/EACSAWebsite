@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
 import AnnotatedCodeView from "./AnnotatedCodeView";
 import GradesDialog from "./GradesDialog";
+import AiHelpBadge from "./AiHelpBadge";
 import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 
 // Attempt counts come off `run_stats`, which the server derives from
@@ -323,6 +324,7 @@ export default function CodingSubmissionViewer({ problem }) {
               <TableHead>Submitted</TableHead>
               <TableHead>Score</TableHead>
               <TableHead>Attempts</TableHead>
+              <TableHead>AI Help</TableHead>
               <TableHead>Access Code</TableHead>
               <TableHead></TableHead>
             </TableRow>
@@ -350,6 +352,9 @@ export default function CodingSubmissionViewer({ problem }) {
                         <AlertTriangle className="w-3 h-3 text-amber-500" title={`${stats.compileErrorCount} compile error(s)`} />
                       )}
                     </span>
+                  </TableCell>
+                  <TableCell>
+                    <AiHelpBadge submission={s} />
                   </TableCell>
                   <TableCell>
                     {s.access_code ? (
@@ -466,6 +471,7 @@ export default function CodingSubmissionViewer({ problem }) {
                       {selectedStats.compileErrorCount} compile error{selectedStats.compileErrorCount !== 1 ? "s" : ""}
                     </span>
                   )}
+                  <AiHelpBadge submission={selected} />
                 </div>
               </DialogHeader>
 

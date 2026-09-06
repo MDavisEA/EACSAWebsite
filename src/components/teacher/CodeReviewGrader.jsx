@@ -15,6 +15,7 @@ import HighlightedCode from "@/components/HighlightedCode";
 import ResizableDivider from "@/components/exam/ResizableDivider";
 import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 import GradesDialog from "./GradesDialog";
+import AiHelpBadge from "./AiHelpBadge";
 import { groupByStudent } from "@/lib/groupSubmissionsByStudent";
 import {
   Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, User, KeyRound,
@@ -307,6 +308,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                   {attempts} attempts
                 </Badge>
               )}
+              <AiHelpBadge submission={s} />
 
               <span className="ml-auto flex items-center gap-2 flex-shrink-0">
                 {(s.line_comment_count ?? 0) > 0 && (
@@ -352,6 +354,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                   turned in {format(new Date(current.submitted_at), "MMM d, h:mm a")}
                 </span>
               )}
+              {current && <AiHelpBadge submission={current} />}
             </DialogTitle>
           </DialogHeader>
 

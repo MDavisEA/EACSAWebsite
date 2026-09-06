@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { FileDown, Trash2, ExternalLink, Loader2, Upload, CheckCircle2, XCircle, AlertTriangle, RefreshCw, UserX, ChevronDown, ChevronUp, Clock, Send } from "lucide-react";
+import AiHelpBadge from "./AiHelpBadge";
 import { exportProjectForReview } from "@/lib/exportProjectZip";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
 import { getCachedList, setCachedList } from "@/lib/submissionListCache";
@@ -351,6 +352,7 @@ export default function ProjectSubmissionViewer({ project }) {
               <TableHead>Student</TableHead>
               <TableHead>Submitted</TableHead>
               <TableHead>Files</TableHead>
+              <TableHead>AI Help</TableHead>
               <TableHead>Feedback</TableHead>
               <TableHead>Gist</TableHead>
               <TableHead className="w-10"></TableHead>
@@ -388,6 +390,9 @@ export default function ProjectSubmissionViewer({ project }) {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{(s.file_names || []).length}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <AiHelpBadge submission={s} />
                   </TableCell>
                   <TableCell>
                     <button
@@ -454,7 +459,10 @@ export default function ProjectSubmissionViewer({ project }) {
       <Dialog open={!!reviewTarget} onOpenChange={(open) => !open && setReviewTarget(null)}>
         <DialogContent className="max-w-[95vw] w-[95vw] max-h-[93vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Feedback — {reviewTarget?.student_name}</DialogTitle>
+            <DialogTitle className="flex items-center gap-3">
+              <span>Feedback — {reviewTarget?.student_name}</span>
+              {reviewTarget && <AiHelpBadge submission={reviewTarget} />}
+            </DialogTitle>
             <DialogDescription>
               Paste the review from your Claude/Cowork pass, edit it however you like, then release it
               when you are ready. Nothing here is visible to the student until you release it.

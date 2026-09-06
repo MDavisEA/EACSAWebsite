@@ -3,6 +3,7 @@ import { createAdminClient, getTeacherFromRequest, teacherCourseIds, teacherOwns
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { extractGistId, fetchGistJavaFiles, fetchGistUpdatedAt } from '../_shared/gist.ts';
 import { fetchOverridesByWorkId } from '../_shared/sectionDueDates.ts';
+import { validateAiHelp } from '../_shared/aiHelp.ts';
 
 function generateAccessCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 - avoids ambiguity
@@ -324,17 +325,29 @@ Deno.serve(async (req) => {
       const sub = await verifyOwnership(admin, body.submission_id, body.session_token, student);
       if (!sub) return json({ error: 'Unauthorized' }, 401);
       if (sub.submitted) return json({ result: sub }); // idempotent - already submitted
+      // A hand-graded Coding Assignment turns in code through this same
+      // action (an autograded one is finalized by run-java-tests instead), so
+      // the AI-help disclosure is required here too - but only for that case,
+      // not for an FRQ (also finalized here, via `responses`), which this
+      // disclosure was never meant to cover.
+      const isCodingAssignment = !!sub.coding_problem_id;
+      const patch: Record<string, unknown> = {
+        submitted: true,
+        submitted_at: new Date().toISOString(),
+        time_spent_seconds: body.time_spent_seconds ?? null,
+      };
+      if (isCodingAssignment) {
+        const aiHelp = validateAiHelp(body);
+        if ('error' in aiHelp) return json({ error: aiHelp.error }, 400);
+        patch.ai_help_used = aiHelp.ai_help_used;
+        patch.ai_help_link = aiHelp.ai_help_link;
+      }
       // `code` is what a hand-graded Coding Assignment turns in, and it was
       // simply missing here: this handler was written when the only thing a
       // student submitted was FRQ responses, and autograded problems get their
       // code written by run-java-tests instead. So a Coding Assignment's code
       // never reached the database from any path, and the teacher opened an
       // empty submission every time.
-      const patch: Record<string, unknown> = {
-        submitted: true,
-        submitted_at: new Date().toISOString(),
-        time_spent_seconds: body.time_spent_seconds ?? null,
-      };
       if (body.responses !== undefined) patch.responses = body.responses;
       if (typeof body.code === 'string') patch.code = body.code;
       const { data, error } = await admin
@@ -429,6 +442,8 @@ Deno.serve(async (req) => {
       const { project_id, gist_url } = body;
       if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
       if (!project_id || !gist_url) return json({ error: 'project_id and gist_url are required' }, 400);
+      const aiHelp = validateAiHelp(body);
+      if ('error' in aiHelp) return json({ error: aiHelp.error }, 400);
 
       // A project turned inactive should stop accepting submissions, including
       // from a student holding a direct link. Due date is deliberately not
@@ -469,6 +484,8 @@ Deno.serve(async (req) => {
         student_email: student.email,
         gist_url,
         files: fetched.files,
+        ai_help_used: aiHelp.ai_help_used,
+        ai_help_link: aiHelp.ai_help_link,
         gist_captured_at: new Date().toISOString(),
         gist_updated_at: fetched.gistUpdatedAt,
         submitted: true,
