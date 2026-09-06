@@ -12,6 +12,41 @@ function looksLikeHeader(fields) {
   return fields.every((f) => HEADER_WORDS.includes(f.trim().toLowerCase()));
 }
 
+// A plain `line.split(",")` leaves quotes in verbatim - a gradebook export
+// that quotes every field regardless of content (`"Bradica Logan",email@…`)
+// came through with the quotes still on the name - and would mis-split a
+// "Last, First" name that is quoted specifically because it contains a
+// comma (`"Logan, Bradica"`). Handles both: a comma inside a quoted field is
+// part of the field, not a separator, and a doubled `""` inside quotes is an
+// escaped literal quote.
+function splitCsvLine(line) {
+  const fields = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        current += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      fields.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current);
+  return fields.map((f) => f.trim());
+}
+
 export function parseRosterCsv(text) {
   const lines = (text || "")
     .split(/\r?\n/)
@@ -19,7 +54,7 @@ export function parseRosterCsv(text) {
     .filter(Boolean);
 
   const rows = lines.map((line) => {
-    const parts = line.split(",").map((p) => p.trim());
+    const parts = splitCsvLine(line);
     // Anything that looks like an email goes in the email slot regardless of
     // column order, so "email,name" pastes work too.
     const emailIdx = parts.findIndex((p) => p.includes("@"));
@@ -28,7 +63,7 @@ export function parseRosterCsv(text) {
     return { student_name: name, email: parts[emailIdx] };
   });
 
-  if (rows.length > 0 && looksLikeHeader(lines[0].split(","))) rows.shift();
+  if (rows.length > 0 && looksLikeHeader(splitCsvLine(lines[0]))) rows.shift();
 
   return rows.filter((r) => r.student_name);
 }
