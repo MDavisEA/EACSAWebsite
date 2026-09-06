@@ -12,6 +12,7 @@ import { Upload, FileCode2, X, Loader2, ChevronDown, ChevronUp } from "lucide-re
 import SampleOutputsEditor from "./SampleOutputsEditor";
 import MarkdownToolbar, { useMarkdownShortcuts } from "./MarkdownToolbar";
 import DueTimeQuickPicks from "./DueTimeQuickPicks";
+import SectionDueDatesEditor from "./SectionDueDatesEditor";
 
 const QUILL_MODULES = {
   toolbar: [
@@ -54,6 +55,7 @@ function defaultForm() {
     course_id: null,
     unit_id: null,
     due_date: "",
+    section_due_dates: [],
     review_prompt: DEFAULT_REVIEW_PROMPT,
     is_active: true,
   };
@@ -84,7 +86,15 @@ function mergeFiles(existing, incoming) {
 export default function ProjectForm({ initial, courses = [], onSave, onCancel }) {
   const [form, setForm] = useState(
     initial
-      ? { ...defaultForm(), ...initial, due_date: toLocalInputValue(initial.due_date) }
+      ? {
+          ...defaultForm(),
+          ...initial,
+          due_date: toLocalInputValue(initial.due_date),
+          section_due_dates: (initial.section_due_dates || []).map((e) => ({
+            section_id: e.section_id,
+            due_date: toLocalInputValue(e.due_date),
+          })),
+        }
       : { ...defaultForm(), course_id: initial?.course_id ?? null, unit_id: initial?.unit_id ?? null }
   );
   const [dragActive, setDragActive] = useState(false);
@@ -106,6 +116,9 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
     onSave({
       ...form,
       due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
+      section_due_dates: (form.section_due_dates || [])
+        .filter((e) => e.due_date)
+        .map((e) => ({ section_id: e.section_id, due_date: new Date(e.due_date).toISOString() })),
       course_id: form.course_id || null,
       unit_id: form.unit_id || null,
     });
@@ -218,6 +231,12 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
           </p>
         </div>
       </div>
+
+      <SectionDueDatesEditor
+        sections={courses.find((c) => c.id === form.course_id)?.sections || []}
+        value={form.section_due_dates}
+        onChange={(v) => updateField("section_due_dates", v)}
+      />
 
       <div className="space-y-2">
         <Label>Assignment Description</Label>

@@ -7,6 +7,7 @@ import {
   teacherOwnsRow,
 } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
+import { attachSectionDueDates, fetchOverridesByWorkId, replaceSectionDueDates, resolveDueDates } from '../_shared/sectionDueDates.ts';
 
 // Students get starter code, description, and the LABELS of test cases
 // (so they know what's being checked) but never expected_output, method_args,
@@ -113,7 +114,26 @@ Deno.serve(async (req) => {
         .eq('is_active', true)
         .maybeSingle();
       if (error) return json({ error: error.message }, 500);
-      return json({ result: data ? sanitizeForStudent(data) : null });
+      if (!data) return json({ result: null });
+
+      // Same reasoning as assignments' examGet: a signed-in student on a
+      // block with its own due date sees that date, anonymous/access-code
+      // students see the base due_date unchanged.
+      const student = await getStudentFromRequest(req, admin);
+      let resolved = data;
+      if (student && data.course_id) {
+        const { data: rosterRow } = await admin
+          .from('roster_students')
+          .select('section_id')
+          .eq('course_id', data.course_id)
+          .ilike('email', student.email)
+          .maybeSingle();
+        if (rosterRow?.section_id) {
+          const overrides = await fetchOverridesByWorkId(admin, 'coding_problem_id', [data.id]);
+          [resolved] = resolveDueDates([data], overrides, () => rosterRow.section_id);
+        }
+      }
+      return json({ result: sanitizeForStudent(resolved) });
     }
 
     // Same sanitized shape as getActive, but for looking back at a piece of
@@ -218,7 +238,7 @@ Deno.serve(async (req) => {
         .in('course_id', mine)
         .order('created_at', { ascending: false });
       if (error) return json({ error: error.message }, 500);
-      return json({ results: data || [] });
+      return json({ results: await attachSectionDueDates(admin, 'coding_problem_id', data || []) });
     }
 
     // Read-only view of what colleagues have built, for copying. Deliberately
@@ -267,13 +287,20 @@ Deno.serve(async (req) => {
       if (!(await teacherOwnsCourse(admin, teacher.id, body.data?.course_id))) {
         return json({ error: 'Pick one of your own courses for this problem.' }, 403);
       }
+      // Not a real column - stored in its own table, keyed to the row
+      // created below. Stripped before withDerivedPoints so it is never
+      // spread back into the insert payload.
+      const { section_due_dates, ...rest } = body.data || {};
       const { data, error } = await admin
         .from('coding_problems')
-        .insert(withDerivedPoints(body.data))
+        .insert(withDerivedPoints(rest))
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
-      return json({ result: data });
+      const { error: sddErr } = await replaceSectionDueDates(admin, 'coding_problem_id', data.id, section_due_dates);
+      if (sddErr) return json({ error: sddErr }, 500);
+      const [withOverrides] = await attachSectionDueDates(admin, 'coding_problem_id', [data]);
+      return json({ result: withOverrides });
     }
 
     if (action === 'update') {
@@ -289,14 +316,20 @@ Deno.serve(async (req) => {
       ) {
         return json({ error: 'Pick one of your own courses for this problem.' }, 403);
       }
+      const { section_due_dates, ...rest } = body.data || {};
+      if (section_due_dates !== undefined) {
+        const { error: sddErr } = await replaceSectionDueDates(admin, 'coding_problem_id', body.id, section_due_dates);
+        if (sddErr) return json({ error: sddErr }, 500);
+      }
       const { data, error } = await admin
         .from('coding_problems')
-        .update(withDerivedPoints(body.data))
+        .update(withDerivedPoints(rest))
         .eq('id', body.id)
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
-      return json({ result: data });
+      const [withOverrides] = await attachSectionDueDates(admin, 'coding_problem_id', [data]);
+      return json({ result: withOverrides });
     }
 
     if (action === 'delete') {

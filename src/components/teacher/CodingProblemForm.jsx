@@ -14,6 +14,7 @@ import MethodEditor, { newMethod } from "./MethodEditor";
 import SampleOutputsEditor from "./SampleOutputsEditor";
 import TestCaseEditor, { newTestCase, generateKey } from "./TestCaseEditor";
 import DueTimeQuickPicks from "./DueTimeQuickPicks";
+import SectionDueDatesEditor from "./SectionDueDatesEditor";
 
 // Defined once at module scope, not inline in JSX - a new array reference
 // on every render makes @uiw/react-codemirror tear down and rebuild the
@@ -58,6 +59,7 @@ function defaultForm() {
     answer_key_notes_html: "",
     sample_outputs: [],
     due_date: "",
+    section_due_dates: [],
     max_test_runs: 5,
     is_active: true,
   };
@@ -99,6 +101,10 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           ...defaultForm(),
           ...initial,
           due_date: toLocalInputValue(initial.due_date),
+          section_due_dates: (initial.section_due_dates || []).map((e) => ({
+            section_id: e.section_id,
+            due_date: toLocalInputValue(e.due_date),
+          })),
           methods: initial.methods?.length ? initial.methods.map(hydrateMethod) : [newMethod()],
         }
       // Spread the whole seed, not just course_id/unit_id - it used to drop
@@ -246,6 +252,9 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
       course_id: form.course_id || null,
       unit_id: form.unit_id || null,
       due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
+      section_due_dates: (form.section_due_dates || [])
+        .filter((e) => e.due_date)
+        .map((e) => ({ section_id: e.section_id, due_date: new Date(e.due_date).toISOString() })),
       methods: form.methods.map(({ _uid, ...m }) => ({
         ...m,
         method_arg_types: m.method_arg_types.map((t) => t.trim()).filter(Boolean),
@@ -345,6 +354,12 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           <p className="text-xs text-muted-foreground">Optional — shown to students.</p>
         </div>
       </div>
+
+      <SectionDueDatesEditor
+        sections={courses.find((c) => c.id === form.course_id)?.sections || []}
+        value={form.section_due_dates}
+        onChange={(v) => updateField("section_due_dates", v)}
+      />
 
       {!isReview && (
       <div className="space-y-2 max-w-xs">

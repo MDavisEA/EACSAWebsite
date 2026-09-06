@@ -6,6 +6,8 @@ import {
   teacherOwnsCourse,
   teacherOwnsRow,
 } from '../_shared/teacherAuth.ts';
+import { getStudentFromRequest } from '../_shared/studentAuth.ts';
+import { attachSectionDueDates, fetchOverridesByWorkId, replaceSectionDueDates, resolveDueDates } from '../_shared/sectionDueDates.ts';
 
 // Fields that must NEVER be sent to a student who is actively taking an exam -
 // showing these would just be handing out the answers.
@@ -53,7 +55,27 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) return json({ error: error.message }, 500);
       if (!data) return json({ results: [] });
-      return json({ results: [stripAnswerKeys(data)] });
+
+      // A signed-in student on a block with its own due date sees THAT date,
+      // not the assignment's base one. Anonymous/access-code students (no
+      // token, or one that fails the school-domain check) fall back to the
+      // base due_date unchanged - exactly the pre-existing behavior, since
+      // there is no identity here to resolve a section from.
+      const student = await getStudentFromRequest(req, admin);
+      let resolved = data;
+      if (student && data.course_id) {
+        const { data: rosterRow } = await admin
+          .from('roster_students')
+          .select('section_id')
+          .eq('course_id', data.course_id)
+          .ilike('email', student.email)
+          .maybeSingle();
+        if (rosterRow?.section_id) {
+          const overrides = await fetchOverridesByWorkId(admin, 'assignment_id', [data.id]);
+          [resolved] = resolveDueDates([data], overrides, () => rosterRow.section_id);
+        }
+      }
+      return json({ results: [stripAnswerKeys(resolved)] });
     }
 
     if (action === 'listFeatured') {
@@ -88,20 +110,27 @@ Deno.serve(async (req) => {
         .in('course_id', mine)
         .order(column, { ascending });
       if (error) return json({ error: error.message }, 500);
-      return json({ results: data || [] });
+      // The form hydrates its per-section rows from this when editing.
+      return json({ results: await attachSectionDueDates(admin, 'assignment_id', data || []) });
     }
 
     if (action === 'create') {
       if (!(await teacherOwnsCourse(admin, teacher.id, body.data?.course_id))) {
         return json({ error: 'Pick one of your own courses for this assignment.' }, 403);
       }
+      // Not a real column on assignments - stored in its own table, keyed to
+      // the row created below.
+      const { section_due_dates, ...insertData } = body.data || {};
       const { data, error } = await admin
         .from('assignments')
-        .insert(body.data)
+        .insert(insertData)
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
-      return json({ result: data });
+      const { error: sddErr } = await replaceSectionDueDates(admin, 'assignment_id', data.id, section_due_dates);
+      if (sddErr) return json({ error: sddErr }, 500);
+      const [withOverrides] = await attachSectionDueDates(admin, 'assignment_id', [data]);
+      return json({ result: withOverrides });
     }
 
     if (action === 'update') {
@@ -111,14 +140,20 @@ Deno.serve(async (req) => {
       if (body.data?.course_id && !(await teacherOwnsCourse(admin, teacher.id, body.data.course_id))) {
         return json({ error: 'Pick one of your own courses for this assignment.' }, 403);
       }
+      const { section_due_dates, ...updateData } = body.data || {};
+      if (section_due_dates !== undefined) {
+        const { error: sddErr } = await replaceSectionDueDates(admin, 'assignment_id', body.id, section_due_dates);
+        if (sddErr) return json({ error: sddErr }, 500);
+      }
       const { data, error } = await admin
         .from('assignments')
-        .update(body.data)
+        .update(updateData)
         .eq('id', body.id)
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
-      return json({ result: data });
+      const [withOverrides] = await attachSectionDueDates(admin, 'assignment_id', [data]);
+      return json({ result: withOverrides });
     }
 
     if (action === 'delete') {

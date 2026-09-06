@@ -76,6 +76,20 @@ export default function CourseCard({ course, allCourses = [], onEdit, onDelete, 
   const parsed = parseRosterCsv(csvText);
   const withoutEmail = parsed.filter((p) => !p.email).length;
 
+  // Ordered the same way the Sections editor lists them, with anyone not on
+  // a listed section (or on one since deleted) collected into a trailing "No
+  // section" group rather than disappearing from the roster.
+  const rosterBySection = (() => {
+    const bySection = new Map(
+      (course.sections || []).map((sec) => [sec.id, { section: sec, rows: [] }])
+    );
+    const none = { section: null, rows: [] };
+    for (const r of roster) {
+      (bySection.get(r.section_id) || none).rows.push(r);
+    }
+    return [...bySection.values(), none].filter((g) => g.rows.length > 0);
+  })();
+
   const handleUpload = async () => {
     if (parsed.length === 0) return;
     setUploading(true);
@@ -188,69 +202,90 @@ export default function CourseCard({ course, allCourses = [], onEdit, onDelete, 
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {roster.map((s) => {
-                        const items = s.items || [];
-                        const missing = items.filter((i) => i.status === "not_started").length;
-                        const inProgress = items.filter((i) => i.status === "in_progress").length;
-                        const newFeedback = items.filter((i) => i.status === "graded").length;
-                        return (
-                          <TableRow
-                            key={s.id}
-                            className="cursor-pointer hover:bg-slate-50/70"
-                            onClick={() => setViewingStudent(s)}
-                          >
-                            <TableCell className="font-medium">{s.student_name}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {s.email || <span className="italic">no email</span>}
-                            </TableCell>
-                            <TableCell>
-                              {missing === 0 && inProgress === 0 ? (
-                                <span className="text-xs text-emerald-600">All caught up</span>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">
-                                  {[
-                                    missing > 0 ? `${missing} missing` : null,
-                                    inProgress > 0 ? `${inProgress} in progress` : null,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(", ")}
+                      {rosterBySection.map((group) => (
+                        <React.Fragment key={group.section?.id ?? "none"}>
+                          {/* Only worth a heading once there is more than one
+                              group to tell apart - a course with no sections
+                              (or where every student is in the same one)
+                              renders as the same flat list as before this
+                              existed. */}
+                          {rosterBySection.length > 1 && (
+                            <TableRow className="hover:bg-transparent">
+                              <TableCell colSpan={5} className="bg-slate-50 py-1.5">
+                                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {group.section?.name || "No section"}
                                 </span>
-                              )}
-                              {newFeedback > 0 && (
-                                <span className="text-xs text-emerald-700 ml-2">
-                                  {newFeedback} new feedback
+                                <span className="text-xs text-muted-foreground ml-1.5">
+                                  ({group.rows.length})
                                 </span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {s.has_signed_in ? (
-                                <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-                                  <Check className="w-3.5 h-3.5" /> Yes
-                                </span>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">Not yet</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="flex items-center gap-1">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setEditingStudent(s); }}
-                                title="Edit or move"
-                                className="text-slate-300 hover:text-foreground transition-colors p-1"
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {group.rows.map((s) => {
+                            const items = s.items || [];
+                            const missing = items.filter((i) => i.status === "not_started").length;
+                            const inProgress = items.filter((i) => i.status === "in_progress").length;
+                            const newFeedback = items.filter((i) => i.status === "graded").length;
+                            return (
+                              <TableRow
+                                key={s.id}
+                                className="cursor-pointer hover:bg-slate-50/70"
+                                onClick={() => setViewingStudent(s)}
                               >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setRemovingStudent(s); }}
-                                title="Remove from this class"
-                                className="text-slate-300 hover:text-destructive transition-colors p-1"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                                <TableCell className="font-medium">{s.student_name}</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                  {s.email || <span className="italic">no email</span>}
+                                </TableCell>
+                                <TableCell>
+                                  {missing === 0 && inProgress === 0 ? (
+                                    <span className="text-xs text-emerald-600">All caught up</span>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">
+                                      {[
+                                        missing > 0 ? `${missing} missing` : null,
+                                        inProgress > 0 ? `${inProgress} in progress` : null,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(", ")}
+                                    </span>
+                                  )}
+                                  {newFeedback > 0 && (
+                                    <span className="text-xs text-emerald-700 ml-2">
+                                      {newFeedback} new feedback
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {s.has_signed_in ? (
+                                    <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                      <Check className="w-3.5 h-3.5" /> Yes
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Not yet</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="flex items-center gap-1">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setEditingStudent(s); }}
+                                    title="Edit or move"
+                                    className="text-slate-300 hover:text-foreground transition-colors p-1"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setRemovingStudent(s); }}
+                                    title="Remove from this class"
+                                    className="text-slate-300 hover:text-destructive transition-colors p-1"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </React.Fragment>
+                      ))}
                     </TableBody>
                   </Table>
                   {roster.some((s) => !s.has_signed_in) && (

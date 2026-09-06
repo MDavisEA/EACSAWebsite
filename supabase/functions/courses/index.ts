@@ -6,6 +6,7 @@ import {
   teacherOwnsCourse,
 } from '../_shared/teacherAuth.ts';
 import { buildWorkItems } from '../_shared/workItems.ts';
+import { fetchOverridesByWorkId, resolveDueDates } from '../_shared/sectionDueDates.ts';
 
 // Courses and rosters exist purely so the teacher can see who has NOT turned
 // work in. Nothing here is student-facing - every action is teacher-only.
@@ -317,7 +318,7 @@ Deno.serve(async (req) => {
       // in, and neither can another teacher's class.
       const { data: theirRows, error: rosterErr } = await admin
         .from('roster_students')
-        .select('course_id, student_name, email')
+        .select('course_id, student_name, email, section_id')
         .in('course_id', myCourses);
       if (rosterErr) return json({ error: rosterErr.message }, 500);
       const mine = (theirRows || []).filter((r: Record<string, any>) =>
@@ -380,10 +381,23 @@ Deno.serve(async (req) => {
         }
       }
 
+      // This one student's section per course they are on - each work item
+      // below belongs to exactly one course, so its own course_id picks the
+      // right section to resolve a due-date override against.
+      const sectionByCourse = new Map<string, string | null>(
+        mine.map((r: Record<string, any>) => [r.course_id, r.section_id || null])
+      );
+      const sectionForRow = (row: Record<string, any>) => sectionByCourse.get(row.course_id) ?? null;
+      const [assignmentOverrides, problemOverrides, projectOverrides] = await Promise.all([
+        fetchOverridesByWorkId(admin, 'assignment_id', (assignments.data || []).map((a: Record<string, any>) => a.id)),
+        fetchOverridesByWorkId(admin, 'coding_problem_id', (problems.data || []).map((p: Record<string, any>) => p.id)),
+        fetchOverridesByWorkId(admin, 'project_id', (projects.data || []).map((p: Record<string, any>) => p.id)),
+      ]);
+
       const items = buildWorkItems(
-        assignments.data || [],
-        problems.data || [],
-        projects.data || [],
+        resolveDueDates(assignments.data || [], assignmentOverrides, sectionForRow),
+        resolveDueDates(problems.data || [], problemOverrides, sectionForRow),
+        resolveDueDates(projects.data || [], projectOverrides, sectionForRow),
         theirSubs
       );
 
@@ -528,11 +542,28 @@ Deno.serve(async (req) => {
         return courseSubs.filter((s) => !s.student_email && (s.student_name || '').trim().toLowerCase() === name);
       };
 
-      const roster = (rosterRes.data || []).map((r: Record<string, any>) => ({
-        ...r,
-        has_signed_in: seenEmails.has((r.email || '').toLowerCase()),
-        items: buildWorkItems(activeAssignments, activeProblems, activeProjects, subsForRow(r)),
-      }));
+      // Fetched once for the whole roster, then resolved per row below - each
+      // roster row can be in a different section, so which override (if any)
+      // applies has to be looked up fresh per student, not once for the class.
+      const [assignmentOverrides, problemOverrides, projectOverrides] = await Promise.all([
+        fetchOverridesByWorkId(admin, 'assignment_id', activeAssignments.map((a: Record<string, any>) => a.id)),
+        fetchOverridesByWorkId(admin, 'coding_problem_id', activeProblems.map((p: Record<string, any>) => p.id)),
+        fetchOverridesByWorkId(admin, 'project_id', activeProjects.map((p: Record<string, any>) => p.id)),
+      ]);
+
+      const roster = (rosterRes.data || []).map((r: Record<string, any>) => {
+        const forThisRow = () => r.section_id;
+        return {
+          ...r,
+          has_signed_in: seenEmails.has((r.email || '').toLowerCase()),
+          items: buildWorkItems(
+            resolveDueDates(activeAssignments, assignmentOverrides, forThisRow),
+            resolveDueDates(activeProblems, problemOverrides, forThisRow),
+            resolveDueDates(activeProjects, projectOverrides, forThisRow),
+            subsForRow(r)
+          ),
+        };
+      });
 
       return json({ roster, units: units.data || [] });
     }

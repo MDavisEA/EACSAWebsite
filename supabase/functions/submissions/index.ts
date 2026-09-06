@@ -2,6 +2,7 @@ import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest, teacherCourseIds, teacherOwnsRow } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { extractGistId, fetchGistJavaFiles, fetchGistUpdatedAt } from '../_shared/gist.ts';
+import { fetchOverridesByWorkId } from '../_shared/sectionDueDates.ts';
 
 function generateAccessCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 - avoids ambiguity
@@ -109,12 +110,30 @@ Deno.serve(async (req) => {
       if (assignment_id) {
         const { data: asgn } = await admin
           .from('assignments')
-          .select('is_active, due_date')
+          .select('is_active, due_date, course_id')
           .eq('id', assignment_id)
           .maybeSingle();
         if (!asgn) return json({ error: 'Assignment not found.' }, 404);
         if (!asgn.is_active) return json({ error: 'This assignment is no longer active.' }, 409);
-        if (asgn.due_date && new Date(asgn.due_date) < new Date()) {
+
+        // A block with its own due date is gated on THAT date, not the
+        // assignment's base one - otherwise a section given more time would
+        // still be locked out the moment the base date passes.
+        let effectiveDueDate = asgn.due_date;
+        if (asgn.course_id) {
+          const { data: rosterRow } = await admin
+            .from('roster_students')
+            .select('section_id')
+            .eq('course_id', asgn.course_id)
+            .ilike('email', student.email)
+            .maybeSingle();
+          if (rosterRow?.section_id) {
+            const overrides = await fetchOverridesByWorkId(admin, 'assignment_id', [assignment_id]);
+            const override = overrides.get(assignment_id)?.get(rosterRow.section_id);
+            if (override) effectiveDueDate = override;
+          }
+        }
+        if (effectiveDueDate && new Date(effectiveDueDate) < new Date()) {
           return json({ error: 'This assignment is past its due date.' }, 409);
         }
       }

@@ -2,6 +2,7 @@ import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { buildWorkItems } from '../_shared/workItems.ts';
+import { fetchOverridesByWorkId, resolveDueDates } from '../_shared/sectionDueDates.ts';
 
 // Powers the signed-in student dashboard: everything assigned to this student,
 // across all three kinds of work, each with where they stand on it.
@@ -40,13 +41,21 @@ Deno.serve(async (req) => {
     // matching is too unreliable to gate visibility on.
     const { data: rosterRows, error: rosterErr } = await admin
       .from('roster_students')
-      .select('course_id, email');
+      .select('course_id, email, section_id');
     if (rosterErr) return json({ error: rosterErr.message }, 500);
 
     const myEmail = student.email.toLowerCase();
-    const myCourseIds = (rosterRows || [])
-      .filter((r: Record<string, any>) => (r.email || '').toLowerCase() === myEmail)
-      .map((r: Record<string, any>) => r.course_id);
+    const myRosterRows = (rosterRows || []).filter(
+      (r: Record<string, any>) => (r.email || '').toLowerCase() === myEmail
+    );
+    const myCourseIds = myRosterRows.map((r: Record<string, any>) => r.course_id);
+    // This student's own section per course - a course they are on twice
+    // (should not happen, but roster data is hand-edited) keeps whichever
+    // row matched last, same as any other roster lookup here.
+    const sectionByCourse = new Map<string, string | null>(
+      myRosterRows.map((r: Record<string, any>) => [r.course_id, r.section_id || null])
+    );
+    const sectionForRow = (row: Record<string, any>) => sectionByCourse.get(row.course_id ?? '') ?? null;
 
     // An item with no course is for everyone; an item with a course is only
     // for students on that roster.
@@ -73,10 +82,20 @@ Deno.serve(async (req) => {
       if (r.error) return json({ error: r.error.message }, 500);
     }
 
+    const visibleAssignments = (assignments.data || []).filter((a: Record<string, any>) => visibleToMe(a.course_id ?? null));
+    const visibleProblems = (problems.data || []).filter((p: Record<string, any>) => visibleToMe(p.course_id ?? null));
+    const visibleProjects = (projects.data || []).filter((pr: Record<string, any>) => visibleToMe(pr.course_id ?? null));
+
+    const [assignmentOverrides, problemOverrides, projectOverrides] = await Promise.all([
+      fetchOverridesByWorkId(admin, 'assignment_id', visibleAssignments.map((a: Record<string, any>) => a.id)),
+      fetchOverridesByWorkId(admin, 'coding_problem_id', visibleProblems.map((p: Record<string, any>) => p.id)),
+      fetchOverridesByWorkId(admin, 'project_id', visibleProjects.map((p: Record<string, any>) => p.id)),
+    ]);
+
     const items = buildWorkItems(
-      (assignments.data || []).filter((a: Record<string, any>) => visibleToMe(a.course_id ?? null)),
-      (problems.data || []).filter((p: Record<string, any>) => visibleToMe(p.course_id ?? null)),
-      (projects.data || []).filter((pr: Record<string, any>) => visibleToMe(pr.course_id ?? null)),
+      resolveDueDates(visibleAssignments, assignmentOverrides, sectionForRow),
+      resolveDueDates(visibleProblems, problemOverrides, sectionForRow),
+      resolveDueDates(visibleProjects, projectOverrides, sectionForRow),
       subs.data || []
     );
 

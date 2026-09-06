@@ -9,6 +9,7 @@ import { Plus } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import QuestionEditor from "./QuestionEditor";
 import DueTimeQuickPicks from "./DueTimeQuickPicks";
+import SectionDueDatesEditor from "./SectionDueDatesEditor";
 
 function generateId() {
   return Math.random().toString(36).substr(2, 9);
@@ -45,6 +46,10 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
       ? {
           ...initial,
           due_date: toLocalInputValue(initial.due_date),
+          section_due_dates: (initial.section_due_dates || []).map((e) => ({
+            section_id: e.section_id,
+            due_date: toLocalInputValue(e.due_date),
+          })),
           course_id: initial.course_id ?? null,
           unit_id: initial.unit_id ?? null,
           questions: initial.questions.map((q) => ({
@@ -60,6 +65,7 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
           questions: [newQuestion(1)],
           time_limit_minutes: null,
           due_date: "",
+          section_due_dates: [],
           course_id: initial?.course_id ?? null,
           unit_id: initial?.unit_id ?? null,
           is_active: true,
@@ -108,6 +114,9 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
       course_id: form.course_id || null,
       unit_id: form.unit_id || null,
       due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
+      section_due_dates: (form.section_due_dates || [])
+        .filter((e) => e.due_date)
+        .map((e) => ({ section_id: e.section_id, due_date: new Date(e.due_date).toISOString() })),
       questions: form.questions.map((q) => ({
         ...q,
         max_score: q.max_score ?? 9,
@@ -214,6 +223,12 @@ export default function AssignmentForm({ initial, courses = [], onSave, onCancel
           <DueTimeQuickPicks value={form.due_date} onPick={(v) => updateField("due_date", v)} />
         </div>
       </div>
+
+      <SectionDueDatesEditor
+        sections={courses.find((c) => c.id === form.course_id)?.sections || []}
+        value={form.section_due_dates}
+        onChange={(v) => updateField("section_due_dates", v)}
+      />
 
       <div className="flex items-center gap-3">
         <Switch
