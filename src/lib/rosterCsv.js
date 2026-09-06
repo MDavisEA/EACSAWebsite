@@ -47,6 +47,27 @@ function splitCsvLine(line) {
   return fields.map((f) => f.trim());
 }
 
+// Splits one combined name into { first_name, last_name }. An explicit comma
+// is trusted as an unambiguous "Last, First" separator (a deliberate export
+// convention some gradebooks use, and exactly what a name gets quoted for in
+// the first place if it contains one - see splitCsvLine above). Without a
+// comma, this school's own gradebook export puts these space-separated as
+// "Last First" - confirmed against this project's real roster data - so the
+// LAST word is the first name and everything before it is the last name,
+// the opposite of the more common "First Last" convention. A single word
+// goes entirely into first_name; there is no signal to split it on.
+function splitName(raw) {
+  const name = (raw || "").trim();
+  if (!name) return { first_name: "", last_name: "" };
+  if (name.includes(",")) {
+    const [last, first] = name.split(",").map((p) => p.trim());
+    return { first_name: first || "", last_name: last || "" };
+  }
+  const parts = name.split(/\s+/);
+  if (parts.length === 1) return { first_name: parts[0], last_name: "" };
+  return { first_name: parts[parts.length - 1], last_name: parts.slice(0, -1).join(" ") };
+}
+
 export function parseRosterCsv(text) {
   const lines = (text || "")
     .split(/\r?\n/)
@@ -58,14 +79,14 @@ export function parseRosterCsv(text) {
     // Anything that looks like an email goes in the email slot regardless of
     // column order, so "email,name" pastes work too.
     const emailIdx = parts.findIndex((p) => p.includes("@"));
-    if (emailIdx === -1) return { student_name: parts[0] || "", email: "" };
+    if (emailIdx === -1) return { ...splitName(parts[0]), email: "" };
     const name = parts.filter((_, i) => i !== emailIdx).join(" ").trim();
-    return { student_name: name, email: parts[emailIdx] };
+    return { ...splitName(name), email: parts[emailIdx] };
   });
 
   if (rows.length > 0 && looksLikeHeader(splitCsvLine(lines[0]))) rows.shift();
 
-  return rows.filter((r) => r.student_name);
+  return rows.filter((r) => r.first_name || r.last_name);
 }
 
 // Normalized for matching - Google's display name and a hand-typed roster

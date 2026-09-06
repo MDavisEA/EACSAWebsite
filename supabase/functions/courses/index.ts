@@ -417,13 +417,20 @@ Deno.serve(async (req) => {
     // and re-inserts a whole roster (or a whole section of one), which would
     // be a strange way to add a single person.
     if (action === 'addRosterStudent') {
-      const { course_id, student_name, email, section_id } = body;
+      const { course_id, first_name, last_name, email, section_id } = body;
       if (!(await owns(course_id))) return json({ error: 'Not found' }, 404);
-      const name = (student_name || '').trim();
-      if (!name) return json({ error: 'A name is required.' }, 400);
+      const fn = (first_name || '').trim();
+      const ln = (last_name || '').trim();
+      if (!fn && !ln) return json({ error: 'A name is required.' }, 400);
       const { data, error } = await admin
         .from('roster_students')
-        .insert({ course_id, student_name: name, email: (email || '').trim() || null, section_id: section_id || null })
+        .insert({
+          course_id,
+          first_name: fn,
+          last_name: ln,
+          email: (email || '').trim() || null,
+          section_id: section_id || null,
+        })
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
@@ -437,18 +444,23 @@ Deno.serve(async (req) => {
     // this can never be used to move a student into (or out of) a course
     // that isn't the teacher's own.
     if (action === 'updateRosterStudent') {
-      const { id, student_name, email, section_id, course_id } = body;
-      const { data: existing } = await admin.from('roster_students').select('course_id').eq('id', id).maybeSingle();
+      const { id, first_name, last_name, email, section_id, course_id } = body;
+      const { data: existing } = await admin.from('roster_students').select('course_id, first_name, last_name').eq('id', id).maybeSingle();
       if (!existing || !(await owns(existing.course_id))) return json({ error: 'Not found' }, 404);
       if (course_id && course_id !== existing.course_id && !(await owns(course_id))) {
         return json({ error: 'Pick one of your own courses.' }, 403);
       }
 
       const update: Record<string, unknown> = {};
-      if (student_name !== undefined) {
-        const name = student_name.trim();
-        if (!name) return json({ error: 'A name is required.' }, 400);
-        update.student_name = name;
+      // Either name field can be sent alone (e.g. fixing just a typo'd last
+      // name), so what counts as "no name at all" is checked against the
+      // OTHER field's existing value, not against an empty string sent here.
+      if (first_name !== undefined) update.first_name = first_name.trim();
+      if (last_name !== undefined) update.last_name = last_name.trim();
+      const nextFirst = first_name !== undefined ? first_name.trim() : existing.first_name;
+      const nextLast = last_name !== undefined ? last_name.trim() : existing.last_name;
+      if ((first_name !== undefined || last_name !== undefined) && !nextFirst && !nextLast) {
+        return json({ error: 'A name is required.' }, 400);
       }
       if (email !== undefined) update.email = (email || '').trim() || null;
       if (section_id !== undefined) update.section_id = section_id || null;
@@ -581,11 +593,12 @@ Deno.serve(async (req) => {
       const rows = students
         .map((s: Record<string, any>) => ({
           course_id,
-          student_name: (s.student_name || '').trim(),
+          first_name: (s.first_name || '').trim(),
+          last_name: (s.last_name || '').trim(),
           email: (s.email || '').trim() || null,
           section_id: section_id || s.section_id || null,
         }))
-        .filter((s) => s.student_name);
+        .filter((s) => s.first_name || s.last_name);
 
       if (rows.length === 0) return json({ error: 'No usable rows found - every line needs at least a name.' }, 400);
 

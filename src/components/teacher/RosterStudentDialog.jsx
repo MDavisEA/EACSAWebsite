@@ -18,7 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 // `mode: "edit"` additionally offers a class picker, since "move" can mean a
 // different section OR a genuinely different course.
 export default function RosterStudentDialog({ open, onOpenChange, mode, course, allCourses = [], student, onSaved }) {
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [sectionId, setSectionId] = useState("none");
   const [courseId, setCourseId] = useState(course?.id || "");
@@ -27,7 +28,8 @@ export default function RosterStudentDialog({ open, onOpenChange, mode, course, 
 
   useEffect(() => {
     if (!open) return;
-    setName(mode === "edit" ? student?.student_name || "" : "");
+    setFirstName(mode === "edit" ? student?.first_name || "" : "");
+    setLastName(mode === "edit" ? student?.last_name || "" : "");
     setEmail(mode === "edit" ? student?.email || "" : "");
     setSectionId((mode === "edit" ? student?.section_id : null) || "none");
     setCourseId((mode === "edit" ? student?.course_id : course?.id) || course?.id || "");
@@ -38,21 +40,24 @@ export default function RosterStudentDialog({ open, onOpenChange, mode, course, 
   // not the roster's original course, once a different class is picked.
   const targetCourse = allCourses.find((c) => c.id === courseId) || course;
   const sections = targetCourse?.sections || [];
+  const hasName = !!(firstName.trim() || lastName.trim());
 
   const handleSave = async () => {
-    if (!name.trim()) { setError("A name is required."); return; }
+    if (!hasName) { setError("A name is required."); return; }
     setSaving(true);
     setError("");
     try {
       if (mode === "add") {
         await base44.entities.Course.addRosterStudent(course.id, {
-          student_name: name.trim(),
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           email: email.trim(),
           section_id: sectionId === "none" ? null : sectionId,
         });
       } else {
         await base44.entities.Course.updateRosterStudent(student.id, {
-          student_name: name.trim(),
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           email: email.trim(),
           section_id: sectionId === "none" ? null : sectionId,
           course_id: courseId,
@@ -76,9 +81,15 @@ export default function RosterStudentDialog({ open, onOpenChange, mode, course, 
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Maria Lopez" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>First Name</Label>
+              <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Maria" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Last Name</Label>
+              <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Lopez" />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Email</Label>
@@ -143,7 +154,7 @@ export default function RosterStudentDialog({ open, onOpenChange, mode, course, 
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving || !name.trim()}>
+          <Button onClick={handleSave} disabled={saving || !hasName}>
             {saving ? "Saving..." : mode === "add" ? "Add Student" : "Save"}
           </Button>
         </div>

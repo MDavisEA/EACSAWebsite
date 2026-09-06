@@ -571,9 +571,9 @@ const Course = {
 
   // Adds one student without touching the rest of the roster - unlike
   // replaceRoster, which wipes and re-inserts (a whole section of) it.
-  async addRosterStudent(course_id, { student_name, email, section_id } = {}) {
+  async addRosterStudent(course_id, { first_name, last_name, email, section_id } = {}) {
     const data = await callFunction('courses', {
-      action: 'addRosterStudent', course_id, student_name, email, section_id,
+      action: 'addRosterStudent', course_id, first_name, last_name, email, section_id,
     });
     return data.result;
   },
