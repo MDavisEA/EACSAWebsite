@@ -292,8 +292,15 @@ export default function CodePracticePage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left: problem + checklist */}
         <div className="w-2/5 border-r border-slate-700 overflow-y-auto p-6 space-y-6 bg-[#252526]">
+          {/* `quill-render` is load-bearing, not decoration - see the note in
+              AnswerKeyPanel. There is no Tailwind typography plugin here, so
+              `prose` generates nothing at all and preflight has already
+              stripped list bullets and block margins; without this class every
+              bulleted list in a problem's directions renders as unmarked,
+              unspaced lines. `quill-dark` re-tints the inline-code and link
+              colors, which are tuned for a white background. */}
           <div
-            className="prose prose-sm prose-invert max-w-none"
+            className="prose prose-sm prose-invert max-w-none quill-render quill-dark"
             dangerouslySetInnerHTML={{ __html: problem.description_html || "" }}
           />
 

@@ -201,6 +201,64 @@ span[data-underline]:hover {
   margin-top: 0.25rem;
 }
 
+/* Block spacing, for the same reason as the list rules above: preflight zeroes
+   the margins on p, headings and lists, and with no typography plugin nothing
+   puts them back, so directions render as one unbroken wall of text. Content
+   written in Quill mostly escapes this by accident, because Quill emits an
+   explicit <p><br></p> for every blank line the teacher types - anything
+   authored outside the editor, such as directions imported from a Google Doc,
+   has no such spacers. Deliberately modest, so existing content that does
+   carry those spacer paragraphs reads as slightly airier rather than
+   double-spaced. */
+.quill-render p,
+.quill-render ul,
+.quill-render ol {
+  margin-bottom: 0.6rem;
+}
+.quill-render p:last-child,
+.quill-render ul:last-child,
+.quill-render ol:last-child {
+  margin-bottom: 0;
+}
+.quill-render h1,
+.quill-render h2,
+.quill-render h3 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1rem 0 0.5rem;
+}
+.quill-render h1:first-child,
+.quill-render h2:first-child,
+.quill-render h3:first-child {
+  margin-top: 0;
+}
+.quill-render h1 { font-size: 1.25rem; }
+.quill-render h2 { font-size: 1.1rem; }
+.quill-render h3 { font-size: 1rem; }
+
+/* Links. Preflight resets anchors to inherit both color and decoration, so a
+   link a teacher put in the directions is currently indistinguishable from the
+   text around it - students cannot tell there is anything to click. */
+.quill-render a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Dark surfaces - the student code editor's problem panel. The pre/code rules
+   further up bake in a light slate background, which on a dark panel puts
+   light text on a light block and makes it unreadable; likewise the link
+   color above is tuned for white. */
+.quill-render.quill-dark pre,
+.quill-render.quill-dark .ql-code-block-container,
+.quill-render.quill-dark code {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+}
+.quill-render.quill-dark a {
+  color: #7dd3fc;
+}
+
 /* Plain react-markdown rendering (project rubrics) - same underlying reason
    as the Quill rules above. */
 .markdown-render ul {

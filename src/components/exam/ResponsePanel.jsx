@@ -192,7 +192,7 @@ export default function ResponsePanel({
         {partPrompt && (
           partPromptIsHtml ? (
             <div
-              className="text-sm text-slate-600 leading-relaxed prose prose-sm max-w-none"
+              className="text-sm text-slate-600 leading-relaxed prose prose-sm max-w-none quill-render"
               dangerouslySetInnerHTML={{ __html: partPrompt }}
             />
           ) : (
