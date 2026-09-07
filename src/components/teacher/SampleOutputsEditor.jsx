@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Upload, X, Loader2 } from "lucide-react";
-import { videoEmbedUrl } from "@/lib/videoEmbed";
+import { videoEmbedUrl, looksLikeImageUrl } from "@/lib/videoEmbed";
 
 // Editor for a project or coding problem's sample_outputs - screenshots of the
 // finished program running, or a link to a video of it. Extracted from
@@ -43,11 +43,17 @@ export default function SampleOutputsEditor({ value, onChange }) {
     }
   };
 
-  const addVideo = () => {
+  // One box for both, because "paste a link" is the same gesture either way and
+  // a teacher should not have to know which of two fields a URL belongs in. A
+  // link ending in an image extension is stored as an image so it renders as a
+  // picture; pasting one into a video-only box used to produce a `kind: video`
+  // item that got iframed as if it were a player.
+  const addLink = () => {
     const url = videoUrl.trim();
     if (!url) return;
     setError("");
-    onChange([...items, { kind: "video", url, caption: "" }]);
+    const kind = looksLikeImageUrl(url) ? "image" : "video";
+    onChange([...items, { kind, url, caption: "" }]);
     setVideoUrl("");
   };
 
@@ -101,6 +107,18 @@ export default function SampleOutputsEditor({ value, onChange }) {
                     rather than a player on the page.
                   </p>
                 )}
+                {/* A Drive embed only works for people who can already open the
+                    file. Nothing here can check that - the frame is
+                    cross-origin - so the reminder is the best we can do, and
+                    it is worth making: a file left on "restricted" renders
+                    Google's own 401 page inside the assignment. */}
+                {/drive\.google\.com/.test(s.url || "") && (
+                  <p className="text-xs text-amber-700">
+                    Drive link &mdash; students only see this if the file is shared
+                    &ldquo;Anyone with the link&rdquo;. Otherwise they get a Google error in place of
+                    the sample.
+                  </p>
+                )}
               </div>
               <Button variant="ghost" size="sm" onClick={() => removeItem(i)} title="Remove">
                 <X className="w-4 h-4" />
@@ -127,11 +145,11 @@ export default function SampleOutputsEditor({ value, onChange }) {
           <Input
             value={videoUrl}
             onChange={(e) => setVideoUrl(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addVideo()}
-            placeholder="...or paste a video link"
+            onKeyDown={(e) => e.key === "Enter" && addLink()}
+            placeholder="...or paste a video or image link"
             className="h-9 w-64 text-sm"
           />
-          <Button variant="outline" size="sm" onClick={addVideo} disabled={!videoUrl.trim()}>
+          <Button variant="outline" size="sm" onClick={addLink} disabled={!videoUrl.trim()}>
             Add
           </Button>
         </div>
