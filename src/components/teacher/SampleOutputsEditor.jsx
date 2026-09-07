@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Upload, X, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Upload, X, Loader2, Terminal } from "lucide-react";
 import { videoEmbedUrl, looksLikeImageUrl } from "@/lib/videoEmbed";
 
 // Editor for a project or coding problem's sample_outputs - screenshots of the
@@ -57,6 +58,14 @@ export default function SampleOutputsEditor({ value, onChange }) {
     setVideoUrl("");
   };
 
+  // Console output pasted as text. Preferable to a screenshot for the terminal
+  // programs this course is almost entirely made of - see the note on
+  // SampleText in SampleOutputs.jsx.
+  const addText = () => {
+    setError("");
+    onChange([...items, { kind: "text", text: "", caption: "" }]);
+  };
+
   const updateItem = (idx, patch) => {
     onChange(items.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
   };
@@ -69,8 +78,10 @@ export default function SampleOutputsEditor({ value, onChange }) {
     <div className="space-y-2">
       <Label>Sample output (optional)</Label>
       <p className="text-xs text-muted-foreground">
-        Screenshots of the program running, or a link to a video of it. Students see these with the
-        directions. Add as many as you need &mdash; an opening state and a win, say.
+        The program's output pasted as text, a screenshot of it running, or a link to a video.
+        Students see these with the directions. Add as many as you need &mdash; an opening state and
+        a win, say. For a console program, pasted text beats a screenshot: it stays selectable,
+        scales with the student's font size, and cannot break the way a linked image can.
       </p>
 
       {items.length > 0 && (
@@ -80,9 +91,15 @@ export default function SampleOutputsEditor({ value, onChange }) {
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-[10px] uppercase">
-                    {s.kind === "video" ? "Video" : "Image"}
+                    {s.kind === "text" ? "Text" : s.kind === "video" ? "Video" : "Image"}
                   </Badge>
-                  {s.kind === "image" ? (
+                  {s.kind === "text" ? (
+                    <span className="text-xs text-muted-foreground">
+                      {(s.text || "").trim()
+                        ? `${(s.text || "").split("\n").length} lines of output`
+                        : "Paste the program's output below"}
+                    </span>
+                  ) : s.kind === "image" ? (
                     <img src={s.url} alt={s.caption || "Sample output"} className="h-12 rounded border bg-white" />
                   ) : (
                     <a
@@ -95,6 +112,17 @@ export default function SampleOutputsEditor({ value, onChange }) {
                     </a>
                   )}
                 </div>
+
+                {s.kind === "text" && (
+                  <Textarea
+                    value={s.text || ""}
+                    onChange={(e) => updateItem(i, { text: e.target.value })}
+                    placeholder={"Guess 1:\n        First num: 3\nYou have 1 correct position(s)..."}
+                    rows={8}
+                    className="font-mono text-xs whitespace-pre"
+                    spellCheck={false}
+                  />
+                )}
                 <Input
                   value={s.caption || ""}
                   onChange={(e) => updateItem(i, { caption: e.target.value })}
@@ -140,6 +168,9 @@ export default function SampleOutputsEditor({ value, onChange }) {
               <Upload className="w-3.5 h-3.5 mr-1.5" /> Upload screenshot
             </>
           )}
+        </Button>
+        <Button variant="outline" size="sm" onClick={addText}>
+          <Terminal className="w-3.5 h-3.5 mr-1.5" /> Paste output text
         </Button>
         <div className="flex items-center gap-1.5">
           <Input

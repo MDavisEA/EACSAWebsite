@@ -37,6 +37,28 @@ function SampleImage({ url, alt, borderCls, linkCls }) {
   );
 }
 
+// Sample output that is console text rather than a picture of console text.
+//
+// Worth its own kind: nearly every program in this course prints to a
+// terminal, and pasting that text beats screenshotting it - it stays
+// selectable and copy-pasteable, it scales with the editor's font-size
+// control, a screen reader can read it, and there is no URL that can rot or
+// come back 401 the way a Drive link does.
+//
+// Scrolls inside its own box rather than stretching the page: console output
+// is often wider than the panel it sits in.
+function SampleText({ text, dark, borderCls }) {
+  return (
+    <pre
+      className={`text-xs font-mono whitespace-pre overflow-x-auto rounded-lg border ${borderCls} p-3 ${
+        dark ? "bg-[#1e1e1e] text-slate-200" : "bg-slate-50 text-slate-800"
+      }`}
+    >
+      {text}
+    </pre>
+  );
+}
+
 // A project or coding problem's sample_outputs, rendered the same way
 // everywhere it's shown - a student on ProjectPage/CodePracticePage, and a
 // teacher previewing either via StudentPreviewDialog - extracted so those do
@@ -59,7 +81,9 @@ export default function SampleOutputs({ items = [], dark = false }) {
         const embed = s.kind === "video" ? videoEmbedUrl(s.url) : null;
         return (
           <div key={i}>
-            {s.kind === "image" ? (
+            {s.kind === "text" ? (
+              <SampleText text={s.text || ""} dark={dark} borderCls={borderCls} />
+            ) : s.kind === "image" ? (
               <SampleImage
                 url={s.url}
                 alt={s.caption || `Sample output ${i + 1}`}
