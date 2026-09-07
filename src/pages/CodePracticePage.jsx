@@ -280,6 +280,7 @@ export default function CodePracticePage() {
             onReset={reset}
             canIncrease={canIncrease}
             canDecrease={canDecrease}
+            dark
           />
           <span>{studentName}</span>
           <Badge className="flex items-center gap-1 bg-slate-700 text-slate-100 hover:bg-slate-700">

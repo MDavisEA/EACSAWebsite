@@ -9,6 +9,8 @@ import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import ReactMarkdown from "react-markdown";
 import { googleDocEmbedUrl } from "@/lib/googleDoc";
 import SampleOutputs from "@/components/SampleOutputs";
+import CodeFontSizeControl from "@/components/CodeFontSizeControl";
+import { useCodeFontSize } from "@/lib/useCodeFontSize";
 
 // Defined once at module scope, not inline in JSX - a new array reference on
 // every render makes @uiw/react-codemirror tear down and rebuild the editor's
@@ -92,6 +94,10 @@ export default function StudentPreviewDialog({ open, onOpenChange, kind, itemId,
 
 function CodePreview({ problem }) {
   const allProgram = (problem.methods || []).every((m) => m.harness_type === "program_output");
+  // Reads the same stored preference the student editor uses, so a teacher can
+  // set it here and see what a student at that size actually gets - the whole
+  // point of this dialog being the real rendering rather than an approximation.
+  const { fontSize, increase, decrease, reset, canIncrease, canDecrease } = useCodeFontSize();
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2 flex-wrap">
@@ -120,8 +126,23 @@ function CodePreview({ problem }) {
 
       {problem.starter_code && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1">Starter code</p>
-          <div className="rounded-lg overflow-hidden border">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-medium text-muted-foreground">Starter code</p>
+            <CodeFontSizeControl
+              fontSize={fontSize}
+              onIncrease={increase}
+              onDecrease={decrease}
+              onReset={reset}
+              canIncrease={canIncrease}
+              canDecrease={canDecrease}
+            />
+          </div>
+          {/* Size travels as a CSS variable the theme reads, not as an extra
+              extension - see the note on CODE_EXTENSIONS above. */}
+          <div
+            className="rounded-lg overflow-hidden border"
+            style={{ "--code-editor-font-size": `${fontSize}px` }}
+          >
             <CodeMirror
               value={problem.starter_code}
               editable={false}
