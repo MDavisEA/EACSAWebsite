@@ -6,6 +6,8 @@ import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import SampleOutputs from "@/components/SampleOutputs";
+import CodeFontSizeControl from "@/components/CodeFontSizeControl";
+import { useCodeFontSize } from "@/lib/useCodeFontSize";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -48,6 +50,9 @@ export default function CodePracticePage() {
   const [runsUsed, setRunsUsed] = useState(0);
   // Coding Assignment problems only: the live runner, opened on demand.
   const [showRunner, setShowRunner] = useState(false);
+
+  // Student's own code font size, remembered across problems and reloads.
+  const { fontSize, increase, decrease, reset, canIncrease, canDecrease } = useCodeFontSize();
 
   const submissionRef = useRef(null); // { id, session_token }
   const draftTimer = useRef(null);
@@ -268,6 +273,14 @@ export default function CodePracticePage() {
           )}
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-400 flex-shrink-0">
+          <CodeFontSizeControl
+            fontSize={fontSize}
+            onIncrease={increase}
+            onDecrease={decrease}
+            onReset={reset}
+            canIncrease={canIncrease}
+            canDecrease={canDecrease}
+          />
           <span>{studentName}</span>
           <Badge className="flex items-center gap-1 bg-slate-700 text-slate-100 hover:bg-slate-700">
             <Trophy className="w-3 h-3" /> {problem.points_possible ?? 0} pts
@@ -345,7 +358,14 @@ export default function CodePracticePage() {
 
         {/* Right: code editor + results */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-hidden">
+          {/* The font size rides in as a CSS variable the editor theme reads,
+              rather than as another extension - see the note on
+              CODE_EXTENSIONS about rebuilt extension arrays dropping the
+              cursor. Changing a variable only restyles. */}
+          <div
+            className="flex-1 overflow-hidden"
+            style={{ "--code-editor-font-size": `${fontSize}px` }}
+          >
             <CodeMirror
               value={code}
               onChange={handleCodeChange}

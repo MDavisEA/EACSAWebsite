@@ -74,7 +74,18 @@ function buildTheme(c, dark) {
         color: c.gutterForeground,
         border: "none",
       },
-      ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" },
+      ".cm-scroller": {
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+        // Read from a CSS variable rather than baked in, so a font-size control
+        // can change it by setting the variable on any ancestor. Doing it
+        // through a new theme extension instead would mean a new extensions
+        // array, which makes @uiw/react-codemirror tear the editor down and
+        // drop the cursor mid-edit (see the note in CodePracticePage).
+        //
+        // The 16px fallback is what this editor has always rendered at: nothing
+        // set a size here before, so it inherited the page's.
+        fontSize: "var(--code-editor-font-size, 16px)",
+      },
     },
     { dark }
   );
