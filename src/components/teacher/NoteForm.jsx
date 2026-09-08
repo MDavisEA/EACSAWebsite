@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
+import { highlightNoteCode } from "@/lib/highlightNoteCode";
 
 const QUILL_MODULES = {
   toolbar: [
@@ -88,6 +89,22 @@ export default function NoteForm({ initial, onSave, onCancel }) {
           />
         </div>
       </div>
+
+      {/* Quill's code-block format flatly refuses inline color on its own
+          text - there is no way to make the box above show live syntax
+          colors while typing. This preview is the same colorizer already
+          used wherever a saved note is actually read, just running here too
+          so a teacher sees the real Java colors immediately instead of only
+          after saving and reopening it. */}
+      {contentHtml && (
+        <div className="space-y-2">
+          <Label>Preview</Label>
+          <div
+            className="prose prose-sm max-w-none quill-render quill-dark p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
+            dangerouslySetInnerHTML={{ __html: highlightNoteCode(contentHtml) }}
+          />
+        </div>
+      )}
 
       <div className="flex items-center gap-3 pt-2 border-t pt-4">
         <Switch checked={isPublished} onCheckedChange={setIsPublished} />

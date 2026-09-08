@@ -300,9 +300,16 @@ span[data-underline]:hover {
    Docs/OneNote brings inline color/background styles on the pasted markup,
    which otherwise survive straight into the editor and stay whatever dark
    color they were in the source document - invisible against this same
-   dark editing surface. */
+   dark editing surface. Excludes a code block and everything inside one:
+   NoteForm's paste handler and Quill's own code-block clipboard matcher
+   both sanitize anything landing there down to plain text first, so a code
+   block never carries a stray pasted color in the first place - and that is
+   exactly where the live Java syntax colors NoteForm applies via Quill's
+   `color` format need to survive, which this blanket reset would otherwise
+   win over (same specificity fight as the one above, just live instead of
+   rendered). */
 .dark-quill .ql-editor,
-.dark-quill .ql-editor * {
+.dark-quill .ql-editor *:not(pre.ql-syntax):not(pre.ql-syntax *) {
   color: #f1f5f9 !important;
   background-color: transparent !important;
 }
