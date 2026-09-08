@@ -16,6 +16,7 @@ import MyScore from '@/pages/MyScore';
 import CodePage from '@/pages/CodePage';
 import CodePracticePage from '@/pages/CodePracticePage';
 import ProjectPage from '@/pages/ProjectPage';
+import StudentPreviewPage from '@/pages/StudentPreviewPage';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -57,6 +58,10 @@ const AuthenticatedApp = () => {
       <Route path="/code" element={<CodePage />} />
       <Route path="/code-practice" element={<CodePracticePage />} />
       <Route path="/project" element={<ProjectPage />} />
+      {/* Teacher-only, enforced server-side by courses/previewAsStudent -
+          opened in its own tab from the class page's "View as Student"
+          button, not linked anywhere else. */}
+      <Route path="/teacher-preview" element={<StudentPreviewPage />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

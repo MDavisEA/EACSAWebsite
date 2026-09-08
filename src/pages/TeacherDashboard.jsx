@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { BookOpen, LogOut, Lock, ChevronLeft, Archive, ArchiveRestore, Plus } from "lucide-react";
+import { BookOpen, LogOut, Lock, ChevronLeft, Archive, ArchiveRestore, Plus, Eye } from "lucide-react";
 import AssignmentForm from "@/components/teacher/AssignmentForm";
 import CodingProblemForm from "@/components/teacher/CodingProblemForm";
 import ProjectForm from "@/components/teacher/ProjectForm";
@@ -636,6 +636,14 @@ export default function TeacherDashboard() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`/teacher-preview?course=${openCourse.id}`, "_blank")}
+                    title="Open a new tab showing exactly what a student in this class would see right now"
+                  >
+                    <Eye className="w-4 h-4 mr-1.5" /> View as Student
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

@@ -412,6 +412,57 @@ Deno.serve(async (req) => {
       });
     }
 
+    // What a student on this roster would see on their dashboard right now -
+    // for the "View as student" button on the class page, opened in its own
+    // tab rather than a dialog since it is meant to read as the real page, not
+    // a mock-up. No real student identity involved, so every item comes back
+    // not_started (an empty submissions array is exactly what buildWorkItems
+    // needs to produce that) and due dates use the course's base date only -
+    // there is no student to resolve a section override against.
+    if (action === 'previewAsStudent') {
+      if (!(await owns(body.course_id))) return json({ error: 'Not found' }, 404);
+      const courseId = body.course_id;
+
+      const [assignments, problems, projects, units, notes, courseRes] = await Promise.all([
+        admin
+          .from('assignments')
+          .select('id, title, due_date, course_id, unit_id, sort_order, questions')
+          .eq('course_id', courseId)
+          .eq('is_active', true),
+        admin
+          .from('coding_problems')
+          .select('id, title, due_date, course_id, unit_id, sort_order, points_possible')
+          .eq('course_id', courseId)
+          .eq('is_active', true),
+        admin
+          .from('projects')
+          .select('id, title, due_date, course_id, unit_id, sort_order')
+          .eq('course_id', courseId)
+          .eq('is_active', true),
+        admin.from('units').select('id, course_id, name, position').eq('course_id', courseId),
+        admin
+          .from('notes')
+          .select('id, course_id, title, content_html, updated_at')
+          .eq('course_id', courseId)
+          .eq('is_published', true),
+        admin.from('courses').select('id, name').eq('id', courseId).maybeSingle(),
+      ]);
+      for (const r of [assignments, problems, projects, units, notes, courseRes]) {
+        if (r.error) return json({ error: r.error.message }, 500);
+      }
+
+      const items = buildWorkItems(assignments.data || [], problems.data || [], projects.data || [], []);
+
+      return json({
+        result: {
+          course_name: courseRes.data?.name || '',
+          items,
+          units: units.data || [],
+          notes: notes.data || [],
+        },
+      });
+    }
+
     // One student added by hand - a late transfer in, a name missed on the
     // original CSV. Distinct from replaceRoster on purpose: that action wipes
     // and re-inserts a whole roster (or a whole section of one), which would

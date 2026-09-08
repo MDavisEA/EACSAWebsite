@@ -552,6 +552,13 @@ const Course = {
     return data.results;
   },
 
+  // What a student on this roster would see right now - powers the "View as
+  // student" tab from the class page.
+  async previewAsStudent(course_id) {
+    const data = await callFunction('courses', { action: 'previewAsStudent', course_id });
+    return data.result;
+  },
+
   async create(fields) {
     const data = await callFunction('courses', { action: 'create', data: fields });
     return data.result;
