@@ -30,8 +30,11 @@ export default function TeacherDashboard() {
   const navigate = useNavigate();
   // Canvas-style navigation: null means the My Classes list, otherwise the
   // class being looked at. Kept as state rather than a route because the whole
-  // dashboard is one authenticated page.
-  const [openCourseId, setOpenCourseId] = useState(null);
+  // dashboard is one authenticated page - but still restored from
+  // localStorage on mount (and kept in sync there as it changes) so an
+  // accidental refresh does not dump the teacher back at My Classes and lose
+  // which class/tab they were in the middle of.
+  const [openCourseId, setOpenCourseId] = useState(() => localStorage.getItem("teacherNav_openCourseId") || null);
   const [showNeedsGrading, setShowNeedsGrading] = useState(false);
   const [showStudents, setShowStudents] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
@@ -46,8 +49,19 @@ export default function TeacherDashboard() {
     setGradeSubmissionId(submissionId);
     setShowQueue(true);
   };
-  const [topTab, setTopTab] = useState("classes");
-  const [courseTab, setCourseTab] = useState("assignments");
+  const [topTab, setTopTab] = useState(() => localStorage.getItem("teacherNav_topTab") || "classes");
+  const [courseTab, setCourseTab] = useState(() => localStorage.getItem("teacherNav_courseTab") || "assignments");
+
+  useEffect(() => {
+    if (openCourseId) localStorage.setItem("teacherNav_openCourseId", openCourseId);
+    else localStorage.removeItem("teacherNav_openCourseId");
+  }, [openCourseId]);
+  useEffect(() => {
+    localStorage.setItem("teacherNav_topTab", topTab);
+  }, [topTab]);
+  useEffect(() => {
+    localStorage.setItem("teacherNav_courseTab", courseTab);
+  }, [courseTab]);
   const [deletingUnit, setDeletingUnit] = useState(null);
   const [showNewWork, setShowNewWork] = useState(false);
   const [newWorkUnitId, setNewWorkUnitId] = useState(null);
