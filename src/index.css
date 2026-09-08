@@ -259,6 +259,55 @@ span[data-underline]:hover {
   color: #7dd3fc;
 }
 
+/* Dark Quill EDITOR (not just rendered output) - for writing notes in the
+   same VS Code-style dark palette as the Java code editor (#1e1e1e/#252526,
+   slate borders and text). Quill's Snow theme is white-only with no dark
+   variant of its own, so every toolbar/editor surface needs an explicit
+   override here rather than just the content-color rules above. */
+.dark-quill .ql-toolbar.ql-snow {
+  background: #252526;
+  border-color: #334155;
+}
+.dark-quill .ql-container.ql-snow {
+  background: #1e1e1e;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+.dark-quill .ql-editor.ql-blank::before {
+  color: #64748b;
+  font-style: normal;
+}
+.dark-quill .ql-stroke {
+  stroke: #cbd5e1;
+}
+.dark-quill .ql-fill {
+  fill: #cbd5e1;
+}
+.dark-quill .ql-picker-label {
+  color: #cbd5e1;
+}
+.dark-quill .ql-picker-options {
+  background: #252526;
+  border-color: #334155;
+}
+.dark-quill .ql-picker-item {
+  color: #cbd5e1;
+}
+.dark-quill button:hover .ql-stroke,
+.dark-quill .ql-picker-label:hover .ql-stroke,
+.dark-quill button.ql-active .ql-stroke {
+  stroke: #7dd3fc;
+}
+.dark-quill button:hover .ql-fill,
+.dark-quill button.ql-active .ql-fill {
+  fill: #7dd3fc;
+}
+.dark-quill .ql-editor pre.ql-syntax,
+.dark-quill .ql-editor code {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+}
+
 /* Plain react-markdown rendering (project rubrics) - same underlying reason
    as the Quill rules above. */
 .markdown-render ul {

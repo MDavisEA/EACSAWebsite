@@ -42,14 +42,15 @@ export default function NoteForm({ initial, onSave, onCancel }) {
 
       <div className="space-y-2">
         <Label>Notes</Label>
-        <ReactQuill
-          value={contentHtml}
-          onChange={setContentHtml}
-          modules={QUILL_MODULES}
-          formats={QUILL_FORMATS}
-          placeholder="Paste or write your notes..."
-          className="bg-white"
-        />
+        <div className="dark-quill">
+          <ReactQuill
+            value={contentHtml}
+            onChange={setContentHtml}
+            modules={QUILL_MODULES}
+            formats={QUILL_FORMATS}
+            placeholder="Paste or write your notes..."
+          />
+        </div>
       </div>
 
       <div className="flex items-center gap-3 pt-2 border-t pt-4">

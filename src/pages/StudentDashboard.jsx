@@ -450,7 +450,7 @@ export default function StudentDashboard() {
             <DialogTitle>{openNote?.title}</DialogTitle>
           </DialogHeader>
           <div
-            className="prose prose-sm max-w-none quill-render"
+            className="prose prose-sm max-w-none quill-render quill-dark p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
             dangerouslySetInnerHTML={{ __html: openNote?.content_html || "" }}
           />
         </DialogContent>

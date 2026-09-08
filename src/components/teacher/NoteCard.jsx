@@ -46,7 +46,7 @@ export default function NoteCard({ note, onEdit, onDelete, onTogglePublished }) 
 
         {expanded && (
           <div
-            className="prose prose-sm max-w-none quill-render mt-3 pt-3 border-t"
+            className="prose prose-sm max-w-none quill-render quill-dark mt-3 p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
             dangerouslySetInnerHTML={{ __html: note.content_html }}
           />
         )}
