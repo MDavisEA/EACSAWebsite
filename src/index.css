@@ -248,15 +248,32 @@ span[data-underline]:hover {
 /* Dark surfaces - the student code editor's problem panel. The pre/code rules
    further up bake in a light slate background, which on a dark panel puts
    light text on a light block and makes it unreadable; likewise the link
-   color above is tuned for white. */
+   color above is tuned for white.
+   The `!important` + universal selector is not optional here: pasting from
+   Word/Google Docs/OneNote (the entire point of a "paste your notes"
+   feature) brings inline style="color:..." / style="background-color:..."
+   on nearly every span and paragraph, and an inline style always wins over
+   a plain class rule regardless of specificity - without this, pasted text
+   kept whatever dark, near-black color it had in the source document, which
+   reads as invisible against this same dark background. */
+.quill-render.quill-dark {
+  color: #f1f5f9 !important;
+}
+/* Only descendants get their background forced transparent - the wrapper
+   itself carries its own dark background (set inline where it's rendered),
+   and matching it here too would override that with this same rule. */
+.quill-render.quill-dark * {
+  color: #f1f5f9 !important;
+  background-color: transparent !important;
+}
 .quill-render.quill-dark pre,
 .quill-render.quill-dark .ql-code-block-container,
 .quill-render.quill-dark code {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #e2e8f0 !important;
 }
 .quill-render.quill-dark a {
-  color: #7dd3fc;
+  color: #7dd3fc !important;
 }
 
 /* Dark Quill EDITOR (not just rendered output) - for writing notes in the
@@ -272,6 +289,16 @@ span[data-underline]:hover {
   background: #1e1e1e;
   border-color: #334155;
   color: #f1f5f9;
+}
+/* Same reason as quill-render.quill-dark below: pasting from Word/Google
+   Docs/OneNote brings inline color/background styles on the pasted markup,
+   which otherwise survive straight into the editor and stay whatever dark
+   color they were in the source document - invisible against this same
+   dark editing surface. */
+.dark-quill .ql-editor,
+.dark-quill .ql-editor * {
+  color: #f1f5f9 !important;
+  background-color: transparent !important;
 }
 .dark-quill .ql-editor.ql-blank::before {
   color: #64748b;
