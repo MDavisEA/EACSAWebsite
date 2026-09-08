@@ -11,6 +11,7 @@ import {
   BookOpen, LogIn, LogOut, ChevronRight, Loader2, RotateCcw, CheckCheck, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { WORK_KIND_META, STATUS, groupWorkByUnit } from "@/lib/workStatus";
+import { highlightNoteCode } from "@/lib/highlightNoteCode";
 
 // Per-kind presentation, plus where clicking a row navigates to - only the
 // student page needs a route (the teacher's roster detail opens a grading
@@ -451,7 +452,7 @@ export default function StudentDashboard() {
           </DialogHeader>
           <div
             className="prose prose-sm max-w-none quill-render quill-dark p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
-            dangerouslySetInnerHTML={{ __html: openNote?.content_html || "" }}
+            dangerouslySetInnerHTML={{ __html: highlightNoteCode(openNote?.content_html || "") }}
           />
         </DialogContent>
       </Dialog>

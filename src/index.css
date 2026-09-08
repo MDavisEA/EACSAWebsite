@@ -272,6 +272,12 @@ span[data-underline]:hover {
   background-color: rgba(255, 255, 255, 0.08) !important;
   color: #e2e8f0 !important;
 }
+/* Per-token Java syntax colors (see highlightNoteCode.js), scoped past the
+   blanket descendant rule above by both a class and a CSS variable - a plain
+   `color` on the span would lose to that rule's own `!important`. */
+.quill-render.quill-dark .ql-token {
+  color: var(--tok-color) !important;
+}
 .quill-render.quill-dark a {
   color: #7dd3fc !important;
 }

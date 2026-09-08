@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Pencil, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { highlightNoteCode } from "@/lib/highlightNoteCode";
 
 export default function NoteCard({ note, onEdit, onDelete, onTogglePublished }) {
   const [expanded, setExpanded] = useState(false);
@@ -47,7 +48,7 @@ export default function NoteCard({ note, onEdit, onDelete, onTogglePublished }) 
         {expanded && (
           <div
             className="prose prose-sm max-w-none quill-render quill-dark mt-3 p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
-            dangerouslySetInnerHTML={{ __html: note.content_html }}
+            dangerouslySetInnerHTML={{ __html: highlightNoteCode(note.content_html) }}
           />
         )}
       </CardContent>
