@@ -515,6 +515,33 @@ const Project = {
 };
 
 // ============================================================================
+// entities.Note (a teacher's own reference notes for a class - private until
+// published, at which point students on that roster see it on their
+// dashboard via StudentWork.myAssignedWork)
+// ============================================================================
+
+const Note = {
+  async list() {
+    const data = await callFunction('notes', { action: 'list' });
+    return data.results;
+  },
+
+  async create(fields) {
+    const data = await callFunction('notes', { action: 'create', data: fields });
+    return data.result;
+  },
+
+  async update(id, fields) {
+    const data = await callFunction('notes', { action: 'update', id, data: fields });
+    return data.result;
+  },
+
+  async delete(id) {
+    await callFunction('notes', { action: 'delete', id });
+  },
+};
+
+// ============================================================================
 // entities.Course (class rosters - exist so the teacher can see who has NOT
 // turned work in; entirely teacher-facing, never exposed to students)
 // ============================================================================
@@ -706,6 +733,7 @@ const StudentWork = {
       studentName: data.student_name,
       units: data.units || [],
       courses: data.courses || [],
+      notes: data.notes || [],
     };
   },
 };
@@ -782,7 +810,7 @@ const functions = {
 };
 
 export const base44 = {
-  entities: { Assignment, Submission, CodingProblem, Project, Course, StudentWork, Teacher },
+  entities: { Assignment, Submission, CodingProblem, Project, Note, Course, StudentWork, Teacher },
   auth,
   integrations,
   functions,

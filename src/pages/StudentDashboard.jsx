@@ -84,6 +84,8 @@ export default function StudentDashboard() {
   const [items, setItems] = useState([]);
   const [units, setUnits] = useState([]);
   const [courses, setCourses] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [openNote, setOpenNote] = useState(null);
   const [showReviewed, setShowReviewed] = useState(false);
   const [markingReviewed, setMarkingReviewed] = useState(false);
   const [studentName, setStudentName] = useState("");
@@ -210,11 +212,12 @@ export default function StudentDashboard() {
     setLoading(true);
     setLoadError("");
     try {
-      const { items: fetched, studentName: name, units: u, courses: c } =
+      const { items: fetched, studentName: name, units: u, courses: c, notes: n } =
         await base44.entities.StudentWork.myAssignedWork();
       setItems(fetched);
       setUnits(u || []);
       setCourses(c || []);
+      setNotes(n || []);
       setStudentName(name || "");
     } catch (e) {
       setLoadError(e.message || "Couldn't load your work. Check your connection and try again.");
@@ -260,6 +263,7 @@ export default function StudentDashboard() {
   // counts at the top and the "all caught up" line match what is actually
   // shown below rather than counting work from a class that is toggled off.
   const visible = courseFilter ? items.filter((i) => i.course_id === courseFilter) : items;
+  const visibleNotes = courseFilter ? notes.filter((n) => n.course_id === courseFilter) : notes;
 
   const todo = visible.filter((i) => i.status === "not_started" || i.status === "in_progress").length;
   const needsLook = visible.filter((i) => i.status === "graded").length;
@@ -324,6 +328,27 @@ export default function StudentDashboard() {
               </button>
             ))}
           </div>
+        )}
+
+        {visibleNotes.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <h2 className="text-sm font-semibold uppercase tracking-wide">Class Notes</h2>
+              <Badge variant="outline" className="text-xs">{visibleNotes.length}</Badge>
+            </div>
+            <div className="space-y-2">
+              {visibleNotes.map((note) => (
+                <button
+                  key={note.id}
+                  onClick={() => setOpenNote(note)}
+                  className="w-full text-left bg-white border rounded-xl p-4 hover:shadow-md hover:border-primary/30 transition-all flex items-center justify-between gap-4"
+                >
+                  <span className="font-medium">{note.title}</span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          </section>
         )}
 
         {loadError ? (
@@ -418,6 +443,18 @@ export default function StudentDashboard() {
           </button>
         </p>
       </main>
+
+      <Dialog open={!!openNote} onOpenChange={(v) => { if (!v) setOpenNote(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{openNote?.title}</DialogTitle>
+          </DialogHeader>
+          <div
+            className="prose prose-sm max-w-none quill-render"
+            dangerouslySetInnerHTML={{ __html: openNote?.content_html || "" }}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* What you turned in, and a way to turn it in again. */}
       <Dialog open={!!detail} onOpenChange={(v) => { if (!v) setDetail(null); }}>

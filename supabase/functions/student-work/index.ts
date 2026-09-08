@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
     // for students on that roster.
     const visibleToMe = (courseId: string | null) => courseId === null || myCourseIds.includes(courseId);
 
-    const [assignments, problems, projects, subs, units, courses] = await Promise.all([
+    const [assignments, problems, projects, subs, units, courses, notes] = await Promise.all([
       admin.from('assignments').select('id, title, due_date, course_id, unit_id, sort_order, questions').eq('is_active', true),
       admin.from('coding_problems').select('id, title, due_date, course_id, unit_id, sort_order, points_possible').eq('is_active', true),
       admin.from('projects').select('id, title, due_date, course_id, unit_id, sort_order').eq('is_active', true),
@@ -76,9 +76,15 @@ Deno.serve(async (req) => {
       myCourseIds.length > 0
         ? admin.from('courses').select('id, name').in('id', myCourseIds)
         : Promise.resolve({ data: [], error: null }),
+      // A note reaches a student only once the teacher has published it AND
+      // only for a course they are actually on - never previewed here, unlike
+      // the teacher's own list which sees every note regardless of status.
+      myCourseIds.length > 0
+        ? admin.from('notes').select('id, course_id, title, content_html, updated_at').eq('is_published', true).in('course_id', myCourseIds)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    for (const r of [assignments, problems, projects, subs, units, courses]) {
+    for (const r of [assignments, problems, projects, subs, units, courses, notes]) {
       if (r.error) return json({ error: r.error.message }, 500);
     }
 
@@ -106,6 +112,7 @@ Deno.serve(async (req) => {
       // Only used to label unit headings when a student is on more than one
       // course's roster - otherwise the course name is redundant.
       courses: courses.data || [],
+      notes: notes.data || [],
     });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);

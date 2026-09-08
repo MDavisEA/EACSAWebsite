@@ -80,7 +80,7 @@ export async function teacherOwnsCourse(
 export async function teacherOwnsRow(
   admin: SupabaseClient,
   teacherId: string,
-  table: 'assignments' | 'coding_problems' | 'projects',
+  table: 'assignments' | 'coding_problems' | 'projects' | 'notes',
   rowId: string
 ): Promise<boolean> {
   const { data } = await admin.from(table).select('course_id').eq('id', rowId).maybeSingle();

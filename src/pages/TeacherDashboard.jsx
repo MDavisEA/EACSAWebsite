@@ -8,12 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { BookOpen, LogOut, Lock, ChevronLeft, Archive, ArchiveRestore } from "lucide-react";
+import { BookOpen, LogOut, Lock, ChevronLeft, Archive, ArchiveRestore, Plus } from "lucide-react";
 import AssignmentForm from "@/components/teacher/AssignmentForm";
 import CodingProblemForm from "@/components/teacher/CodingProblemForm";
 import ProjectForm from "@/components/teacher/ProjectForm";
 import CourseForm from "@/components/teacher/CourseForm";
 import CourseCard from "@/components/teacher/CourseCard";
+import NoteForm from "@/components/teacher/NoteForm";
+import NoteCard from "@/components/teacher/NoteCard";
 import TeachersPanel from "@/components/teacher/TeachersPanel";
 import GlobalCommentsPanel from "@/components/teacher/GlobalCommentsPanel";
 import MyStudentsDialog from "@/components/teacher/MyStudentsDialog";
@@ -82,6 +84,11 @@ export default function TeacherDashboard() {
   const [editingProject, setEditingProject] = useState(null);
   const [deletingProject, setDeletingProject] = useState(null);
 
+  const [notes, setNotes] = useState([]);
+  const [showNoteForm, setShowNoteForm] = useState(false);
+  const [editingNote, setEditingNote] = useState(null);
+  const [deletingNote, setDeletingNote] = useState(null);
+
   const [courses, setCourses] = useState([]);
   const [showCourseForm, setShowCourseForm] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
@@ -126,6 +133,7 @@ export default function TeacherDashboard() {
       await Promise.all([
         loadCodingProblems(),
         loadProjects(),
+        loadNotes(),
         loadCourses(),
         loadGradingCounts(),
         loadAssignments(),
@@ -188,6 +196,11 @@ export default function TeacherDashboard() {
   const loadProjects = async () => {
     const results = await base44.entities.Project.list();
     setProjects(results);
+  };
+
+  const loadNotes = async () => {
+    const results = await base44.entities.Note.list();
+    setNotes(results);
   };
 
   const loadCourses = async () => {
@@ -377,6 +390,30 @@ export default function TeacherDashboard() {
   const handleToggleProjectGrading = async (project) => {
     await base44.entities.Project.update(project.id, { grading_skipped: !project.grading_skipped });
     await Promise.all([loadProjects(), loadGradingCounts()]);
+  };
+
+  const handleSaveNote = async (data) => {
+    if (editingNote?.id) {
+      await base44.entities.Note.update(editingNote.id, data);
+    } else {
+      await base44.entities.Note.create({ ...data, course_id: openCourseId });
+    }
+    setShowNoteForm(false);
+    setEditingNote(null);
+    loadNotes();
+  };
+
+  const handleDeleteNote = async () => {
+    if (deletingNote) {
+      await base44.entities.Note.delete(deletingNote.id);
+      setDeletingNote(null);
+      loadNotes();
+    }
+  };
+
+  const handleToggleNotePublished = async (note) => {
+    await base44.entities.Note.update(note.id, { is_published: !note.is_published });
+    loadNotes();
   };
 
   const handleSaveCourse = async (data) => {
@@ -622,6 +659,7 @@ export default function TeacherDashboard() {
                     </span>
                   )}
                 </TabsTrigger>
+                <TabsTrigger value="notes">Notes</TabsTrigger>
                 <TabsTrigger value="people">People</TabsTrigger>
               </TabsList>
 
@@ -666,6 +704,35 @@ export default function TeacherDashboard() {
                   }}
                   handlers={workHandlers}
                 />
+              </TabsContent>
+
+              <TabsContent value="notes">
+                <div className="space-y-4">
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={() => { setEditingNote(null); setShowNoteForm(true); }}>
+                      <Plus className="w-4 h-4 mr-1.5" /> New Note
+                    </Button>
+                  </div>
+                  {notes.filter((n) => n.course_id === openCourse.id).length === 0 ? (
+                    <div className="text-center text-muted-foreground bg-white border rounded-xl p-10">
+                      <p className="text-sm">No notes yet for this class.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {notes
+                        .filter((n) => n.course_id === openCourse.id)
+                        .map((note) => (
+                          <NoteCard
+                            key={note.id}
+                            note={note}
+                            onEdit={() => { setEditingNote(note); setShowNoteForm(true); }}
+                            onDelete={() => setDeletingNote(note)}
+                            onTogglePublished={() => handleToggleNotePublished(note)}
+                          />
+                        ))}
+                    </div>
+                  )}
+                </div>
               </TabsContent>
 
               <TabsContent value="people">
@@ -850,6 +917,34 @@ export default function TeacherDashboard() {
           />
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showNoteForm} onOpenChange={setShowNoteForm}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingNote?.id ? "Edit Note" : "New Note"}</DialogTitle>
+          </DialogHeader>
+          <NoteForm
+            initial={editingNote}
+            onSave={handleSaveNote}
+            onCancel={() => { setShowNoteForm(false); setEditingNote(null); }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingNote} onOpenChange={() => setDeletingNote(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Note?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{deletingNote?.title}". This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteNote}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!deletingProject} onOpenChange={() => setDeletingProject(null)}>
         <AlertDialogContent>
