@@ -390,6 +390,15 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                     className="w-20 text-center"
                     disabled={gradingSkipped}
                   />
+                  {maxPoints != null && (
+                    <button
+                      onClick={() => { setScore(String(maxPoints)); setSaved(false); }}
+                      disabled={gradingSkipped}
+                      className="text-xs px-2 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors font-medium disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      Full credit
+                    </button>
+                  )}
                 </div>
 
                 {/* Takes this one out of every "needs grading" count and list
