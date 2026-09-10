@@ -978,7 +978,19 @@ Deno.serve(async (req) => {
         work = data;
       }
       if (!work) return json({ error: 'Not found' }, 404);
-      return json({ result: { submission: sub, work, kind } });
+
+      // Whether a prior, already-graded attempt was archived when this was
+      // turned in again - see reopenMine. Single-row lookup, only relevant
+      // for a hand-graded Coding Assignment (the only kind reopenMine allows
+      // this for), but cheap enough to just always check.
+      const { data: versionRow } = await admin
+        .from('submission_versions')
+        .select('id')
+        .eq('submission_id', sub.id)
+        .limit(1)
+        .maybeSingle();
+
+      return json({ result: { submission: { ...sub, resubmitted: !!versionRow }, work, kind } });
     }
 
     if (action === 'saveGrade') {

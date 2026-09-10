@@ -14,8 +14,10 @@ import AnswerKeyPanel from "./AnswerKeyPanel";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import {
   Loader2, ChevronLeft, ChevronRight, CheckCircle2, EyeOff, FileCode, Terminal, Info,
-  KeyRound, ExternalLink,
+  KeyRound, ExternalLink, Bot,
 } from "lucide-react";
+import AiHelpBadge from "./AiHelpBadge";
+import PreviousVersionsPanel from "./PreviousVersionsPanel";
 
 const KIND_LABEL = { frq: "FRQ", code: "Mini Problem", review: "Coding Assignment", project: "Project" };
 
@@ -306,6 +308,12 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                     waiting since {format(new Date(current.submitted_at), "MMM d")}
                   </span>
                 )}
+                {detail?.submission && <AiHelpBadge submission={detail.submission} />}
+                {detail?.submission?.resubmitted && (
+                  <Badge variant="outline" className="text-blue-700 border-blue-300 flex-shrink-0">
+                    Resubmitted
+                  </Badge>
+                )}
               </div>
 
               {isCode && (
@@ -343,6 +351,8 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
+
+            {detail?.submission?.resubmitted && <PreviousVersionsPanel submissionId={detail.submission.id} />}
 
             {loadingDetail || !detail ? (
               <div className="py-16 flex justify-center">
@@ -551,6 +561,18 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                         onChange={(e) => setScore(e.target.value)}
                         className="w-20 text-center"
                       />
+                      {/* maxPoints is only ever non-null for a hand-graded
+                          Coding Assignment here (kind "review") - a Project's
+                          score has no fixed max, so this naturally never
+                          shows for one. */}
+                      {maxPoints != null && (
+                        <button
+                          onClick={() => setScore(String(maxPoints))}
+                          className="text-xs px-2 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors font-medium"
+                        >
+                          Full credit
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -565,6 +587,25 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                     />
                     <CommentBank compact value={comments} onChange={setComments} scope={commentScope} />
                   </div>
+
+                  {/* Easy to miss up in the header next to the name and
+                      timestamp - repeated here, right where the feedback
+                      itself gets written, whenever the student actually
+                      said yes. */}
+                  {detail.submission.ai_help_used && (
+                    <div className="flex items-center gap-2 text-sm bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      <Bot className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                      <a
+                        href={detail.submission.ai_help_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-700 hover:underline break-all flex-1"
+                      >
+                        {detail.submission.ai_help_link}
+                      </a>
+                      <ExternalLink className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />
+                    </div>
+                  )}
 
                   {kind === "project" && (
                     <div className="flex items-center gap-2 border-t pt-3">
