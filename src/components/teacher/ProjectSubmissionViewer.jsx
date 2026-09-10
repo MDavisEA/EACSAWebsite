@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { FileDown, Trash2, ExternalLink, Loader2, Upload, CheckCircle2, XCircle, AlertTriangle, RefreshCw, UserX, ChevronDown, ChevronUp, Clock, Send } from "lucide-react";
+import { FileDown, Trash2, ExternalLink, Loader2, Upload, CheckCircle2, XCircle, AlertTriangle, RefreshCw, UserX, ChevronDown, ChevronUp, Clock, Send, Bot } from "lucide-react";
 import AiHelpBadge from "./AiHelpBadge";
 import { exportProjectForReview } from "@/lib/exportProjectZip";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
@@ -538,6 +538,24 @@ export default function ProjectSubmissionViewer({ project }) {
                 scope={{ project_id: project.id }}
               />
             </div>
+
+            {/* Easy to miss up next to the name and timestamp - repeated
+                here, right where the feedback itself gets written, whenever
+                the student actually said yes. */}
+            {reviewTarget?.ai_help_used && (
+              <div className="flex items-center gap-2 text-sm bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <Bot className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                <a
+                  href={reviewTarget.ai_help_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-700 hover:underline break-all flex-1"
+                >
+                  {reviewTarget.ai_help_link}
+                </a>
+                <ExternalLink className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />
+              </div>
+            )}
 
             <div className="space-y-2 max-w-[160px]">
               <Label>Score (optional)</Label>

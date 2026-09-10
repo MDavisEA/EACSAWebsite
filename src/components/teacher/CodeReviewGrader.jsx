@@ -19,7 +19,7 @@ import AiHelpBadge from "./AiHelpBadge";
 import { groupByStudent } from "@/lib/groupSubmissionsByStudent";
 import {
   Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, User, KeyRound,
-  FileCode, Terminal, Info, ChevronRight as Arrow,
+  FileCode, Terminal, Info, ChevronRight as Arrow, Bot, ExternalLink,
 } from "lucide-react";
 
 // Grading a hand-marked coding problem. Two levels on purpose: the card shows
@@ -598,6 +598,26 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                         scope={{ coding_problem_id: problem.id }}
                       />
                     </div>
+
+                    {/* Easy to miss up in the dialog title next to the name
+                        and timestamp - repeated here, right where the
+                        feedback itself gets written, whenever the student
+                        actually said yes. */}
+                    {current.ai_help_used && (
+                      <div className="flex items-center gap-2 text-sm bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        <Bot className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                        <a
+                          href={current.ai_help_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-amber-700 hover:underline break-all flex-1"
+                        >
+                          {current.ai_help_link}
+                        </a>
+                        <ExternalLink className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />
+                      </div>
+                    )}
+
                     <p className="text-xs text-muted-foreground">
                       {lineComments.length > 0
                         ? `${lineComments.length} line comment${lineComments.length === 1 ? "" : "s"} will be saved with this.`
