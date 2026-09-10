@@ -378,12 +378,51 @@ Deno.serve(async (req) => {
         sub.autograde_score !== null ||
         !!(sub.teacher_comments || '').trim() ||
         (sub.line_comments || []).length > 0;
+
       if (graded) {
-        return json(
-          { error: 'This has already been graded. Ask your teacher if you need to turn it in again.' },
-          409
-        );
+        // Only a hand-graded Coding Assignment can be turned in again after
+        // grading - an FRQ, a Project, and an autograded Mini Problem all
+        // still refuse, exactly as before. The graded attempt is archived
+        // first, not discarded: the grading queue must only ever show one
+        // current thing to grade for this student, but nothing the teacher
+        // already wrote should vanish - see submission_versions.
+        let isReviewCoding = false;
+        if (sub.coding_problem_id) {
+          const { data: problem } = await admin
+            .from('coding_problems')
+            .select('grading_kind')
+            .eq('id', sub.coding_problem_id)
+            .maybeSingle();
+          isReviewCoding = problem?.grading_kind === 'review';
+        }
+        if (!isReviewCoding) {
+          return json(
+            { error: 'This has already been graded. Ask your teacher if you need to turn it in again.' },
+            409
+          );
+        }
+        const { error: archiveErr } = await admin
+          .from('submission_versions')
+          .insert({ submission_id: sub.id, snapshot: sub });
+        if (archiveErr) return json({ error: archiveErr.message }, 500);
+        const { data, error } = await admin
+          .from('submissions')
+          .update({
+            submitted: false,
+            submitted_at: null,
+            score: null,
+            teacher_comments: null,
+            line_comments: [],
+            feedback_released: false,
+            feedback_reviewed_at: null,
+          })
+          .eq('id', body.submission_id)
+          .select()
+          .single();
+        if (error) return json({ error: error.message }, 500);
+        return json({ result: data });
       }
+
       const { data, error } = await admin
         .from('submissions')
         .update({ submitted: false, submitted_at: null })
@@ -705,9 +744,44 @@ Deno.serve(async (req) => {
       const { data, error } = await query.order(column, { ascending });
       if (error) return json({ error: error.message }, 500);
       const rows = data || [];
+
+      // Which of these have an earlier, already-graded attempt archived (see
+      // reopenMine) - one bulk query rather than one per row, so the list
+      // itself can flag "Resubmitted" without opening each student.
+      const ids = rows.map((s: Record<string, any>) => s.id);
+      const { data: versionRows } = ids.length
+        ? await admin.from('submission_versions').select('submission_id').in('submission_id', ids)
+        : { data: [] as Record<string, any>[] };
+      const resubmittedIds = new Set((versionRows || []).map((v: Record<string, any>) => v.submission_id));
+      const withFlag = rows.map((s: Record<string, any>) => ({ ...s, resubmitted: resubmittedIds.has(s.id) }));
+
       // Opt-in so anything still asking for whole rows (the CSV exports, which
       // genuinely need every response) keeps working unchanged.
-      return json({ results: body.summary ? rows.map(summarizeForList) : rows });
+      return json({ results: body.summary ? withFlag.map(summarizeForList) : withFlag });
+    }
+
+    // The archived, previously-graded attempt(s) behind a resubmitted
+    // submission - oldest last, so the teacher reads them in the order they
+    // actually happened.
+    if (action === 'listVersions') {
+      const { data: sub } = await admin
+        .from('submissions')
+        .select('id, assignment_id, coding_problem_id, project_id')
+        .eq('id', body.submission_id)
+        .maybeSingle();
+      if (!sub) return json({ error: 'Not found' }, 404);
+      const table = sub.assignment_id ? 'assignments' : sub.coding_problem_id ? 'coding_problems' : 'projects';
+      const workId = sub.assignment_id || sub.coding_problem_id || sub.project_id;
+      const { data: workRow } = await admin.from(table).select('course_id').eq('id', workId).maybeSingle();
+      if (!workRow || !myCourses.includes(workRow.course_id)) return json({ error: 'Not found' }, 404);
+
+      const { data, error } = await admin
+        .from('submission_versions')
+        .select('*')
+        .eq('submission_id', body.submission_id)
+        .order('archived_at', { ascending: false });
+      if (error) return json({ error: error.message }, 500);
+      return json({ results: data || [] });
     }
 
     // One full submission row, for when the teacher actually opens a student.

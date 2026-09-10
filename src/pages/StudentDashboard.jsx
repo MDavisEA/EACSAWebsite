@@ -497,23 +497,37 @@ export default function StudentDashboard() {
                 </p>
               )}
 
-              {/* Only offered while nothing has been graded - see reopenMine on
-                  the server, which is what actually enforces it. */}
-              {detail.item.kind !== "project" && detail.item.status === "submitted" && (
-                <div className="border-t pt-3 flex items-center gap-3 flex-wrap">
-                  <Button variant="outline" onClick={resubmit} disabled={reopening}>
-                    {reopening ? (
-                      <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Reopening...</>
-                    ) : (
-                      <><RotateCcw className="w-4 h-4 mr-1.5" /> Turn it in again</>
-                    )}
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Reopens this with your work still in it. Once your teacher has graded it you
-                    will need to ask them.
-                  </span>
-                </div>
-              )}
+              {/* Before grading, any FRQ or Coding Assignment can be reopened
+                  - see reopenMine on the server, which is what actually
+                  enforces it. After grading, only a hand-graded Coding
+                  Assignment can still be turned in again; the old grade and
+                  feedback are not lost, just archived, and the score you see
+                  here goes back to unscored until it is regraded. */}
+              {(() => {
+                const isReviewCoding = detail.item.kind === "code" && detail.codingProblem?.grading_kind === "review";
+                const canResubmit =
+                  detail.item.kind !== "project" &&
+                  (detail.item.status === "submitted" ||
+                    (isReviewCoding && (detail.item.status === "graded" || detail.item.status === "reviewed")));
+                if (!canResubmit) return null;
+                const alreadyGraded = detail.item.status !== "submitted";
+                return (
+                  <div className="border-t pt-3 flex items-center gap-3 flex-wrap">
+                    <Button variant="outline" onClick={resubmit} disabled={reopening}>
+                      {reopening ? (
+                        <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Reopening...</>
+                      ) : (
+                        <><RotateCcw className="w-4 h-4 mr-1.5" /> Turn it in again</>
+                      )}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {alreadyGraded
+                        ? "Reopens this with your work still in it. Your current grade and feedback go back to waiting on a grade until your teacher looks at it again."
+                        : "Reopens this with your work still in it. Once your teacher has graded it you will need to ask them."}
+                    </span>
+                  </div>
+                );
+              })()}
 
               {/* The point of the whole Reviewed section: once they have
                   actually read the feedback they say so, and it moves out of

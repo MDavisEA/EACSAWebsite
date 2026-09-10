@@ -244,6 +244,13 @@ const Submission = {
     return data.result;
   },
 
+  // The archived, previously-graded attempt(s) behind a resubmitted
+  // Coding Assignment - see reopenMine on the server.
+  async listVersions(id) {
+    const data = await callFunction('submissions', { action: 'listVersions', submission_id: id });
+    return data.results;
+  },
+
   // { byAssignment: {id: n}, byProject: {id: n} } - submitted work with no
   // score yet, i.e. what is waiting on the teacher.
   async gradingCounts() {
