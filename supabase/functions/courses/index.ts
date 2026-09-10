@@ -49,15 +49,48 @@ Deno.serve(async (req) => {
       // Roster counts, units and sections come back with the list so the
       // dashboard can render a whole course without a request per course.
       const ids = (data || []).map((c: Record<string, any>) => c.id);
-      const [counts, units, sections] = await Promise.all([
+      const [counts, units, sections, linksOut, linksIn] = await Promise.all([
         ids.length ? admin.from('roster_students').select('course_id').in('course_id', ids) : { data: [] },
         ids.length ? admin.from('units').select('*').in('course_id', ids).order('position') : { data: [] },
         ids.length ? admin.from('sections').select('*').in('course_id', ids).order('position') : { data: [] },
+        // Colleagues whose course receives a copy of everything new I add to
+        // this one.
+        ids.length
+          ? admin.from('course_links').select('source_course_id, target_course_id').in('source_course_id', ids)
+          : { data: [] },
+        // The one course (if any) this course itself receives new work from.
+        ids.length
+          ? admin.from('course_links').select('source_course_id, target_course_id').in('target_course_id', ids)
+          : { data: [] },
       ]);
       const byCourse: Record<string, number> = {};
       (counts.data || []).forEach((r: Record<string, any>) => {
         byCourse[r.course_id] = (byCourse[r.course_id] || 0) + 1;
       });
+
+      // The other side of every link found above - fetched as its own lookup
+      // (course name + owning teacher's display name) rather than a nested
+      // PostgREST embed, since courses and teacher_profiles each reference
+      // auth.users separately and have no direct foreign key to each other
+      // for an embed to walk.
+      const otherCourseIds = [
+        ...new Set([
+          ...(linksOut.data || []).map((l: Record<string, any>) => l.target_course_id),
+          ...(linksIn.data || []).map((l: Record<string, any>) => l.source_course_id),
+        ]),
+      ];
+      const otherCourses = otherCourseIds.length
+        ? (await admin.from('courses').select('id, name, teacher_id').in('id', otherCourseIds)).data || []
+        : [];
+      const otherTeacherIds = [...new Set(otherCourses.map((c: Record<string, any>) => c.teacher_id))];
+      const otherTeachers = otherTeacherIds.length
+        ? (await admin.from('teacher_profiles').select('id, display_name').in('id', otherTeacherIds)).data || []
+        : [];
+      const courseInfo = (id: string) => {
+        const c = otherCourses.find((x: Record<string, any>) => x.id === id);
+        const t = c ? otherTeachers.find((x: Record<string, any>) => x.id === c.teacher_id) : null;
+        return { course_name: c?.name || '', teacher_name: t?.display_name || '' };
+      };
 
       return json({
         results: (data || []).map((c: Record<string, any>) => ({
@@ -65,8 +98,61 @@ Deno.serve(async (req) => {
           student_count: byCourse[c.id] || 0,
           units: (units.data || []).filter((u: Record<string, any>) => u.course_id === c.id),
           sections: (sections.data || []).filter((s: Record<string, any>) => s.course_id === c.id),
+          linked_out_to: (linksOut.data || [])
+            .filter((l: Record<string, any>) => l.source_course_id === c.id)
+            .map((l: Record<string, any>) => courseInfo(l.target_course_id)),
+          linked_from: (() => {
+            const link = (linksIn.data || []).find((l: Record<string, any>) => l.target_course_id === c.id);
+            return link ? courseInfo(link.source_course_id) : null;
+          })(),
         })),
       });
+    }
+
+    // Read-only, for the "Link to a colleague's course" picker - every other
+    // teacher's course, same trust model as coding-problems' listShared (this
+    // is a small department, not an org chart, and everyone already sees
+    // everyone else's coding problems the same way).
+    if (action === 'listLinkable') {
+      const mine = await myCourseIds();
+      const { data, error } = await admin.from('courses').select('id, name, teacher_id').order('name');
+      if (error) return json({ error: error.message }, 500);
+      const others = (data || []).filter((c: Record<string, any>) => !mine.includes(c.id));
+      const teacherIds = [...new Set(others.map((c: Record<string, any>) => c.teacher_id))];
+      const teachers = teacherIds.length
+        ? (await admin.from('teacher_profiles').select('id, display_name').in('id', teacherIds)).data || []
+        : [];
+      return json({
+        results: others.map((c: Record<string, any>) => ({
+          id: c.id,
+          name: c.name,
+          teacher_name: teachers.find((t: Record<string, any>) => t.id === c.teacher_id)?.display_name || '',
+        })),
+      });
+    }
+
+    // My course (course_id) starts receiving a copy of every new item added
+    // to source_course_id from now on. One source per target - linking again
+    // just replaces it, rather than a course silently drawing from two places
+    // at once.
+    if (action === 'linkCourse') {
+      if (!(await owns(body.course_id))) return json({ error: 'Not found' }, 404);
+      if (body.source_course_id === body.course_id) {
+        return json({ error: "A course can't link to itself." }, 400);
+      }
+      await admin.from('course_links').delete().eq('target_course_id', body.course_id);
+      const { error } = await admin
+        .from('course_links')
+        .insert({ source_course_id: body.source_course_id, target_course_id: body.course_id });
+      if (error) return json({ error: error.message }, 500);
+      return json({ success: true });
+    }
+
+    if (action === 'unlinkCourse') {
+      if (!(await owns(body.course_id))) return json({ error: 'Not found' }, 404);
+      const { error } = await admin.from('course_links').delete().eq('target_course_id', body.course_id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ success: true });
     }
 
     if (action === 'create') {

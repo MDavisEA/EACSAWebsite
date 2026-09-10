@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { BookOpen, LogOut, Lock, ChevronLeft, Archive, ArchiveRestore, Plus, Eye } from "lucide-react";
+import { BookOpen, LogOut, Lock, ChevronLeft, Archive, ArchiveRestore, Plus, Eye, Link2 } from "lucide-react";
 import AssignmentForm from "@/components/teacher/AssignmentForm";
 import CodingProblemForm from "@/components/teacher/CodingProblemForm";
 import ProjectForm from "@/components/teacher/ProjectForm";
@@ -25,6 +25,7 @@ import TeacherHome from "@/components/teacher/TeacherHome";
 import CourseUnitsView from "@/components/teacher/CourseUnitsView";
 import NewWorkDialog from "@/components/teacher/NewWorkDialog";
 import SharedLibraryDialog from "@/components/teacher/SharedLibraryDialog";
+import CourseLinkDialog from "@/components/teacher/CourseLinkDialog";
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
@@ -66,6 +67,7 @@ export default function TeacherDashboard() {
   const [showNewWork, setShowNewWork] = useState(false);
   const [newWorkUnitId, setNewWorkUnitId] = useState(null);
   const [showShared, setShowShared] = useState(false);
+  const [showCourseLink, setShowCourseLink] = useState(false);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -647,6 +649,14 @@ export default function TeacherDashboard() {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => setShowCourseLink(true)}
+                    title="Link this course to (or from) a colleague's, so new work copies over automatically"
+                  >
+                    <Link2 className="w-4 h-4 mr-1.5" /> Course Links
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleToggleArchived(openCourse)}
                     title={
                       openCourse.archived
@@ -863,6 +873,15 @@ export default function TeacherDashboard() {
         courses={courses}
         onCopied={loadCodingProblems}
       />
+
+      {openCourse && (
+        <CourseLinkDialog
+          open={showCourseLink}
+          onOpenChange={setShowCourseLink}
+          course={openCourse}
+          onChanged={loadCourses}
+        />
+      )}
 
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">

@@ -1,5 +1,6 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest, teacherCourseIds, teacherOwnsCourse, teacherOwnsRow } from '../_shared/teacherAuth.ts';
+import { propagateToLinkedCourses } from '../_shared/courseLinks.ts';
 
 Deno.serve(async (req) => {
   const preflight = handleOptions(req);
@@ -42,6 +43,7 @@ Deno.serve(async (req) => {
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
+      await propagateToLinkedCourses(admin, 'notes', data);
       return json({ result: data });
     }
 

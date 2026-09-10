@@ -8,6 +8,7 @@ import {
 } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { attachSectionDueDates, fetchOverridesByWorkId, replaceSectionDueDates, resolveDueDates } from '../_shared/sectionDueDates.ts';
+import { propagateToLinkedCourses } from '../_shared/courseLinks.ts';
 
 // Students get starter code, description, and the LABELS of test cases
 // (so they know what's being checked) but never expected_output, method_args,
@@ -299,6 +300,7 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
       const { error: sddErr } = await replaceSectionDueDates(admin, 'coding_problem_id', data.id, section_due_dates);
       if (sddErr) return json({ error: sddErr }, 500);
+      await propagateToLinkedCourses(admin, 'coding_problems', data);
       const [withOverrides] = await attachSectionDueDates(admin, 'coding_problem_id', [data]);
       return json({ result: withOverrides });
     }

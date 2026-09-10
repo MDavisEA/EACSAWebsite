@@ -10,6 +10,7 @@ import { extractGistId, fetchGistJavaFiles } from '../_shared/gist.ts';
 import { extractGoogleDocId } from '../_shared/googleDoc.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { attachSectionDueDates, fetchOverridesByWorkId, replaceSectionDueDates, resolveDueDates } from '../_shared/sectionDueDates.ts';
+import { propagateToLinkedCourses } from '../_shared/courseLinks.ts';
 
 // Students see the rubric (it's the point - they should know what they're
 // reviewed against) but never review_prompt, which is instructions aimed at
@@ -122,6 +123,7 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
       const { error: sddErr } = await replaceSectionDueDates(admin, 'project_id', data.id, section_due_dates);
       if (sddErr) return json({ error: sddErr }, 500);
+      await propagateToLinkedCourses(admin, 'projects', data);
       const [withOverrides] = await attachSectionDueDates(admin, 'project_id', [data]);
       return json({ result: withOverrides });
     }

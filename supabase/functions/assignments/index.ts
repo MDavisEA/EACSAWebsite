@@ -8,6 +8,7 @@ import {
 } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { attachSectionDueDates, fetchOverridesByWorkId, replaceSectionDueDates, resolveDueDates } from '../_shared/sectionDueDates.ts';
+import { propagateToLinkedCourses } from '../_shared/courseLinks.ts';
 
 // Fields that must NEVER be sent to a student who is actively taking an exam -
 // showing these would just be handing out the answers.
@@ -129,6 +130,7 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
       const { error: sddErr } = await replaceSectionDueDates(admin, 'assignment_id', data.id, section_due_dates);
       if (sddErr) return json({ error: sddErr }, 500);
+      await propagateToLinkedCourses(admin, 'assignments', data);
       const [withOverrides] = await attachSectionDueDates(admin, 'assignment_id', [data]);
       return json({ result: withOverrides });
     }

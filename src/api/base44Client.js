@@ -559,6 +559,21 @@ const Course = {
     return data.result;
   },
 
+  // Every other teacher's course, for the "Link to a colleague's course"
+  // picker.
+  async listLinkable() {
+    const data = await callFunction('courses', { action: 'listLinkable' });
+    return data.results;
+  },
+
+  async linkCourse(course_id, source_course_id) {
+    await callFunction('courses', { action: 'linkCourse', course_id, source_course_id });
+  },
+
+  async unlinkCourse(course_id) {
+    await callFunction('courses', { action: 'unlinkCourse', course_id });
+  },
+
   async create(fields) {
     const data = await callFunction('courses', { action: 'create', data: fields });
     return data.result;
