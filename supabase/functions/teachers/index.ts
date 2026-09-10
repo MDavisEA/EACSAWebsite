@@ -48,7 +48,24 @@ Deno.serve(async (req) => {
         .select('id')
         .eq('email', email)
         .maybeSingle();
-      if (already) return json({ error: 'That teacher already has an account.' }, 409);
+
+      // A teacher_profiles row already existing does not mean the invite was
+      // ever acted on - re-clicking "Invite" for someone who has not yet set
+      // a password (confirmed_at still null) is the normal way to resend a
+      // lost or expired email, not a mistake. Only block it once they have an
+      // actual working login, where sending another invite would be
+      // pointless (and inviteUserByEmail errors on a confirmed user anyway).
+      if (already) {
+        const { data: userRes } = await admin.auth.admin.getUserById(already.id);
+        if (userRes?.user?.confirmed_at) {
+          return json({ error: 'That teacher already has an account.' }, 409);
+        }
+        const { error: resendErr } = await admin.auth.admin.inviteUserByEmail(email, {
+          redirectTo: body.redirect_to || undefined,
+        });
+        if (resendErr) return json({ error: resendErr.message }, 500);
+        return json({ result: { email, emailed: true, note: null } });
+      }
 
       // Supabase emails the link; redirectTo has to be listed under
       // Authentication -> URL Configuration or the link silently goes nowhere.
