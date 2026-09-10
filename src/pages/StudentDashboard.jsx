@@ -459,7 +459,7 @@ export default function StudentDashboard() {
 
       {/* What you turned in, and a way to turn it in again. */}
       <Dialog open={!!detail} onOpenChange={(v) => { if (!v) setDetail(null); }}>
-        <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[88vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{detail?.item?.title}</DialogTitle>
           </DialogHeader>

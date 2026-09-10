@@ -55,7 +55,7 @@ function CodeWithNotes({ code, file = null, lineComments = [] }) {
 
   return (
     <div
-      className="rounded-lg overflow-hidden text-xs font-mono"
+      className="rounded-lg overflow-x-auto text-xs font-mono"
       style={{ background: ONE_DARK.bg, color: ONE_DARK.plain }}
     >
       {lines.map((text, i) => {
@@ -127,7 +127,12 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
   );
 
   return (
-    <div className="space-y-4">
+    // min-w-0 matters here, not just space-y-4: DialogContent (dialog.jsx) is
+    // a grid container, and a grid item's default min-width is auto, not 0 -
+    // without this, a long unwrapped code line forces this whole subtree
+    // wider instead of scrolling within its own box, pushing the dialog past
+    // the edge of the screen with nothing to scroll it back into view.
+    <div className="space-y-4 min-w-0">
       <div className="bg-white rounded-xl border shadow-sm p-6">
         <div className="text-center mb-4">
           <p className="text-muted-foreground text-sm mb-1">Score for</p>
