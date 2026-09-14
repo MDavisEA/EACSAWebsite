@@ -9,6 +9,7 @@ import SubmissionDetail from "@/components/SubmissionDetail";
 import { format, isPast } from "date-fns";
 import {
   BookOpen, LogIn, LogOut, ChevronRight, Loader2, RotateCcw, CheckCheck, ChevronDown, ChevronUp,
+  MessageSquare, FileCode,
 } from "lucide-react";
 import { WORK_KIND_META, STATUS, groupWorkByUnit } from "@/lib/workStatus";
 import { highlightNoteCode } from "@/lib/highlightNoteCode";
@@ -52,6 +53,19 @@ function WorkRow({ item, onOpen }) {
             </span>
           )}
           {item.is_late && <span className="text-xs text-amber-700">Turned in late</span>}
+          {/* Tells them, before they click in, whether feedback is worth
+              digging into - a specific comment on their code is the
+              strongest signal, so it wins over a general one when both
+              exist rather than showing both badges. */}
+          {item.has_line_comments ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700">
+              <FileCode className="w-3 h-3" /> Comments on your code
+            </span>
+          ) : item.has_comment ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700">
+              <MessageSquare className="w-3 h-3" /> Feedback
+            </span>
+          ) : null}
         </div>
       </div>
 

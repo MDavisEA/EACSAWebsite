@@ -25,6 +25,14 @@ export interface WorkItem {
   course_id: string | null;
   unit_id: string | null;
   sort_order: number | null;
+  // Whether there is an overall comment / any line comments to read - not
+  // the text itself, just enough for a student to tell before clicking in
+  // whether it is worth digging into the feedback or just a bare score.
+  // Line comments specifically mean "commented on a specific line of code,"
+  // never true for an FRQ (which has no lines of code - its own per-part
+  // remarks live in a different column this never looks at).
+  has_comment: boolean;
+  has_line_comments: boolean;
 }
 
 // Project feedback is release-gated (see submissions/index.ts); FRQ and code
@@ -46,6 +54,21 @@ export function statusForSubmission(
     return { status: sub.feedback_reviewed_at ? 'reviewed' : 'graded', score: visibleScore };
   }
   return { status: 'submitted', score: null };
+}
+
+// Same gating as the score itself (see visibleScore above): a project's
+// feedback - including the mere fact that some exists - stays invisible
+// until the teacher releases it, so this never becomes a way to learn
+// "there is something waiting for you" ahead of that release.
+function feedbackFlags(
+  sub: Record<string, any> | undefined,
+  gated: boolean
+): { has_comment: boolean; has_line_comments: boolean } {
+  if (!sub || (gated && !sub.feedback_released)) return { has_comment: false, has_line_comments: false };
+  return {
+    has_comment: !!(sub.teacher_comments || '').trim(),
+    has_line_comments: (sub.line_comments || []).length > 0,
+  };
 }
 
 // Builds one identity's WorkItem[] from the active work in scope and THEIR
@@ -98,6 +121,7 @@ export function buildWorkItems(
       course_id: a.course_id ?? null,
       unit_id: a.unit_id ?? null,
       sort_order: a.sort_order ?? null,
+      ...feedbackFlags(sub, false),
     });
   }
 
@@ -120,6 +144,7 @@ export function buildWorkItems(
       course_id: p.course_id ?? null,
       unit_id: p.unit_id ?? null,
       sort_order: p.sort_order ?? null,
+      ...feedbackFlags(sub, false),
     });
   }
 
@@ -140,6 +165,7 @@ export function buildWorkItems(
       course_id: pr.course_id ?? null,
       unit_id: pr.unit_id ?? null,
       sort_order: pr.sort_order ?? null,
+      ...feedbackFlags(sub, true),
     });
   }
 
