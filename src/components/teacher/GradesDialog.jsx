@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Copy, Check, Loader2, Mail } from "lucide-react";
 import { latestPerStudent } from "@/lib/groupSubmissionsByStudent";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
+import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 
 // Every student's mark for ONE assignment, in a list built for copying into
 // Canvas by hand. Deliberately not a gradebook: no cross-assignment view, no
@@ -30,6 +31,7 @@ export default function GradesDialog({
   onOpenChange,
   title,
   submissions,
+  loadFor,
   courseId,
   preloadedRoster,
   maxPoints,
@@ -38,7 +40,44 @@ export default function GradesDialog({
   const [sortBy, setSortBy] = useState("last");
   const [fetchedRoster, setFetchedRoster] = useState([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
+  const [fetchedSubmissions, setFetchedSubmissions] = useState([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Submissions arrive one of two ways. A viewer that is already open passes
+  // the list it has; opened straight off a card there is no viewer and no
+  // list, so `loadFor` says what to fetch - the point being that reading down
+  // a column of marks should not require expanding the submissions table
+  // first and waiting for it to render.
+  //
+  // Seeded from the same module-scope cache the viewers read, so a card whose
+  // submissions were looked at earlier opens instantly, then refetched in the
+  // background exactly as they do. `loadFor` is stringified for the dependency
+  // list because callers build it inline and a fresh object every render would
+  // refetch forever.
+  const loadKey = loadFor ? JSON.stringify(loadFor) : null;
+
+  useEffect(() => {
+    if (!open || submissions || !loadFor) return;
+    let cancelled = false;
+
+    const cached = getCachedList(loadFor);
+    if (cached) setFetchedSubmissions(cached);
+    setLoadingSubmissions(!cached);
+
+    base44.entities.Submission.filterSummary({ ...loadFor, submitted: true }, "-submitted_at")
+      .then((r) => {
+        if (cancelled) return;
+        setFetchedSubmissions(r || []);
+        setCachedList(loadFor, r || []);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingSubmissions(false); });
+
+    return () => { cancelled = true; };
+  }, [open, loadKey, submissions]);
+
+  const effectiveSubmissions = submissions || fetchedSubmissions;
 
   // The roster is what makes "who has no grade yet" answerable - without it
   // this can only list people who turned something in, which is the wrong list
@@ -60,7 +99,7 @@ export default function GradesDialog({
   const roster = preloadedRoster || fetchedRoster;
 
   const rows = useMemo(() => {
-    const latest = latestPerStudent(submissions || []);
+    const latest = latestPerStudent(effectiveSubmissions || []);
     const submitted = latest.map((s) => {
       const score = scoreOf(s);
       return {
@@ -96,7 +135,7 @@ export default function GradesDialog({
           : pa.first.localeCompare(pb.first) || pa.last.localeCompare(pb.last);
       return primary;
     });
-  }, [submissions, roster, sortBy, scoreOf]);
+  }, [effectiveSubmissions, roster, sortBy, scoreOf]);
 
   const gradedCount = rows.filter((r) => r.score != null).length;
 
@@ -177,7 +216,11 @@ export default function GradesDialog({
         )}
 
         <div className="border rounded-lg divide-y">
-          {rows.length === 0 ? (
+          {loadingSubmissions && rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-6 text-center flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading submissions...
+            </p>
+          ) : rows.length === 0 ? (
             <p className="text-sm text-muted-foreground p-6 text-center">Nobody has turned this in yet.</p>
           ) : (
             rows.map((r) => (

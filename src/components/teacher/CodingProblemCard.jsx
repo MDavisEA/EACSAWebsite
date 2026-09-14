@@ -3,15 +3,23 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Pencil, Trash2, CopyPlus, Code2, Eye, EyeOff, Link2, Users, ChevronDown, ChevronUp, Copy, Check , GripVertical, Ban } from "lucide-react";
+import { Pencil, Trash2, CopyPlus, Code2, Eye, EyeOff, Link2, Users, ChevronDown, ChevronUp, Copy, Check , GripVertical, Ban, ClipboardList } from "lucide-react";
 import CodingSubmissionViewer from "./CodingSubmissionViewer";
 import CodeReviewGrader from "./CodeReviewGrader";
 import StudentPreviewDialog from "./StudentPreviewDialog";
+import GradesDialog from "./GradesDialog";
+
+// Matches the two viewers: a hand-graded Coding Assignment is marked by a
+// person and keeps its mark in `score`, while an autograded Mini Problem's
+// mark is `autograde_score`, falling back to a hand-entered one.
+const SCORE_OF_REVIEW = (s) => s.score ?? null;
+const SCORE_OF_AUTOGRADED = (s) => s.autograde_score ?? s.score ?? null;
 
 export default function CodingProblemCard({ problem, ungradedCount = 0, dragHandleProps, onEdit, onDelete, onToggleActive, onToggleGrading, onToggleKeyReleased, onDuplicate }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [gradesOpen, setGradesOpen] = useState(false);
 
   const methods = problem.methods || [];
   const allTestCases = methods.flatMap((m) => m.test_cases || []);
@@ -101,6 +109,19 @@ export default function CodingProblemCard({ problem, ungradedCount = 0, dragHand
                   <span className="text-xs text-muted-foreground whitespace-nowrap">Key</span>
                 </div>
               )}
+              {/* Sits up here rather than only inside the submissions table,
+                  so reading down a column of marks does not mean expanding
+                  the table and waiting for it first. The dialog fetches the
+                  list itself, reusing whatever the viewer already cached. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setGradesOpen(true)}
+                title="Every student's mark for this, ready to copy into Canvas"
+                className="mr-2"
+              >
+                <ClipboardList className="w-4 h-4" />
+              </Button>
               <Switch checked={problem.is_active} onCheckedChange={onToggleActive} className="mr-2" />
               <Button variant="ghost" size="sm" onClick={() => setPreviewing(true)} title="Preview as student">
                 <Eye className="w-4 h-4" />
@@ -168,6 +189,16 @@ export default function CodingProblemCard({ problem, ungradedCount = 0, dragHand
         kind="code"
         itemId={problem.id}
         title={problem.title}
+      />
+
+      <GradesDialog
+        open={gradesOpen}
+        onOpenChange={setGradesOpen}
+        title={problem.title}
+        loadFor={{ coding_problem_id: problem.id }}
+        courseId={problem.course_id}
+        maxPoints={problem.points_possible ?? null}
+        scoreOf={problem.grading_kind === "review" ? SCORE_OF_REVIEW : SCORE_OF_AUTOGRADED}
       />
     </Card>
   );
