@@ -85,7 +85,10 @@ function CodeWithNotes({ code, file = null, lineComments = [] }) {
               </pre>
             </div>
             {note && (
-              <div className="flex items-start gap-1.5 bg-amber-500/15 border-l-2 border-amber-400 pl-11 pr-3 py-1.5">
+              <div
+                id={`line-comment-${file || "main"}-${n}`}
+                className="flex items-start gap-1.5 bg-amber-500/15 border-l-2 border-amber-400 pl-11 pr-3 py-1.5 scroll-mt-4"
+              >
                 <MessageSquare className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
                 <span className="text-xs text-amber-100 font-sans">{note.body}</span>
               </div>
@@ -156,6 +159,28 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
           </p>
         )}
       </div>
+
+      {/* A comment sitting on line 34 of a 60-line file is very easy to
+          scroll straight past without noticing - this is the one thing on
+          the page guaranteed to be seen, so it says up front that there is
+          something to find below and jumps straight to it. */}
+      {visibleLineComments.length > 0 && (
+        <button
+          onClick={() => {
+            const first = visibleLineComments[0];
+            document
+              .getElementById(`line-comment-${first.file || "main"}-${first.line}`)
+              ?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
+          className="w-full flex items-center gap-2 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 text-left hover:bg-amber-100 transition-colors"
+        >
+          <MessageSquare className="w-5 h-5 text-amber-600 flex-shrink-0" />
+          <span className="text-sm font-medium text-amber-900">
+            Your teacher left {visibleLineComments.length} comment{visibleLineComments.length === 1 ? "" : "s"} on
+            specific lines of your code - tap to jump to {visibleLineComments.length === 1 ? "it" : "the first one"}.
+          </span>
+        </button>
+      )}
 
       {isProject ? (
         <div className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
