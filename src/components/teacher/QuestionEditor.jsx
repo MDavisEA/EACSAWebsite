@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { base44 } from "@/api/base44Client";
 import { Plus, Trash2, GripVertical, Upload, X, Image, FileText, Type, Check } from "lucide-react";
 import ReactQuill from "react-quill";
+import { QUILL_MODULES, QUILL_FORMATS } from "@/lib/quillConfig";
 import "react-quill/dist/quill.snow.css";
 import PdfTextEditor from "@/components/teacher/PdfTextEditor";
 import AnswerKeyEditor from "@/components/teacher/AnswerKeyEditor";
@@ -13,21 +14,6 @@ import AnswerKeyEditor from "@/components/teacher/AnswerKeyEditor";
 function generateId() {
   return Math.random().toString(36).substr(2, 9);
 }
-
-const QUILL_MODULES = {
-  toolbar: [
-    [{ header: [false, 3, 4] }],
-    ["bold", "italic", "underline", "code"],
-    [{ list: "ordered" }, { list: "bullet" }],
-    ["code-block"],
-    ["clean"],
-  ],
-};
-
-const QUILL_FORMATS = [
-  "header", "bold", "italic", "underline", "code",
-  "list", "bullet", "code-block"
-];
 
 function PdfPagePicker({ pdfUrl, onConfirm, onCancel }) {
   const [pageCount, setPageCount] = useState(null);

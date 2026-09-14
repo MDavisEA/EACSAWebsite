@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import ReactQuill from "react-quill";
+import { QUILL_MODULES, QUILL_FORMATS } from "@/lib/quillConfig";
 import "react-quill/dist/quill.snow.css";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
@@ -20,18 +21,6 @@ import SectionDueDatesEditor from "./SectionDueDatesEditor";
 // on every render makes @uiw/react-codemirror tear down and rebuild the
 // editor's state, which drops the current selection/cursor mid-edit.
 const CODE_EXTENSIONS = [java(), ...a11yLightEditorTheme];
-
-const QUILL_MODULES = {
-  toolbar: [
-    [{ header: [false, 3, 4] }],
-    ["bold", "italic", "underline", "code"],
-    [{ list: "ordered" }, { list: "bullet" }],
-    ["code-block"],
-    ["clean"],
-  ],
-};
-
-const QUILL_FORMATS = ["header", "bold", "italic", "underline", "code", "list", "bullet", "code-block"];
 
 function defaultForm() {
   return {

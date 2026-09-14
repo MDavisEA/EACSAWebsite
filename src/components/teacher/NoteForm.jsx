@@ -4,20 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import ReactQuill from "react-quill";
+import { QUILL_MODULES, QUILL_FORMATS } from "@/lib/quillConfig";
 import "react-quill/dist/quill.snow.css";
 import { highlightNoteCode } from "@/lib/highlightNoteCode";
-
-const QUILL_MODULES = {
-  toolbar: [
-    [{ header: [false, 3, 4] }],
-    ["bold", "italic", "underline", "code"],
-    [{ list: "ordered" }, { list: "bullet" }],
-    ["code-block"],
-    ["clean"],
-  ],
-};
-
-const QUILL_FORMATS = ["header", "bold", "italic", "underline", "code", "list", "bullet", "code-block"];
 
 // A teacher pasting a Java file from wherever they copied it from (an IDE, a
 // gist, a doc) almost never remembers to click the code-block toolbar button

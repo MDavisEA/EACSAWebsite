@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { openLinksInNewTab } from "@/lib/quillConfig";
 import { base44 } from "@/api/base44Client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -113,7 +114,7 @@ function CodePreview({ problem }) {
       {problem.description_html && (
         <div
           className="prose prose-sm max-w-none quill-render"
-          dangerouslySetInnerHTML={{ __html: problem.description_html }}
+          dangerouslySetInnerHTML={{ __html: openLinksInNewTab(problem.description_html) }}
         />
       )}
 
@@ -200,7 +201,7 @@ function ProjectPreview({ project }) {
       {project.description_html && (
         <div
           className="prose prose-sm max-w-none quill-render"
-          dangerouslySetInnerHTML={{ __html: project.description_html }}
+          dangerouslySetInnerHTML={{ __html: openLinksInNewTab(project.description_html) }}
         />
       )}
 

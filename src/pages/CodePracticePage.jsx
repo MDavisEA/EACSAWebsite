@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { openLinksInNewTab } from "@/lib/quillConfig";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useGoogleSession } from "@/lib/useGoogleSession";
@@ -301,7 +302,7 @@ export default function CodePracticePage() {
               colors, which are tuned for a white background. */}
           <div
             className="prose prose-sm prose-invert max-w-none quill-render quill-dark"
-            dangerouslySetInnerHTML={{ __html: problem.description_html || "" }}
+            dangerouslySetInnerHTML={{ __html: openLinksInNewTab(problem.description_html || "") }}
           />
 
           {(problem.sample_outputs || []).length > 0 && (

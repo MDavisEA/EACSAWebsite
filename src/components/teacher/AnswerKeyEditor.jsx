@@ -3,22 +3,8 @@ import { Label } from "@/components/ui/label";
 import { Upload, X, KeyRound } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import ReactQuill from "react-quill";
+import { QUILL_MODULES, QUILL_FORMATS } from "@/lib/quillConfig";
 import "react-quill/dist/quill.snow.css";
-
-const QUILL_MODULES = {
-  toolbar: [
-    [{ header: [false, 3, 4] }],
-    ["bold", "italic", "underline", "code"],
-    [{ list: "ordered" }, { list: "bullet" }],
-    ["code-block"],
-    ["clean"],
-  ],
-};
-
-const QUILL_FORMATS = [
-  "header", "bold", "italic", "underline", "code",
-  "list", "bullet", "code-block"
-];
 
 export default function AnswerKeyEditor({ keyHtml, keyImageUrl, onChangeHtml, onChangeImageUrl }) {
   const inputRef = useRef();

@@ -7,24 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ReactQuill from "react-quill";
+import { QUILL_MODULES, QUILL_FORMATS } from "@/lib/quillConfig";
 import "react-quill/dist/quill.snow.css";
 import { Upload, FileCode2, X, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import SampleOutputsEditor from "./SampleOutputsEditor";
 import MarkdownToolbar, { useMarkdownShortcuts } from "./MarkdownToolbar";
 import DueTimeQuickPicks from "./DueTimeQuickPicks";
 import SectionDueDatesEditor from "./SectionDueDatesEditor";
-
-const QUILL_MODULES = {
-  toolbar: [
-    [{ header: [false, 3, 4] }],
-    ["bold", "italic", "underline", "code"],
-    [{ list: "ordered" }, { list: "bullet" }],
-    ["code-block"],
-    ["clean"],
-  ],
-};
-
-const QUILL_FORMATS = ["header", "bold", "italic", "underline", "code", "list", "bullet", "code-block"];
 
 const DEFAULT_REVIEW_PROMPT = `Review each submission against the rubric above. Do not assign grades or numeric scores.
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { openLinksInNewTab } from "@/lib/quillConfig";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useGoogleSession, ALLOWED_STUDENT_DOMAIN } from "@/lib/useGoogleSession";
@@ -208,7 +209,7 @@ export default function ProjectPage() {
             </h2>
             <div
               className="prose prose-sm max-w-none quill-render"
-              dangerouslySetInnerHTML={{ __html: project.description_html }}
+              dangerouslySetInnerHTML={{ __html: openLinksInNewTab(project.description_html) }}
             />
           </div>
         )}
