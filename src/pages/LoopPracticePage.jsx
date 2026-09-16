@@ -6,6 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Repeat2, AlertCircle, ChevronRight, LogIn } from "lucide-react";
 
+// Cycled across the picker list purely for visual variety - carries no
+// meaning about the assignment itself.
+const ACCENT_COLORS = [
+  { border: "border-l-emerald-500/60", pill: "bg-emerald-500/15 text-emerald-300" },
+  { border: "border-l-sky-500/60", pill: "bg-sky-500/15 text-sky-300" },
+  { border: "border-l-violet-500/60", pill: "bg-violet-500/15 text-violet-300" },
+  { border: "border-l-amber-500/60", pill: "bg-amber-500/15 text-amber-300" },
+  { border: "border-l-pink-500/60", pill: "bg-pink-500/15 text-pink-300" },
+];
+
 // Picker + "begin" screen, same dual-mode shape as CodePage.jsx: no ?id=
 // lists every active practice set (standalone ones and course-scoped ones
 // alike - course is organizational here, not an access gate, same as the
@@ -69,7 +79,7 @@ export default function LoopPracticePage() {
       <div className="min-h-screen bg-[#1e1e1e] flex items-center justify-center p-6">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 mb-5">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-400/20 mb-5">
               <Repeat2 className="w-7 h-7 text-emerald-400" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight mb-2 text-slate-100">Loop Practice</h1>
@@ -82,26 +92,31 @@ export default function LoopPracticePage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {[...standalone, ...byCourse].map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => handleSelect(a)}
-                  className="w-full text-left bg-[#252526] border border-slate-700 rounded-xl p-5 hover:border-emerald-500/50 hover:shadow-md transition-all group"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="font-semibold text-slate-100 group-hover:text-emerald-400 transition-colors">
-                        {a.title}
-                      </h2>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
-                        <span>{a.target_score} correct to finish</span>
-                        {a.courses?.name && <span>{a.courses.name}</span>}
+              {[...standalone, ...byCourse].map((a, i) => {
+                const accent = ACCENT_COLORS[i % ACCENT_COLORS.length];
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => handleSelect(a)}
+                    className={`w-full text-left bg-[#252526] border border-slate-700 border-l-4 ${accent.border} rounded-xl p-5 hover:shadow-md transition-all group`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="font-semibold text-slate-100 group-hover:text-emerald-400 transition-colors">
+                          {a.title}
+                        </h2>
+                        <div className="flex items-center gap-2 mt-1.5 text-xs">
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${accent.pill}`}>
+                            {a.target_score} correct to finish
+                          </span>
+                          {a.courses?.name && <span className="text-slate-400">{a.courses.name}</span>}
+                        </div>
                       </div>
+                      <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
                     </div>
-                    <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -125,7 +140,7 @@ export default function LoopPracticePage() {
     <div className="min-h-screen bg-[#1e1e1e] flex items-center justify-center p-6">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 mb-5">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-400/20 mb-5">
             <Repeat2 className="w-7 h-7 text-emerald-400" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight mb-2 text-slate-100">{assignment.title}</h1>

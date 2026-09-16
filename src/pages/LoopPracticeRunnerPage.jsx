@@ -6,7 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { CheckCircle2, XCircle, Trophy, Home } from "lucide-react";
+import { CheckCircle2, XCircle, Trophy, Home, Terminal, ListChecks } from "lucide-react";
+
+const DIFFICULTY_COLOR = {
+  easy: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  medium: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  hard: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+};
+
+// Purely decorative labels for the 4 multiple-choice options - color/letter
+// carry no meaning about which one is correct, just visual variety.
+const OPTION_STYLE = [
+  { letter: "A", classes: "bg-sky-500/15 text-sky-300 border-sky-500/40" },
+  { letter: "B", classes: "bg-violet-500/15 text-violet-300 border-violet-500/40" },
+  { letter: "C", classes: "bg-amber-500/15 text-amber-300 border-amber-500/40" },
+  { letter: "D", classes: "bg-pink-500/15 text-pink-300 border-pink-500/40" },
+];
 
 // The drill itself: fetch a random problem matching the assignment's
 // filters, grade the answer server-side, show instant feedback, repeat
@@ -112,11 +127,14 @@ export default function LoopPracticeRunnerPage() {
     return (
       <div className="min-h-screen bg-[#1e1e1e] flex items-center justify-center p-6">
         <div className="text-center max-w-md">
-          <Trophy className="w-14 h-14 text-emerald-400 mx-auto mb-4" />
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-400/20 mb-4">
+            <Trophy className="w-10 h-10 text-emerald-400" />
+          </div>
           <h1 className="text-2xl font-bold text-slate-100 mb-2">Set complete!</h1>
           <p className="text-slate-400 mb-6">
-            Final score: {submission.loop_score} · {submission.loop_correct_count} correct,{" "}
-            {submission.loop_wrong_count} wrong
+            Final score: <span className="text-emerald-300 font-semibold">{submission.loop_score}</span> ·{" "}
+            <span className="text-emerald-400">{submission.loop_correct_count} correct</span>,{" "}
+            <span className="text-rose-400">{submission.loop_wrong_count} wrong</span>
           </p>
           <Button onClick={() => navigate("/loop-practice")}>
             <Home className="w-4 h-4 mr-2" /> Back to Loop Practice
@@ -133,18 +151,32 @@ export default function LoopPracticeRunnerPage() {
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm text-slate-400">
-            <span>Score: {submission?.loop_score ?? 0}</span>
+            <span className="font-semibold text-emerald-300">Score: {submission?.loop_score ?? 0}</span>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="border-slate-600 text-slate-300 capitalize">{problem.difficulty}</Badge>
-              <span>{submission?.loop_correct_count ?? 0} correct · {submission?.loop_wrong_count ?? 0} wrong</span>
+              <Badge variant="outline" className={`capitalize ${DIFFICULTY_COLOR[problem.difficulty] || "border-slate-600 text-slate-300"}`}>
+                {problem.difficulty}
+              </Badge>
+              <span>
+                <span className="text-emerald-400">{submission?.loop_correct_count ?? 0} correct</span>
+                {" · "}
+                <span className="text-rose-400">{submission?.loop_wrong_count ?? 0} wrong</span>
+              </span>
             </div>
           </div>
-          <Progress value={Math.min(100, ((submission?.loop_score ?? 0) / Math.max(1, targetScore)) * 100)} />
+          <Progress
+            value={Math.min(100, ((submission?.loop_score ?? 0) / Math.max(1, targetScore)) * 100)}
+            className="[&>div]:bg-gradient-to-r [&>div]:from-emerald-400 [&>div]:to-teal-300"
+          />
         </div>
 
         {problem.type === "trace" ? (
           <div className="bg-[#252526] border border-slate-700 rounded-xl p-6 space-y-4">
-            <h2 className="text-slate-200 font-medium">What does this print?</h2>
+            <h2 className="flex items-center gap-2 text-slate-200 font-medium">
+              <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-500/15 text-blue-300 flex-shrink-0">
+                <Terminal className="w-4 h-4" />
+              </span>
+              What does this print?
+            </h2>
             <pre className="bg-[#1e1e1e] border border-slate-700 rounded-lg p-4 text-sm text-slate-100 font-mono overflow-x-auto">
               {problem.code}
             </pre>
@@ -163,21 +195,36 @@ export default function LoopPracticeRunnerPage() {
           </div>
         ) : (
           <div className="bg-[#252526] border border-slate-700 rounded-xl p-6 space-y-4">
-            <h2 className="text-slate-200 font-medium">Which loop produces this output?</h2>
+            <h2 className="flex items-center gap-2 text-slate-200 font-medium">
+              <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-violet-500/15 text-violet-300 flex-shrink-0">
+                <ListChecks className="w-4 h-4" />
+              </span>
+              Which loop produces this output?
+            </h2>
             <pre className="bg-[#1e1e1e] border border-slate-700 rounded-lg p-4 text-sm text-slate-100 font-mono overflow-x-auto">
               {problem.shown_output}
             </pre>
             <div className="grid gap-3">
-              {problem.choices.map((c) => (
-                <button
-                  key={c.choice_index}
-                  disabled={!!feedback || submitting}
-                  onClick={() => submitAnswer(c.choice_index)}
-                  className="text-left bg-[#1e1e1e] border border-slate-700 rounded-lg p-3 font-mono text-xs text-slate-100 hover:border-emerald-500/50 disabled:opacity-60 transition-colors whitespace-pre-wrap break-words"
-                >
-                  {c.code}
-                </button>
-              ))}
+              {problem.choices.map((c, i) => {
+                const style = OPTION_STYLE[i % OPTION_STYLE.length];
+                return (
+                  <button
+                    key={c.choice_index}
+                    disabled={!!feedback || submitting}
+                    onClick={() => submitAnswer(c.choice_index)}
+                    className="flex items-start gap-3 text-left bg-[#1e1e1e] border border-slate-700 rounded-lg p-3 hover:border-slate-500 disabled:opacity-60 transition-colors"
+                  >
+                    <span
+                      className={`flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-md border text-xs font-semibold ${style.classes}`}
+                    >
+                      {style.letter}
+                    </span>
+                    <span className="font-mono text-xs text-slate-100 whitespace-pre-wrap break-words">
+                      {c.code}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
