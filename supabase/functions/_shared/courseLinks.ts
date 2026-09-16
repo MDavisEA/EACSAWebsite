@@ -4,7 +4,10 @@ import { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 // name - keeps a linked course's units aligned with the source without a
 // separate mapping table, and means a whole new unit the source teacher adds
 // gets created on the target side the first time something in it propagates.
-async function findOrCreateUnit(
+// Exported for loop-practice/index.ts, which needs the same unit-matching for
+// a course-scoped loop_assignments row but can't use propagateToLinkedCourses
+// directly below (see linkedTeacherIds doc comment).
+export async function findOrCreateUnit(
   admin: SupabaseClient,
   targetCourseId: string,
   sourceUnitName: string | null
@@ -84,4 +87,34 @@ export async function propagateToLinkedCourses(
   } catch {
     // See doc comment above - never let this bubble up to the caller.
   }
+}
+
+/**
+ * Every OTHER teacher who owns a course that is the TARGET of a course_links
+ * row whose SOURCE is one of `teacherId`'s own courses. Bridges the
+ * course-to-course `course_links` table to a teacher-to-teacher relationship,
+ * for content that (unlike assignments/coding_problems/projects/notes) isn't
+ * itself scoped by course_id - loop_problems is scoped directly by
+ * teacher_id (see 0030_loop_practice.sql), so there is no `row.course_id` for
+ * propagateToLinkedCourses to key off of. A course link still implies "this
+ * colleague should get my new stuff," so this reads it the other way: from
+ * my courses, out to whichever teachers own the courses linked to them.
+ */
+export async function linkedTeacherIds(admin: SupabaseClient, teacherId: string): Promise<string[]> {
+  const { data: myCourses } = await admin.from('courses').select('id').eq('teacher_id', teacherId);
+  const myCourseIds = (myCourses || []).map((c: Record<string, any>) => c.id);
+  if (myCourseIds.length === 0) return [];
+
+  const { data: links } = await admin.from('course_links').select('target_course_id').in('source_course_id', myCourseIds);
+  const targetCourseIds = [...new Set((links || []).map((l: Record<string, any>) => l.target_course_id))];
+  if (targetCourseIds.length === 0) return [];
+
+  const { data: targetCourses } = await admin.from('courses').select('teacher_id').in('id', targetCourseIds);
+  return [
+    ...new Set(
+      (targetCourses || [])
+        .map((c: Record<string, any>) => c.teacher_id)
+        .filter((id: string) => id && id !== teacherId)
+    ),
+  ];
 }

@@ -5,6 +5,91 @@ import {
   teacherOwnsCourse,
   teacherOwnsLoopRow,
 } from '../_shared/teacherAuth.ts';
+import { findOrCreateUnit, linkedTeacherIds } from '../_shared/courseLinks.ts';
+
+// Bank items are teacher-scoped, not course-scoped (see 0030_loop_practice.sql),
+// so they can't use propagateToLinkedCourses directly - there's no
+// row.course_id to match a course_links row against. linkedTeacherIds bridges
+// that: every colleague who has a course linked FROM one of mine gets a copy
+// of the item too, keyed by their own teacher_id. Best-effort/silent on
+// failure, same discipline as propagateToLinkedCourses - a colleague's copy
+// failing to land must never turn into an error on the teacher's own save.
+async function propagateLoopProblem(admin: any, teacherId: string, row: Record<string, any>): Promise<void> {
+  try {
+    const targets = await linkedTeacherIds(admin, teacherId);
+    if (targets.length === 0) return;
+    const { id, teacher_id, created_at, updated_at, ...rest } = row;
+    for (const targetTeacherId of targets) {
+      const { error } = await admin
+        .from('loop_problems')
+        .upsert({ ...rest, teacher_id: targetTeacherId }, { onConflict: 'teacher_id,source_key' });
+      if (error) console.error(`propagateLoopProblem -> ${targetTeacherId}: ${error.message}`);
+    }
+  } catch (e) {
+    console.error(`propagateLoopProblem threw: ${(e as Error).message}`);
+  }
+}
+
+// A course-scoped assignment follows the exact same course_links path as
+// assignments/coding_problems/projects (unit matched by name, forced
+// inactive) - just with teacher_id additionally overridden per target course's
+// owner, since loop_assignments (unlike those tables) carries a real
+// teacher_id column. A standalone assignment (no course_id) has no course to
+// key a link off of, so it goes straight to every linked colleague instead,
+// same as a bank item.
+async function propagateLoopAssignment(admin: any, teacherId: string, row: Record<string, any>): Promise<void> {
+  try {
+    const { id, teacher_id, created_at, updated_at, ...rest } = row;
+    if (row.course_id) {
+      const { data: links } = await admin
+        .from('course_links')
+        .select('target_course_id')
+        .eq('source_course_id', row.course_id);
+      for (const link of links || []) {
+        try {
+          const { data: targetCourse } = await admin
+            .from('courses')
+            .select('teacher_id')
+            .eq('id', link.target_course_id)
+            .maybeSingle();
+          if (!targetCourse) continue;
+          let sourceUnitName: string | null = null;
+          if (row.unit_id) {
+            const { data: unit } = await admin.from('units').select('name').eq('id', row.unit_id).maybeSingle();
+            sourceUnitName = unit?.name || null;
+          }
+          const targetUnitId = await findOrCreateUnit(admin, link.target_course_id, sourceUnitName);
+          const { course_id, unit_id, ...withoutCourse } = rest;
+          const { error } = await admin.from('loop_assignments').insert({
+            ...withoutCourse,
+            teacher_id: targetCourse.teacher_id,
+            course_id: link.target_course_id,
+            unit_id: targetUnitId,
+            is_active: false,
+          });
+          if (error) console.error(`propagateLoopAssignment -> ${link.target_course_id}: ${error.message}`);
+        } catch (e) {
+          console.error(`propagateLoopAssignment -> ${link.target_course_id} threw: ${(e as Error).message}`);
+        }
+      }
+    } else {
+      const targets = await linkedTeacherIds(admin, teacherId);
+      const { course_id, unit_id, ...withoutCourse } = rest;
+      for (const targetTeacherId of targets) {
+        const { error } = await admin.from('loop_assignments').insert({
+          ...withoutCourse,
+          teacher_id: targetTeacherId,
+          course_id: null,
+          unit_id: null,
+          is_active: false,
+        });
+        if (error) console.error(`propagateLoopAssignment (standalone) -> ${targetTeacherId}: ${error.message}`);
+      }
+    }
+  } catch (e) {
+    console.error(`propagateLoopAssignment threw: ${(e as Error).message}`);
+  }
+}
 
 // Students get the loop's code (trace) or the target output plus the 4
 // choices (multiple_choice), but never the answer key: expected_output for
@@ -121,6 +206,7 @@ Deno.serve(async (req) => {
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
+      await propagateLoopProblem(admin, teacher.id, data);
       return json({ result: data });
     }
 
@@ -170,6 +256,9 @@ Deno.serve(async (req) => {
         .upsert(rows, { onConflict: 'teacher_id,source_key' })
         .select();
       if (error) return json({ error: error.message }, 500);
+      for (const row of data || []) {
+        await propagateLoopProblem(admin, teacher.id, row);
+      }
       return json({ results: data || [], imported: data?.length ?? 0 });
     }
 
@@ -193,6 +282,7 @@ Deno.serve(async (req) => {
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
+      await propagateLoopAssignment(admin, teacher.id, data);
       return json({ result: data });
     }
 

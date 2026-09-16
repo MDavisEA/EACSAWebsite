@@ -122,7 +122,18 @@ pattern under `src/components/teacher/`.
   option is correct before answering. Teacher UI lives under its own
   "Loop Practice" top-level tab (`LoopPracticePanel`), and a course-scoped
   practice set also shows up in that course's own Loop Practice tab inside
-  `CourseUnitsView`. Students use it at `/loop-practice`.
+  `CourseUnitsView`. Students use it at `/loop-practice`. A standalone
+  practice set (`course_id` null) needs no student sign-in at all - progress
+  is tracked by a server-generated `session_token` cached client-side,
+  the same ownership model every submission used before Google sign-in was
+  required (see `verifyOwnership` in `submissions/index.ts`); a course-scoped
+  one still requires it, like everything else. New bank items and
+  assignments also propagate to any colleague linked via Course Links
+  (`_shared/courseLinks.ts`'s `linkedTeacherIds`, bridging the course-to-course
+  `course_links` table to a teacher-to-teacher relationship since
+  `loop_problems` has no `course_id` of its own to key a link off of) - like
+  every other kind of propagated work, a copy always lands inactive and only
+  on create, never on edit.
 
 ## Deliberate design decisions worth not undoing
 - **Projects are separate from the autograder on purpose.** Autograder = small
