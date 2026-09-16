@@ -55,15 +55,28 @@ export default function LoopPracticePage() {
     base44.auth.signInWithGoogle(window.location.href);
   };
 
+  // A standalone set (no course_id) needs no sign-in at all, so there is
+  // nothing to wait for - it redirects into the runner the moment it's
+  // found, same as a signed-in student does for a course-scoped one.
   useEffect(() => {
-    if (!sessionLoading && session && assignment) {
+    if (!sessionLoading && assignment && (session || !assignment.course_id)) {
       navigate(`/loop-practice-run?id=${assignment.id}`, { replace: true });
     }
   }, [sessionLoading, session, assignment, navigate]);
 
-  const handleSelect = (a) => navigate(`/loop-practice?id=${a.id}`);
+  // Standalone sets skip this page's sign-in screen entirely - go straight
+  // to the runner. Course-scoped ones still land here first so a
+  // not-yet-signed-in student sees who/what they're about to start.
+  const handleSelect = (a) => {
+    navigate(a.course_id ? `/loop-practice?id=${a.id}` : `/loop-practice-run?id=${a.id}`);
+  };
 
-  if (loading || sessionLoading || (assignmentId && !assignment && !error)) {
+  if (
+    loading ||
+    sessionLoading ||
+    (assignmentId && !assignment && !error) ||
+    (assignment && !assignment.course_id)
+  ) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#1e1e1e]">
         <div className="w-8 h-8 border-4 border-slate-700 border-t-emerald-400 rounded-full animate-spin" />
@@ -109,7 +122,11 @@ export default function LoopPracticePage() {
                           <span className={`px-2 py-0.5 rounded-full font-medium ${accent.pill}`}>
                             {a.target_score} correct to finish
                           </span>
-                          {a.courses?.name && <span className="text-slate-400">{a.courses.name}</span>}
+                          {a.courses?.name ? (
+                            <span className="text-slate-400">{a.courses.name}</span>
+                          ) : (
+                            <span className="text-slate-500">No sign-in needed</span>
+                          )}
                         </div>
                       </div>
                       <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 transition-colors flex-shrink-0" />

@@ -482,34 +482,75 @@ Deno.serve(async (req) => {
     // startCoding just above. loop_score/loop_correct_count/loop_wrong_count
     // and whether they've already reached target_score (submitted) are read
     // off that row directly by the caller.
+    //
+    // A standalone set (no course_id) doesn't require sign-in at all - it's
+    // open practice, not a tracked class assignment - so an anonymous caller
+    // gets a row keyed by a server-generated session_token instead of a
+    // student_user_id, the same ownership model submissions used everywhere
+    // before Google sign-in was required (see verifyOwnership above). A
+    // course-scoped set still requires sign-in, same as every other kind of
+    // work in this app.
     if (action === 'startLoopPractice') {
-      const { loop_assignment_id } = body;
-      if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      const { loop_assignment_id, session_token: clientToken } = body;
       if (!loop_assignment_id) return json({ error: 'loop_assignment_id is required' }, 400);
-
-      const { data: existing } = await admin
-        .from('submissions')
-        .select('*')
-        .eq('student_user_id', student.id)
-        .eq('loop_assignment_id', loop_assignment_id)
-        .maybeSingle();
-      if (existing) return json({ result: existing });
 
       const { data: la } = await admin
         .from('loop_assignments')
-        .select('is_active')
+        .select('is_active, course_id')
         .eq('id', loop_assignment_id)
         .maybeSingle();
       if (!la) return json({ error: 'Assignment not found.' }, 404);
       if (!la.is_active) return json({ error: 'This practice set is no longer active.' }, 409);
 
+      if (la.course_id && !student) {
+        return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      }
+
+      if (student) {
+        const { data: existing } = await admin
+          .from('submissions')
+          .select('*')
+          .eq('student_user_id', student.id)
+          .eq('loop_assignment_id', loop_assignment_id)
+          .maybeSingle();
+        if (existing) return json({ result: existing });
+
+        const { data, error } = await admin
+          .from('submissions')
+          .insert({
+            loop_assignment_id,
+            student_name: student.name,
+            student_user_id: student.id,
+            student_email: student.email,
+            submitted: false,
+            access_code: generateAccessCode(),
+          })
+          .select()
+          .single();
+        if (error) return json({ error: error.message }, 500);
+        return json({ result: data });
+      }
+
+      // Anonymous - only reachable for a standalone set (course_id null),
+      // checked above. clientToken is whatever the browser cached from a
+      // previous visit to THIS set; without one (or if it no longer matches
+      // a row) a fresh row is created and its token handed back to cache.
+      if (clientToken) {
+        const { data: existing } = await admin
+          .from('submissions')
+          .select('*')
+          .eq('loop_assignment_id', loop_assignment_id)
+          .eq('session_token', clientToken)
+          .is('student_user_id', null)
+          .maybeSingle();
+        if (existing) return json({ result: existing });
+      }
+
       const { data, error } = await admin
         .from('submissions')
         .insert({
           loop_assignment_id,
-          student_name: student.name,
-          student_user_id: student.id,
-          student_email: student.email,
+          student_name: 'Guest',
           submitted: false,
           access_code: generateAccessCode(),
         })

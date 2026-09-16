@@ -43,10 +43,14 @@ export default function LoopPracticeRunnerPage() {
   const [feedback, setFeedback] = useState(null); // { correct, correct_answer }
   const [submitting, setSubmitting] = useState(false);
 
+  // A standalone set (no course_id) needs no sign-in - only a course-scoped
+  // one does, checked once the assignment itself is known below.
+  const anonTokenKey = (id) => `loop_anon_token_${id}`;
+
   useEffect(() => {
     if (sessionLoading) return;
-    if (!assignmentId || !session) {
-      navigate(assignmentId ? `/loop-practice?id=${assignmentId}` : "/loop-practice");
+    if (!assignmentId) {
+      navigate("/loop-practice");
       return;
     }
     start();
@@ -56,12 +60,24 @@ export default function LoopPracticeRunnerPage() {
     setLoading(true);
     setError("");
     try {
-      const [sub, available] = await Promise.all([
-        base44.entities.Submission.startLoopPractice(assignmentId),
-        base44.entities.LoopAssignment.listAvailable(),
-      ]);
+      const available = await base44.entities.LoopAssignment.listAvailable();
+      const a = available.find((x) => x.id === assignmentId) || null;
+      if (!a) {
+        setError("This practice set isn't available right now.");
+        setLoading(false);
+        return;
+      }
+      setAssignment(a);
+      if (a.course_id && !session) {
+        navigate(`/loop-practice?id=${assignmentId}`, { replace: true });
+        return;
+      }
+      const cachedToken = a.course_id ? undefined : localStorage.getItem(anonTokenKey(assignmentId)) || undefined;
+      const sub = await base44.entities.Submission.startLoopPractice(assignmentId, cachedToken);
+      if (!a.course_id && sub.session_token) {
+        localStorage.setItem(anonTokenKey(assignmentId), sub.session_token);
+      }
       setSubmission(sub);
-      setAssignment(available.find((a) => a.id === assignmentId) || null);
       if (!sub.submitted) await loadNextProblem(null);
     } catch (e) {
       setError(e.message || "Couldn't load this practice set.");
@@ -85,7 +101,12 @@ export default function LoopPracticeRunnerPage() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const data = await base44.entities.Submission.submitLoopAnswer(submission.id, problem.id, answer);
+      const data = await base44.entities.Submission.submitLoopAnswer(
+        submission.id,
+        problem.id,
+        answer,
+        submission.session_token
+      );
       setSubmission(data.result);
       setFeedback({ correct: data.correct, correct_answer: data.correct_answer });
     } catch (e) {

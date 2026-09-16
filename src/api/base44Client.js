@@ -396,16 +396,21 @@ const Submission = {
   // Get-or-create the student's one progress row for a loop practice
   // assignment - same idea as create()'s startCoding branch, just its own
   // method since loop practice isn't "one answer" like the others.
-  async startLoopPractice(loop_assignment_id) {
-    const data = await callFunction('submissions', { action: 'startLoopPractice', loop_assignment_id });
+  // session_token is only meaningful for a standalone (no sign-in required)
+  // set: pass back whatever a previous call returned on submission.session_token
+  // to resume the same anonymous progress instead of starting over.
+  async startLoopPractice(loop_assignment_id, session_token) {
+    const data = await callFunction('submissions', { action: 'startLoopPractice', loop_assignment_id, session_token });
     return data.result;
   },
 
   // Grades one attempt server-side and returns the updated progress row plus
   // {correct, correct_answer} for instant feedback. Never trust a client-side
   // guess at correctness - this is the only place that decision gets made.
-  async submitLoopAnswer(submission_id, loop_problem_id, answer) {
-    return callFunction('submissions', { action: 'submitLoopAnswer', submission_id, loop_problem_id, answer });
+  // session_token proves ownership of an anonymous (not signed-in) row - see
+  // startLoopPractice.
+  async submitLoopAnswer(submission_id, loop_problem_id, answer, session_token) {
+    return callFunction('submissions', { action: 'submitLoopAnswer', submission_id, loop_problem_id, answer, session_token });
   },
 };
 
