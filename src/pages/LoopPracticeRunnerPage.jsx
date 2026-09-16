@@ -173,7 +173,7 @@ export default function LoopPracticeRunnerPage() {
                   key={c.choice_index}
                   disabled={!!feedback || submitting}
                   onClick={() => submitAnswer(c.choice_index)}
-                  className="text-left bg-[#1e1e1e] border border-slate-700 rounded-lg p-3 font-mono text-xs text-slate-100 hover:border-emerald-500/50 disabled:opacity-60 transition-colors"
+                  className="text-left bg-[#1e1e1e] border border-slate-700 rounded-lg p-3 font-mono text-xs text-slate-100 hover:border-emerald-500/50 disabled:opacity-60 transition-colors whitespace-pre-wrap break-words"
                 >
                   {c.code}
                 </button>
