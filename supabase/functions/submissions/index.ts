@@ -1202,7 +1202,9 @@ Deno.serve(async (req) => {
       // it has to be compared against what is actually stored.
       const { data: before } = await admin
         .from('submissions')
-        .select('score, question_scores, part_comments, style_score, style_comments, teacher_comments, line_comments, feedback_ack_required')
+        .select(
+          'score, question_scores, part_comments, style_score, style_comments, teacher_comments, line_comments, feedback_ack_required, assignment_id, coding_problem_id, project_id'
+        )
         .eq('id', body.submission_id)
         .maybeSingle();
 
@@ -1253,6 +1255,51 @@ Deno.serve(async (req) => {
       // whatever the reviewed state already was is left alone.
       const newlyRequiringAck = body.feedback_ack_required === true && !before?.feedback_ack_required;
       if (changedFeedback || newlyRequiringAck) update.feedback_reviewed_at = null;
+
+      // A perfect score the teacher did not flag for required acknowledgment
+      // needs no trip through the student's attention at all - skip straight
+      // to Reviewed rather than making them open something with nothing to
+      // say. Only meaningful where a real max exists to compare against: an
+      // FRQ (summed from its questions) or a hand-graded Coding Assignment
+      // (manual_points/points_possible) - never a Project, which has no
+      // fixed max, and never an autograded Mini Problem, whose mark is
+      // autograde_score and never touches `score` here at all.
+      const effectiveAckRequired = update.feedback_ack_required ?? before?.feedback_ack_required ?? false;
+      // `score` and `points_possible` are both Postgres `numeric` columns,
+      // which PostgREST sends over the wire as strings (to avoid float
+      // precision loss) - unlike `manual_points`, a plain integer. Coercing
+      // both sides with Number(...) before comparing means this still works
+      // correctly whichever shape each one happens to arrive in, rather than
+      // a strict === silently never matching a value read back from `before`.
+      const rawScore = update.score !== undefined ? update.score : before?.score ?? null;
+      const effectiveScore = rawScore != null ? Number(rawScore) : null;
+      if (!effectiveAckRequired && effectiveScore != null && Number.isFinite(effectiveScore)) {
+        let maxPoints: number | null = null;
+        if (before?.assignment_id) {
+          const { data: asg } = await admin
+            .from('assignments')
+            .select('questions')
+            .eq('id', before.assignment_id)
+            .maybeSingle();
+          const questions = asg?.questions || [];
+          maxPoints = questions.length
+            ? questions.reduce((sum: number, q: Record<string, any>) => sum + (Number(q.max_score ?? 9) || 0), 0)
+            : null;
+        } else if (before?.coding_problem_id) {
+          const { data: cp } = await admin
+            .from('coding_problems')
+            .select('manual_points, points_possible, grading_kind')
+            .eq('id', before.coding_problem_id)
+            .maybeSingle();
+          if (cp?.grading_kind === 'review') {
+            const raw = cp.manual_points ?? cp.points_possible ?? null;
+            maxPoints = raw != null ? Number(raw) : null;
+          }
+        }
+        if (maxPoints != null && Number.isFinite(maxPoints) && effectiveScore === maxPoints) {
+          update.feedback_reviewed_at = new Date().toISOString();
+        }
+      }
 
       const { data, error } = await admin
         .from('submissions')

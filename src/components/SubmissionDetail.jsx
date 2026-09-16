@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { highlightJava, ONE_DARK } from "@/lib/javaHighlight";
-import { Star, MessageSquare, KeyRound, CheckCircle2, XCircle, EyeOff } from "lucide-react";
+import { Star, MessageSquare, FileCode, KeyRound, CheckCircle2, XCircle, EyeOff } from "lucide-react";
 
 // Renders one graded submission - code + checks for a coding problem, or a
 // per-question breakdown for an FRQ assignment. Factored out of MyScore.jsx
@@ -128,6 +128,11 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
     () => (isProject && !projectFeedbackVisible ? [] : result.line_comments || []),
     [isProject, projectFeedbackVisible, result.line_comments]
   );
+  // Same gating, for the same reason - a project's general comment is
+  // withheld until release just like its score and line comments.
+  const hasGeneralComment =
+    !(isProject && !projectFeedbackVisible) && !!(result.teacher_comments || "").trim();
+  const hasLineComments = visibleLineComments.length > 0;
 
   return (
     // min-w-0 matters here, not just space-y-4: DialogContent (dialog.jsx) is
@@ -157,6 +162,23 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
           <p className="text-sm text-muted-foreground text-center">
             Turned in. Your teacher has not released feedback for this project yet.
           </p>
+        )}
+        {/* What kind of feedback is actually here, before scrolling down to
+            find out - a bare score reads very differently from a score plus
+            two paragraphs plus comments on three lines of code. */}
+        {(hasGeneralComment || hasLineComments) && (
+          <div className="flex items-center justify-center gap-2 flex-wrap mt-3 pt-3 border-t">
+            {hasGeneralComment && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium px-2.5 py-1">
+                <MessageSquare className="w-3.5 h-3.5" /> General Feedback
+              </span>
+            )}
+            {hasLineComments && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-700 text-xs font-medium px-2.5 py-1">
+                <FileCode className="w-3.5 h-3.5" /> Comments on your code
+              </span>
+            )}
+          </div>
         )}
       </div>
 
@@ -231,6 +253,19 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
         </div>
       ) : result.coding_problem_id ? (
         <div className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
+          {/* General feedback first, above the code - a student asked to
+              scroll past their own code to find it before this was easy to
+              miss entirely. */}
+          {result.teacher_comments && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                Teacher Feedback
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-sm text-amber-900 whitespace-pre-wrap">{result.teacher_comments}</p>
+              </div>
+            </div>
+          )}
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Your Code</p>
             {/* One rendering whether or not there are line comments: the
@@ -272,16 +307,6 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
                   )}
                 </div>
               )}
-            </div>
-          )}
-          {result.teacher_comments && (
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                Teacher Feedback
-              </p>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-sm text-amber-900 whitespace-pre-wrap">{result.teacher_comments}</p>
-              </div>
             </div>
           )}
           {(result.compile_error || (result.test_results || []).length > 0) && (
