@@ -15,6 +15,8 @@ import TeacherDashboard from '@/pages/TeacherDashboard';
 import MyScore from '@/pages/MyScore';
 import CodePage from '@/pages/CodePage';
 import CodePracticePage from '@/pages/CodePracticePage';
+import LoopPracticePage from '@/pages/LoopPracticePage';
+import LoopPracticeRunnerPage from '@/pages/LoopPracticeRunnerPage';
 import ProjectPage from '@/pages/ProjectPage';
 import StudentPreviewPage from '@/pages/StudentPreviewPage';
 
@@ -57,6 +59,8 @@ const AuthenticatedApp = () => {
       <Route path="/my-work" element={<Navigate to="/" replace />} />
       <Route path="/code" element={<CodePage />} />
       <Route path="/code-practice" element={<CodePracticePage />} />
+      <Route path="/loop-practice" element={<LoopPracticePage />} />
+      <Route path="/loop-practice-run" element={<LoopPracticeRunnerPage />} />
       <Route path="/project" element={<ProjectPage />} />
       {/* Teacher-only, enforced server-side by courses/previewAsStudent -
           opened in its own tab from the class page's "View as Student"

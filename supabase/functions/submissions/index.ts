@@ -477,6 +477,120 @@ Deno.serve(async (req) => {
       return json({ result: data });
     }
 
+    // One submissions row per student per loop_assignment, holding running
+    // progress rather than a single answer - get-or-create, same as
+    // startCoding just above. loop_score/loop_correct_count/loop_wrong_count
+    // and whether they've already reached target_score (submitted) are read
+    // off that row directly by the caller.
+    if (action === 'startLoopPractice') {
+      const { loop_assignment_id } = body;
+      if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      if (!loop_assignment_id) return json({ error: 'loop_assignment_id is required' }, 400);
+
+      const { data: existing } = await admin
+        .from('submissions')
+        .select('*')
+        .eq('student_user_id', student.id)
+        .eq('loop_assignment_id', loop_assignment_id)
+        .maybeSingle();
+      if (existing) return json({ result: existing });
+
+      const { data: la } = await admin
+        .from('loop_assignments')
+        .select('is_active')
+        .eq('id', loop_assignment_id)
+        .maybeSingle();
+      if (!la) return json({ error: 'Assignment not found.' }, 404);
+      if (!la.is_active) return json({ error: 'This practice set is no longer active.' }, 409);
+
+      const { data, error } = await admin
+        .from('submissions')
+        .insert({
+          loop_assignment_id,
+          student_name: student.name,
+          student_user_id: student.id,
+          student_email: student.email,
+          submitted: false,
+          access_code: generateAccessCode(),
+        })
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
+    // Grades one attempt server-side - the client never gets to say whether
+    // its own answer was correct. Loads the real loop_problems row via the
+    // admin client and compares against it directly, the same discipline
+    // sanitizeForStudent enforces for coding problems' hidden test cases.
+    if (action === 'submitLoopAnswer') {
+      const { submission_id, loop_problem_id, answer } = body;
+      if (!submission_id || !loop_problem_id) {
+        return json({ error: 'submission_id and loop_problem_id are required' }, 400);
+      }
+      const sessionToken = body.session_token || '';
+      const sub = await verifyOwnership(admin, submission_id, sessionToken, student);
+      if (!sub || !sub.loop_assignment_id) return json({ error: 'Submission not found.' }, 404);
+      if (sub.submitted) return json({ result: sub, already_complete: true });
+
+      const [{ data: problem }, { data: assignment }] = await Promise.all([
+        admin.from('loop_problems').select('*').eq('id', loop_problem_id).maybeSingle(),
+        admin.from('loop_assignments').select('*').eq('id', sub.loop_assignment_id).maybeSingle(),
+      ]);
+      if (!problem || !assignment) return json({ error: 'Not found.' }, 404);
+
+      let correct = false;
+      let correctAnswer: unknown = null;
+      if (problem.type === 'trace') {
+        // Trim trailing whitespace per line and trailing blank lines, but
+        // otherwise exact - this still teaches output precision without
+        // failing a student over an invisible trailing newline.
+        const normalize = (s: string) =>
+          String(s ?? '')
+            .split('\n')
+            .map((line) => line.replace(/\s+$/, ''))
+            .join('\n')
+            .replace(/\n+$/, '');
+        correct = normalize(answer) === normalize(problem.expected_output);
+        correctAnswer = problem.expected_output;
+      } else {
+        const choices = problem.choices || [];
+        const idx = Number(answer);
+        correct = Number.isInteger(idx) && !!choices[idx]?.correct;
+        correctAnswer = choices.findIndex((c: Record<string, any>) => c.correct);
+      }
+
+      const delta = correct ? 1 : -Number(assignment.wrong_penalty || 0);
+      const newScore = Math.max(0, Number(sub.loop_score || 0) + delta);
+      const newLog = [
+        ...(sub.loop_attempt_log || []),
+        {
+          problem_id: loop_problem_id,
+          type: problem.type,
+          given_answer: answer,
+          correct,
+          score_delta: delta,
+          at: new Date().toISOString(),
+        },
+      ];
+      const reachedTarget = newScore >= Number(assignment.target_score || 0);
+
+      const { data: updated, error } = await admin
+        .from('submissions')
+        .update({
+          loop_score: newScore,
+          loop_correct_count: sub.loop_correct_count + (correct ? 1 : 0),
+          loop_wrong_count: sub.loop_wrong_count + (correct ? 0 : 1),
+          loop_attempt_log: newLog,
+          ...(reachedTarget ? { submitted: true, submitted_at: new Date().toISOString() } : {}),
+        })
+        .eq('id', submission_id)
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: updated, correct, correct_answer: correctAnswer });
+    }
+
     if (action === 'submitProject') {
       const { project_id, gist_url } = body;
       if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);

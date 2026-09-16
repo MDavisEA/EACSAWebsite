@@ -87,3 +87,18 @@ export async function teacherOwnsRow(
   if (!data) return false;
   return teacherOwnsCourse(admin, teacherId, data.course_id);
 }
+
+/**
+ * loop_problems/loop_assignments carry a real teacher_id instead of deriving
+ * ownership through a course - a loop assignment can be standalone (no
+ * course at all), which teacherOwnsRow's course-based check can't express.
+ */
+export async function teacherOwnsLoopRow(
+  admin: SupabaseClient,
+  teacherId: string,
+  table: 'loop_problems' | 'loop_assignments',
+  rowId: string
+): Promise<boolean> {
+  const { data } = await admin.from(table).select('teacher_id').eq('id', rowId).maybeSingle();
+  return !!data && data.teacher_id === teacherId;
+}

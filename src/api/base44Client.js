@@ -392,6 +392,21 @@ const Submission = {
     const data = await callFunction('submissions', { action: 'recheckGists', project_id });
     return data.results;
   },
+
+  // Get-or-create the student's one progress row for a loop practice
+  // assignment - same idea as create()'s startCoding branch, just its own
+  // method since loop practice isn't "one answer" like the others.
+  async startLoopPractice(loop_assignment_id) {
+    const data = await callFunction('submissions', { action: 'startLoopPractice', loop_assignment_id });
+    return data.result;
+  },
+
+  // Grades one attempt server-side and returns the updated progress row plus
+  // {correct, correct_answer} for instant feedback. Never trust a client-side
+  // guess at correctness - this is the only place that decision gets made.
+  async submitLoopAnswer(submission_id, loop_problem_id, answer) {
+    return callFunction('submissions', { action: 'submitLoopAnswer', submission_id, loop_problem_id, answer });
+  },
 };
 
 // ============================================================================
@@ -467,6 +482,81 @@ const CodingProblem = {
 
   async delete(id) {
     await callFunction('coding-problems', { action: 'delete', id });
+  },
+};
+
+// ============================================================================
+// entities.LoopProblem / entities.LoopAssignment (Loop Practice - a
+// DeltaMath-style drill tool for for-loops, built on the same shim pattern)
+// ============================================================================
+
+const LoopProblem = {
+  async list() {
+    const data = await callFunction('loop-practice', { action: 'listProblems' });
+    return data.results;
+  },
+
+  async create(fields) {
+    const data = await callFunction('loop-practice', { action: 'createProblem', data: fields });
+    return data.result;
+  },
+
+  async update(id, fields) {
+    const data = await callFunction('loop-practice', { action: 'updateProblem', id, data: fields });
+    return data.result;
+  },
+
+  async delete(id) {
+    await callFunction('loop-practice', { action: 'deleteProblem', id });
+  },
+
+  // Accepts the AI-generated bank JSON array verbatim (see the prompt used
+  // to generate it). Upserts on the bank's own string ids, so re-importing
+  // an updated batch is safe.
+  async bulkImport(items) {
+    const data = await callFunction('loop-practice', { action: 'bulkImportProblems', items });
+    return data;
+  },
+};
+
+const LoopAssignment = {
+  // Student-facing: every active assignment, standalone or course-scoped -
+  // course_id/unit_id are organizational here, not an access gate, same as
+  // coding_problems.
+  async listAvailable() {
+    const data = await callFunction('loop-practice', { action: 'listAvailable' });
+    return data.results;
+  },
+
+  async list() {
+    const data = await callFunction('loop-practice', { action: 'listAssignments' });
+    return data.results;
+  },
+
+  async create(fields) {
+    const data = await callFunction('loop-practice', { action: 'createAssignment', data: fields });
+    return data.result;
+  },
+
+  async update(id, fields) {
+    const data = await callFunction('loop-practice', { action: 'updateAssignment', id, data: fields });
+    return data.result;
+  },
+
+  async delete(id) {
+    await callFunction('loop-practice', { action: 'deleteAssignment', id });
+  },
+
+  // Draws one random active problem matching the assignment's filters,
+  // sanitized (no answer key) and with multiple_choice choices shuffled.
+  // exclude_id avoids repeating the immediately-previous problem.
+  async getProblemToAttempt(loop_assignment_id, exclude_id) {
+    const data = await callFunction('loop-practice', {
+      action: 'getProblemToAttempt',
+      loop_assignment_id,
+      exclude_id,
+    });
+    return data.result;
   },
 };
 
@@ -848,7 +938,7 @@ const functions = {
 };
 
 export const base44 = {
-  entities: { Assignment, Submission, CodingProblem, Project, Note, Course, StudentWork, Teacher },
+  entities: { Assignment, Submission, CodingProblem, LoopProblem, LoopAssignment, Project, Note, Course, StudentWork, Teacher },
   auth,
   integrations,
   functions,

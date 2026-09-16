@@ -9,6 +9,7 @@ import ReorderUnitsDialog from "./ReorderUnitsDialog";
 import AssignmentCard from "./AssignmentCard";
 import CodingProblemCard from "./CodingProblemCard";
 import ProjectCard from "./ProjectCard";
+import LoopAssignmentCard from "./LoopAssignmentCard";
 
 const TYPE_TABS = [
   { value: "all", label: "All" },
@@ -16,6 +17,7 @@ const TYPE_TABS = [
   { value: "code", label: "Mini Problem" },
   { value: "review", label: "Coding Assignment" },
   { value: "project", label: "Projects" },
+  { value: "loop", label: "Loop Practice" },
 ];
 
 // Inside a class: its units, and the work filed under each. Units are managed
@@ -26,6 +28,7 @@ export default function CourseUnitsView({
   assignments,
   codingProblems,
   projects,
+  loopAssignments,
   gradingCounts,
   onAddWork,
   onUnitCreate,
@@ -52,6 +55,9 @@ export default function CourseUnitsView({
       .filter((p) => p.course_id === course.id)
       .map((x) => ({ kind: x.grading_kind === "review" ? "review" : "code", item: x })),
     ...projects.filter((p) => p.course_id === course.id).map((x) => ({ kind: "project", item: x })),
+    ...(loopAssignments || [])
+      .filter((a) => a.course_id === course.id)
+      .map((x) => ({ kind: "loop", item: x })),
   ];
   const inCourse =
     typeFilter === "all" ? allInCourse : allInCourse.filter((w) => w.kind === typeFilter);
@@ -158,6 +164,18 @@ export default function CourseUnitsView({
           onToggleGrading={() => handlers.toggleCodingGrading(item)}
           onToggleKeyReleased={() => handlers.toggleCodingKeyReleased(item)}
           onDuplicate={() => handlers.duplicateCoding(item)}
+        />
+      );
+    }
+    if (kind === "loop") {
+      return (
+        <LoopAssignmentCard
+          key={`loop-${item.id}`}
+          assignment={item}
+          dragHandleProps={dragHandleProps}
+          onEdit={() => handlers.editLoop(item)}
+          onDelete={() => handlers.deleteLoop(item)}
+          onToggleActive={() => handlers.toggleLoopActive(item)}
         />
       );
     }

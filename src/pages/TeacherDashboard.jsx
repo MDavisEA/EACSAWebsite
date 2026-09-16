@@ -12,6 +12,10 @@ import { BookOpen, LogOut, Lock, ChevronLeft, Archive, ArchiveRestore, Plus, Eye
 import AssignmentForm from "@/components/teacher/AssignmentForm";
 import CodingProblemForm from "@/components/teacher/CodingProblemForm";
 import ProjectForm from "@/components/teacher/ProjectForm";
+import LoopProblemForm from "@/components/teacher/LoopProblemForm";
+import LoopAssignmentForm from "@/components/teacher/LoopAssignmentForm";
+import LoopBulkImportDialog from "@/components/teacher/LoopBulkImportDialog";
+import LoopPracticePanel from "@/components/teacher/LoopPracticePanel";
 import CourseForm from "@/components/teacher/CourseForm";
 import CourseCard from "@/components/teacher/CourseCard";
 import NoteForm from "@/components/teacher/NoteForm";
@@ -113,6 +117,16 @@ export default function TeacherDashboard() {
   const [editingCourse, setEditingCourse] = useState(null);
   const [deletingCourse, setDeletingCourse] = useState(null);
 
+  const [loopProblems, setLoopProblems] = useState([]);
+  const [loopAssignments, setLoopAssignments] = useState([]);
+  const [showLoopProblemForm, setShowLoopProblemForm] = useState(false);
+  const [editingLoopProblem, setEditingLoopProblem] = useState(null);
+  const [deletingLoopProblem, setDeletingLoopProblem] = useState(null);
+  const [showLoopBulkImport, setShowLoopBulkImport] = useState(false);
+  const [showLoopAssignmentForm, setShowLoopAssignmentForm] = useState(false);
+  const [editingLoopAssignment, setEditingLoopAssignment] = useState(null);
+  const [deletingLoopAssignment, setDeletingLoopAssignment] = useState(null);
+
   const generateCode = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let code = "";
@@ -157,6 +171,8 @@ export default function TeacherDashboard() {
         loadGradingCounts(),
         loadOutstandingAckCount(),
         loadAssignments(),
+        loadLoopProblems(),
+        loadLoopAssignments(),
       ]);
     } catch (e) {
       setLoading(false);
@@ -211,6 +227,16 @@ export default function TeacherDashboard() {
   const loadCodingProblems = async () => {
     const results = await base44.entities.CodingProblem.list();
     setCodingProblems(results);
+  };
+
+  const loadLoopProblems = async () => {
+    const results = await base44.entities.LoopProblem.list();
+    setLoopProblems(results);
+  };
+
+  const loadLoopAssignments = async () => {
+    const results = await base44.entities.LoopAssignment.list();
+    setLoopAssignments(results);
   };
 
   const loadProjects = async () => {
@@ -372,6 +398,60 @@ export default function TeacherDashboard() {
   const handleToggleCodingGrading = async (problem) => {
     await base44.entities.CodingProblem.update(problem.id, { grading_skipped: !problem.grading_skipped });
     await Promise.all([loadCodingProblems(), loadGradingCounts()]);
+  };
+
+  const handleSaveLoopProblem = async (data) => {
+    if (editingLoopProblem?.id) {
+      await base44.entities.LoopProblem.update(editingLoopProblem.id, data);
+    } else {
+      await base44.entities.LoopProblem.create(data);
+    }
+    setShowLoopProblemForm(false);
+    setEditingLoopProblem(null);
+    loadLoopProblems();
+  };
+
+  const handleDeleteLoopProblem = async () => {
+    if (deletingLoopProblem) {
+      await base44.entities.LoopProblem.delete(deletingLoopProblem.id);
+      setDeletingLoopProblem(null);
+      loadLoopProblems();
+    }
+  };
+
+  const handleToggleLoopProblemActive = async (problem) => {
+    await base44.entities.LoopProblem.update(problem.id, { is_active: !problem.is_active });
+    loadLoopProblems();
+  };
+
+  const handleImportLoopProblems = async (items) => {
+    const result = await base44.entities.LoopProblem.bulkImport(items);
+    loadLoopProblems();
+    return result;
+  };
+
+  const handleSaveLoopAssignment = async (data) => {
+    if (editingLoopAssignment?.id) {
+      await base44.entities.LoopAssignment.update(editingLoopAssignment.id, data);
+    } else {
+      await base44.entities.LoopAssignment.create(data);
+    }
+    setShowLoopAssignmentForm(false);
+    setEditingLoopAssignment(null);
+    loadLoopAssignments();
+  };
+
+  const handleDeleteLoopAssignment = async () => {
+    if (deletingLoopAssignment) {
+      await base44.entities.LoopAssignment.delete(deletingLoopAssignment.id);
+      setDeletingLoopAssignment(null);
+      loadLoopAssignments();
+    }
+  };
+
+  const handleToggleLoopAssignmentActive = async (assignment) => {
+    await base44.entities.LoopAssignment.update(assignment.id, { is_active: !assignment.is_active });
+    loadLoopAssignments();
   };
 
   const handleDuplicateCoding = async (problem) => {
@@ -575,6 +655,9 @@ export default function TeacherDashboard() {
     toggleProjectActive: handleToggleProjectActive,
     toggleProjectGrading: handleToggleProjectGrading,
     duplicateProject: handleDuplicateProject,
+    editLoop: (a) => { setEditingLoopAssignment(a); setShowLoopAssignmentForm(true); },
+    deleteLoop: (a) => setDeletingLoopAssignment(a),
+    toggleLoopActive: handleToggleLoopAssignmentActive,
   };
 
   return (
@@ -624,6 +707,13 @@ export default function TeacherDashboard() {
             )}
             <Button variant="outline" size="sm" onClick={() => setShowStudents(true)}>
               Students
+            </Button>
+            <Button
+              variant={openCourseId ? "ghost" : "outline"}
+              size="sm"
+              onClick={() => { setOpenCourseId(null); setTopTab("loop"); }}
+            >
+              Loop Practice
             </Button>
             <Button
               variant={openCourseId ? "ghost" : "outline"}
@@ -727,6 +817,7 @@ export default function TeacherDashboard() {
                   assignments={assignments}
                   codingProblems={codingProblems}
                   projects={projects}
+                  loopAssignments={loopAssignments}
                   gradingCounts={gradingCounts}
                   onAddWork={(unitId) => { setNewWorkUnitId(unitId); setShowNewWork(true); }}
                   onUnitCreate={async (name) => {
@@ -806,6 +897,29 @@ export default function TeacherDashboard() {
                 />
               </TabsContent>
             </Tabs>
+          </div>
+        ) : topTab === "loop" ? (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h1 className="text-xl font-bold tracking-tight">Loop Practice</h1>
+              <Button variant="outline" size="sm" onClick={() => setTopTab("classes")}>
+                Back to My Classes
+              </Button>
+            </div>
+            <LoopPracticePanel
+              problems={loopProblems}
+              assignments={loopAssignments}
+              courses={courses}
+              onNewProblem={() => { setEditingLoopProblem(null); setShowLoopProblemForm(true); }}
+              onEditProblem={(p) => { setEditingLoopProblem(p); setShowLoopProblemForm(true); }}
+              onDeleteProblem={(p) => setDeletingLoopProblem(p)}
+              onToggleProblemActive={handleToggleLoopProblemActive}
+              onImportProblems={() => setShowLoopBulkImport(true)}
+              onNewAssignment={() => { setEditingLoopAssignment(null); setShowLoopAssignmentForm(true); }}
+              onEditAssignment={(a) => { setEditingLoopAssignment(a); setShowLoopAssignmentForm(true); }}
+              onDeleteAssignment={(a) => setDeletingLoopAssignment(a)}
+              onToggleAssignmentActive={handleToggleLoopAssignmentActive}
+            />
           </div>
         ) : topTab === "teachers" ? (
           <div className="space-y-6">
@@ -973,6 +1087,70 @@ export default function TeacherDashboard() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteCoding}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={showLoopProblemForm} onOpenChange={setShowLoopProblemForm}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingLoopProblem?.id ? "Edit Loop Problem" : "New Loop Problem"}</DialogTitle>
+          </DialogHeader>
+          <LoopProblemForm
+            initial={editingLoopProblem}
+            onSave={handleSaveLoopProblem}
+            onCancel={() => { setShowLoopProblemForm(false); setEditingLoopProblem(null); }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingLoopProblem} onOpenChange={() => setDeletingLoopProblem(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Loop Problem?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes it from any practice set that draws on it. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteLoopProblem}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <LoopBulkImportDialog
+        open={showLoopBulkImport}
+        onOpenChange={setShowLoopBulkImport}
+        onImport={handleImportLoopProblems}
+      />
+
+      <Dialog open={showLoopAssignmentForm} onOpenChange={setShowLoopAssignmentForm}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingLoopAssignment?.id ? "Edit Practice Set" : "New Practice Set"}</DialogTitle>
+          </DialogHeader>
+          <LoopAssignmentForm
+            initial={editingLoopAssignment}
+            courses={courses}
+            onSave={handleSaveLoopAssignment}
+            onCancel={() => { setShowLoopAssignmentForm(false); setEditingLoopAssignment(null); }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingLoopAssignment} onOpenChange={() => setDeletingLoopAssignment(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Practice Set?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{deletingLoopAssignment?.title}" and every student's progress on it.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteLoopAssignment}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

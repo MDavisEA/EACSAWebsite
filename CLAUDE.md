@@ -108,6 +108,21 @@ pattern under `src/components/teacher/`.
   in**, matching on email first and falling back to normalized names.
 - **`/my-work`**: signed-in students see all their own graded work, replacing
   the need for the teacher to hand out access codes individually.
+- **Loop Practice**: a DeltaMath-style drill tool for for-loops, separate
+  from the autograder. `loop_problems` is a teacher-curated bank of two item
+  types - trace-the-output and "which loop produces this output" multiple
+  choice - authored by hand or bulk-imported from AI-generated JSON.
+  `loop_assignments` assembles filtered slices of the bank into practice
+  sets with a `target_score` and a per-wrong-answer `wrong_penalty`; unlike
+  every other work table, ownership is a direct `teacher_id` column rather
+  than derived through `course_id`, because a practice set can be standalone
+  (not filed under any class) as well as course/unit-scoped. Grading happens
+  server-side in `submissions/index.ts`'s `submitLoopAnswer` - the client
+  never sees a trace item's `expected_output` or which multiple-choice
+  option is correct before answering. Teacher UI lives under its own
+  "Loop Practice" top-level tab (`LoopPracticePanel`), and a course-scoped
+  practice set also shows up in that course's own Loop Practice tab inside
+  `CourseUnitsView`. Students use it at `/loop-practice`.
 
 ## Deliberate design decisions worth not undoing
 - **Projects are separate from the autograder on purpose.** Autograder = small
