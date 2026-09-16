@@ -9,6 +9,7 @@ import CommentBank from "./CommentBank";
 import AnnotatedCodeView from "./AnnotatedCodeView";
 import GradesDialog from "./GradesDialog";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -58,7 +59,12 @@ export default function ProjectSubmissionViewer({ project }) {
   const csvFileInputRef = useRef(null);
 
   const [reviewTarget, setReviewTarget] = useState(null);
-  const [reviewDraft, setReviewDraft] = useState({ teacher_comments: "", score: "", feedback_released: false });
+  const [reviewDraft, setReviewDraft] = useState({
+    teacher_comments: "",
+    score: "",
+    feedback_released: false,
+    feedback_ack_required: false,
+  });
   const [lineComments, setLineComments] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
   const [savingReview, setSavingReview] = useState(false);
@@ -183,6 +189,7 @@ export default function ProjectSubmissionViewer({ project }) {
       teacher_comments: s.teacher_comments || "",
       score: s.score ?? "",
       feedback_released: !!s.feedback_released,
+      feedback_ack_required: !!s.feedback_ack_required,
     });
     setLineComments([]);
     setReviewError("");
@@ -226,6 +233,7 @@ export default function ProjectSubmissionViewer({ project }) {
         teacher_comments: reviewDraft.teacher_comments,
         score: reviewDraft.score === "" ? null : Number(reviewDraft.score),
         feedback_released: reviewDraft.feedback_released,
+        feedback_ack_required: reviewDraft.feedback_ack_required,
         line_comments: lineComments,
       });
       setReviewTarget(null);
@@ -579,6 +587,24 @@ export default function ProjectSubmissionViewer({ project }) {
                 </p>
               </div>
             </div>
+
+            {/* Puts this on their dashboard's Outstanding Feedback shelf
+                instead of the normal graded list, until they actively
+                confirm they read it - for feedback that genuinely needs to
+                land, not every routine grade. */}
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <Checkbox
+                checked={reviewDraft.feedback_ack_required}
+                onCheckedChange={(v) => setReviewDraft((d) => ({ ...d, feedback_ack_required: !!v }))}
+                className="mt-0.5"
+              />
+              <span>
+                Require the student to confirm they&rsquo;ve read this
+                <span className="block text-xs text-muted-foreground">
+                  Shows up front on their dashboard until they actively acknowledge it.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">

@@ -33,6 +33,13 @@ export interface WorkItem {
   // remarks live in a different column this never looks at).
   has_comment: boolean;
   has_line_comments: boolean;
+  // The teacher checked "require the student to confirm they read this" and
+  // they have not yet done so. Only ever true alongside status 'graded' -
+  // the moment they acknowledge it (the same feedback_reviewed_at flow the
+  // optional "mark reviewed" button already used), status becomes
+  // 'reviewed' and this goes false, same as if they had just clicked it
+  // unprompted.
+  needs_ack: boolean;
 }
 
 // Project feedback is release-gated (see submissions/index.ts); FRQ and code
@@ -122,6 +129,7 @@ export function buildWorkItems(
       unit_id: a.unit_id ?? null,
       sort_order: a.sort_order ?? null,
       ...feedbackFlags(sub, false),
+      needs_ack: status === 'graded' && !!sub?.feedback_ack_required,
     });
   }
 
@@ -145,6 +153,7 @@ export function buildWorkItems(
       unit_id: p.unit_id ?? null,
       sort_order: p.sort_order ?? null,
       ...feedbackFlags(sub, false),
+      needs_ack: status === 'graded' && !!sub?.feedback_ack_required,
     });
   }
 
@@ -166,6 +175,7 @@ export function buildWorkItems(
       unit_id: pr.unit_id ?? null,
       sort_order: pr.sort_order ?? null,
       ...feedbackFlags(sub, true),
+      needs_ack: status === 'graded' && !!sub?.feedback_ack_required,
     });
   }
 

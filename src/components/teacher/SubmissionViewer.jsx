@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
+import { Checkbox } from "@/components/ui/checkbox";
 import ByQuestionGrader from "./ByQuestionGrader";
 import { latestPerStudent, studentKey } from "@/lib/groupSubmissionsByStudent";
 import GradesDialog from "./GradesDialog";
@@ -27,6 +28,7 @@ export default function SubmissionViewer({ assignment, onGraded }) {
   const [gradesOpen, setGradesOpen] = useState(false);
   const [questionScores, setQuestionScores] = useState({}); // { [questionId]: string }
   const [partComments, setPartComments] = useState({}); // { [key]: string }
+  const [ackRequired, setAckRequired] = useState(false);
 
   const updateQuestionScore = (qId, value) => {
     setQuestionScores((prev) => ({ ...prev, [qId]: value }));
@@ -89,6 +91,7 @@ export default function SubmissionViewer({ assignment, onGraded }) {
       )
     );
     setPartComments(s.part_comments || {});
+    setAckRequired(!!s.feedback_ack_required);
     setSaved(false);
   };
 
@@ -113,11 +116,18 @@ export default function SubmissionViewer({ assignment, onGraded }) {
       score: computedTotal,
       question_scores: parsedQuestionScores,
       part_comments: partComments,
+      feedback_ack_required: ackRequired,
     });
     setSubmissions((prev) =>
       prev.map((s) =>
         s.id === selected.id
-          ? { ...s, score: computedTotal, question_scores: parsedQuestionScores, part_comments: partComments }
+          ? {
+              ...s,
+              score: computedTotal,
+              question_scores: parsedQuestionScores,
+              part_comments: partComments,
+              feedback_ack_required: ackRequired,
+            }
           : s
       )
     );
@@ -467,6 +477,24 @@ export default function SubmissionViewer({ assignment, onGraded }) {
                     )}
                   </div>
                 </div>
+
+                {/* Puts this on their dashboard's Outstanding Feedback shelf
+                    instead of the normal graded list, until they actively
+                    confirm they read it - for feedback that genuinely needs
+                    to land, not every routine grade. */}
+                <label className="flex items-start gap-2 text-sm cursor-pointer mt-2">
+                  <Checkbox
+                    checked={ackRequired}
+                    onCheckedChange={(v) => { setAckRequired(!!v); setSaved(false); }}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Require the student to confirm they&rsquo;ve read this
+                    <span className="block text-xs text-muted-foreground">
+                      Shows up front on their dashboard until they actively acknowledge it.
+                    </span>
+                  </span>
+                </label>
 
                 <div className="space-y-6 mt-2">
                   {sections.map((section, si) => {

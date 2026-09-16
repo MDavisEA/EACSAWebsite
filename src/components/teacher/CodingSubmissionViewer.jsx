@@ -11,6 +11,7 @@ import { latestPerStudent, studentKey } from "@/lib/groupSubmissionsByStudent";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
+import { Checkbox } from "@/components/ui/checkbox";
 import AnnotatedCodeView from "./AnnotatedCodeView";
 import GradesDialog from "./GradesDialog";
 import AiHelpBadge from "./AiHelpBadge";
@@ -56,6 +57,7 @@ export default function CodingSubmissionViewer({ problem }) {
   // the student sees it through exactly the same path.
   const [lineComments, setLineComments] = useState([]);
   const [comments, setComments] = useState("");
+  const [ackRequired, setAckRequired] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
@@ -116,6 +118,7 @@ export default function CodingSubmissionViewer({ problem }) {
     setExpandedAttempt(null);
     setLineComments([]);
     setComments(s.teacher_comments || "");
+    setAckRequired(!!s.feedback_ack_required);
     setSavedFeedback(false);
     setFeedbackError("");
     setDetailLoading(true);
@@ -126,6 +129,7 @@ export default function CodingSubmissionViewer({ problem }) {
       setSelected((cur) => (cur && cur.id === full.id ? { ...cur, ...full } : cur));
       setLineComments(full.line_comments || []);
       setComments(full.teacher_comments || "");
+      setAckRequired(!!full.feedback_ack_required);
     } catch (e) {
       setFeedbackError(e.message || "Couldn't load the rest of this submission.");
     } finally {
@@ -153,6 +157,7 @@ export default function CodingSubmissionViewer({ problem }) {
       await base44.entities.Submission.update(selected.id, {
         teacher_comments: comments,
         line_comments: lineComments,
+        feedback_ack_required: ackRequired,
       });
       setSubmissions((prev) =>
         prev.map((s) =>
@@ -588,6 +593,23 @@ export default function CodingSubmissionViewer({ problem }) {
                   onChange={(v) => { setComments(v); setSavedFeedback(false); }}
                   scope={{ coding_problem_id: problem.id }}
                 />
+                {/* Puts this on their dashboard's Outstanding Feedback shelf
+                    instead of the normal graded list, until they actively
+                    confirm they read it - for feedback that genuinely needs
+                    to land, not every routine grade. */}
+                <label className="flex items-start gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={ackRequired}
+                    onCheckedChange={(v) => { setAckRequired(!!v); setSavedFeedback(false); }}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Require the student to confirm they&rsquo;ve read this
+                    <span className="block text-xs text-muted-foreground">
+                      Shows up front on their dashboard until they actively acknowledge it.
+                    </span>
+                  </span>
+                </label>
                 {feedbackError && <p className="text-sm text-destructive">{feedbackError}</p>}
                 <div className="flex items-center gap-3">
                   <Button size="sm" onClick={saveFeedback} disabled={savingFeedback}>

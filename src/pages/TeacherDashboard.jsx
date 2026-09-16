@@ -20,6 +20,7 @@ import TeachersPanel from "@/components/teacher/TeachersPanel";
 import GlobalCommentsPanel from "@/components/teacher/GlobalCommentsPanel";
 import MyStudentsDialog from "@/components/teacher/MyStudentsDialog";
 import NeedsGradingPanel from "@/components/teacher/NeedsGradingPanel";
+import OutstandingAckPanel from "@/components/teacher/OutstandingAckPanel";
 import GradingQueue from "@/components/teacher/GradingQueue";
 import TeacherHome from "@/components/teacher/TeacherHome";
 import CourseUnitsView from "@/components/teacher/CourseUnitsView";
@@ -37,6 +38,8 @@ export default function TeacherDashboard() {
   // which class/tab they were in the middle of.
   const [openCourseId, setOpenCourseId] = useState(() => localStorage.getItem("teacherNav_openCourseId") || null);
   const [showNeedsGrading, setShowNeedsGrading] = useState(false);
+  const [showOutstandingAck, setShowOutstandingAck] = useState(false);
+  const [outstandingAckCount, setOutstandingAckCount] = useState(0);
   const [showStudents, setShowStudents] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   // Set when the queue is opened on one specific submission - from a
@@ -152,6 +155,7 @@ export default function TeacherDashboard() {
         loadNotes(),
         loadCourses(),
         loadGradingCounts(),
+        loadOutstandingAckCount(),
         loadAssignments(),
       ]);
     } catch (e) {
@@ -230,6 +234,15 @@ export default function TeacherDashboard() {
   const loadGradingCounts = async () => {
     setGradingCounts(await base44.entities.Submission.gradingCounts());
   };
+
+  const loadOutstandingAckCount = async () => {
+    setOutstandingAckCount(await base44.entities.Submission.outstandingAckCount());
+  };
+
+  // Grading and "require acknowledgment" are saved together in every grader,
+  // so anything that used to just refresh gradingCounts after a save needs
+  // to refresh this too.
+  const refreshGradingState = () => Promise.all([loadGradingCounts(), loadOutstandingAckCount()]);
 
   const loadAssignments = async () => {
     const results = await base44.entities.Assignment.list("-created_date");
@@ -543,7 +556,7 @@ export default function TeacherDashboard() {
   }
 
   const workHandlers = {
-    onGraded: loadGradingCounts,
+    onGraded: refreshGradingState,
     editAssignment: (a) => { setEditing(a); setShowForm(true); },
     deleteAssignment: (a) => setDeleting(a),
     toggleAssignmentActive: handleToggleActive,
@@ -596,6 +609,19 @@ export default function TeacherDashboard() {
                 </span>
               )}
             </Button>
+            {outstandingAckCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowOutstandingAck(true)}
+                className="border-amber-300 text-amber-800 hover:bg-amber-50"
+              >
+                Outstanding Feedback
+                <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold text-white">
+                  {outstandingAckCount}
+                </span>
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setShowStudents(true)}>
               Students
             </Button>
@@ -815,7 +841,7 @@ export default function TeacherDashboard() {
       <GradingQueue
         open={showQueue}
         onOpenChange={(v) => { setShowQueue(v); if (!v) setGradeSubmissionId(null); }}
-        onChanged={loadGradingCounts}
+        onChanged={refreshGradingState}
         initialSubmissionId={gradeSubmissionId}
       />
 
@@ -824,7 +850,13 @@ export default function TeacherDashboard() {
       <NeedsGradingPanel
         open={showNeedsGrading}
         onOpenChange={setShowNeedsGrading}
-        onChanged={loadGradingCounts}
+        onChanged={refreshGradingState}
+        onGrade={openGradingFor}
+      />
+
+      <OutstandingAckPanel
+        open={showOutstandingAck}
+        onOpenChange={setShowOutstandingAck}
         onGrade={openGradingFor}
       />
 

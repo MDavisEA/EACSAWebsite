@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import CommentBank from "./CommentBank";
+import { Checkbox } from "@/components/ui/checkbox";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import AnnotatedCodeView from "./AnnotatedCodeView";
 import AnswerKeyPanel from "./AnswerKeyPanel";
@@ -50,6 +51,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const [comments, setComments] = useState("");
   const [gradingSkipped, setGradingSkipped] = useState(false);
   const [lineComments, setLineComments] = useState([]);
+  const [ackRequired, setAckRequired] = useState(false);
 
   const [gradesOpen, setGradesOpen] = useState(false);
   const [showKey, setShowKey] = useState(true);
@@ -109,6 +111,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
     setComments(s.teacher_comments || "");
     setLineComments(s.line_comments || []);
     setGradingSkipped(!!s.grading_skipped);
+    setAckRequired(!!s.feedback_ack_required);
     setSaved(false);
     setError("");
     loadFull(s);
@@ -184,6 +187,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
         teacher_comments: comments,
         line_comments: lineComments,
         grading_skipped: gradingSkipped,
+        feedback_ack_required: ackRequired,
       });
       // Matched on id, not position: the list is grouped by student now, so an
       // index into `groups` is not an index into `submissions`.
@@ -616,6 +620,24 @@ export default function CodeReviewGrader({ problem, onGraded }) {
                         scope={{ coding_problem_id: problem.id }}
                       />
                     </div>
+
+                    {/* Puts this on their dashboard's Outstanding Feedback
+                        shelf instead of the normal graded list, until they
+                        actively confirm they read it - for feedback that
+                        genuinely needs to land, not every routine grade. */}
+                    <label className="flex items-start gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={ackRequired}
+                        onCheckedChange={(v) => { setAckRequired(!!v); setSaved(false); }}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Require the student to confirm they&rsquo;ve read this
+                        <span className="block text-xs text-muted-foreground">
+                          Shows up front on their dashboard until they actively acknowledge it.
+                        </span>
+                      </span>
+                    </label>
 
                     {/* Easy to miss up in the dialog title next to the name
                         and timestamp - repeated here, right where the

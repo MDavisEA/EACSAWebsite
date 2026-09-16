@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronLeft, ChevronRight, KeyRound, Save, CheckCircle2, Clipboard, ClipboardCheck, ZoomIn,
 } from "lucide-react";
@@ -63,6 +64,7 @@ export default function ByQuestionGrader({ open, onOpenChange, assignment, submi
           Object.entries(s.question_scores || {}).map(([k, v]) => [k, String(v)])
         ),
         partComments: { ...(s.part_comments || {}) },
+        ackRequired: !!s.feedback_ack_required,
       };
     });
     setGrades(seeded);
@@ -96,6 +98,14 @@ export default function ByQuestionGrader({ open, onOpenChange, assignment, submi
     setSaved(false);
   };
 
+  const updateAckRequired = (value) => {
+    setGrades((prev) => ({
+      ...prev,
+      [student.id]: { ...prev[student.id], ackRequired: value },
+    }));
+    setSaved(false);
+  };
+
   // Persists the FULL grades object for one submission, same shape the
   // per-student editor saves - so grading one question here never wipes out
   // scores another question already has for this student.
@@ -118,8 +128,14 @@ export default function ByQuestionGrader({ open, onOpenChange, assignment, submi
         score: total,
         question_scores: parsedScores,
         part_comments: g.partComments,
+        feedback_ack_required: !!g.ackRequired,
       });
-      onSubmissionUpdated(submissionId, { score: total, question_scores: parsedScores, part_comments: g.partComments });
+      onSubmissionUpdated(submissionId, {
+        score: total,
+        question_scores: parsedScores,
+        part_comments: g.partComments,
+        feedback_ack_required: !!g.ackRequired,
+      });
       setSaveError("");
       return true;
     } catch (e) {
@@ -241,6 +257,24 @@ export default function ByQuestionGrader({ open, onOpenChange, assignment, submi
             Next Student <ChevronRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
+
+        {/* Whole-submission setting, not per-question - shown once per
+            student here rather than repeated on every question. Puts this
+            on their dashboard's Outstanding Feedback shelf instead of the
+            normal graded list, until they actively confirm they read it. */}
+        <label className="flex items-start gap-2 text-sm cursor-pointer py-1">
+          <Checkbox
+            checked={!!grades[student.id]?.ackRequired}
+            onCheckedChange={(v) => updateAckRequired(!!v)}
+            className="mt-0.5"
+          />
+          <span>
+            Require {student.student_name} to confirm they&rsquo;ve read this
+            <span className="block text-xs text-muted-foreground">
+              Shows up front on their dashboard until they actively acknowledge it.
+            </span>
+          </span>
+        </label>
 
         {assignment.answer_key_url && (
           <a

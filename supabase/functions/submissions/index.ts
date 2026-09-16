@@ -946,6 +946,89 @@ Deno.serve(async (req) => {
       return json({ results });
     }
 
+    // Graded work where the teacher checked "require the student to confirm
+    // they read this" and they have not yet done so - shared by
+    // outstandingAckCount and listOutstandingAck below, same relationship
+    // unscoredSubmissionsFor has to gradingCounts/listNeedsGrading. A
+    // Project only counts once its feedback is actually released - flagging
+    // one as outstanding before that would mean asking a student to
+    // acknowledge feedback they cannot see yet.
+    const outstandingAckSubmissionsFor = async (workIds: string[]) => {
+      const CHUNK = 100;
+      const out: Record<string, any>[] = [];
+      for (let i = 0; i < workIds.length; i += CHUNK) {
+        const slice = workIds.slice(i, i + CHUNK).join(',');
+        const { data, error } = await admin
+          .from('submissions')
+          .select(
+            'id, assignment_id, project_id, coding_problem_id, student_name, student_user_id, student_email, submitted_at, score, autograde_score, feedback_released'
+          )
+          .eq('submitted', true)
+          .eq('feedback_ack_required', true)
+          .is('feedback_reviewed_at', null)
+          .or(`assignment_id.in.(${slice}),project_id.in.(${slice}),coding_problem_id.in.(${slice})`);
+        if (error) throw new Error(error.message);
+        out.push(...(data || []));
+      }
+      return out;
+    };
+
+    // A row this landed on for isn't necessarily actually visible to the
+    // student yet - a Project awaiting release, or (in principle) a row with
+    // no score at all. Filters unscoredSubmissionsFor's raw rows down to
+    // ones a student could actually see and acknowledge right now.
+    const isAckVisible = (row: Record<string, any>, kind: string) =>
+      kind === 'project' ? !!row.feedback_released : row.score != null || row.autograde_score != null;
+
+    if (action === 'outstandingAckCount') {
+      const index = await myWorkIndex();
+      const workIds = [...index.keys()].filter((id) => !index.get(id)?.archived);
+      if (workIds.length === 0) return json({ result: 0 });
+      const rows = await outstandingAckSubmissionsFor(workIds);
+      const seenKeys = new Set<string>();
+      let count = 0;
+      for (const row of rows) {
+        const workId = row.assignment_id || row.project_id || row.coding_problem_id;
+        const meta = index.get(workId);
+        if (!meta || !isAckVisible(row, meta.kind)) continue;
+        const key = `${workId}::${studentKey(row)}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        count++;
+      }
+      return json({ result: count });
+    }
+
+    if (action === 'listOutstandingAck') {
+      const index = await myWorkIndex();
+      const workIds = [...index.keys()].filter((id) => !index.get(id)?.archived);
+      if (workIds.length === 0) return json({ results: [] });
+      const rows = await outstandingAckSubmissionsFor(workIds);
+      const seenKeys = new Set<string>();
+      const results = [];
+      for (const row of rows) {
+        const workId = row.assignment_id || row.project_id || row.coding_problem_id;
+        const meta = index.get(workId);
+        if (!meta || !isAckVisible(row, meta.kind)) continue;
+        const key = `${workId}::${studentKey(row)}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        results.push({
+          id: row.id,
+          kind: meta.kind,
+          work_id: workId,
+          course_id: meta.course_id,
+          title: meta.title,
+          student_name: row.student_name,
+          submitted_at: row.submitted_at,
+        });
+      }
+      results.sort(
+        (a, b) => new Date(a.submitted_at ?? 0).getTime() - new Date(b.submitted_at ?? 0).getTime()
+      );
+      return json({ results });
+    }
+
     // Everything needed to grade ONE submission, whatever kind it is: the full
     // row plus the assignment/problem/project it belongs to. The grading queue
     // walks a list that spans all three types and all courses, so it cannot
@@ -1005,7 +1088,7 @@ Deno.serve(async (req) => {
       // it has to be compared against what is actually stored.
       const { data: before } = await admin
         .from('submissions')
-        .select('score, question_scores, part_comments, style_score, style_comments, teacher_comments, line_comments')
+        .select('score, question_scores, part_comments, style_score, style_comments, teacher_comments, line_comments, feedback_ack_required')
         .eq('id', body.submission_id)
         .maybeSingle();
 
@@ -1019,6 +1102,10 @@ Deno.serve(async (req) => {
       if (body.feedback_released !== undefined) update.feedback_released = body.feedback_released;
       // Written feedback pinned to specific lines of a hand-graded submission.
       if (body.line_comments !== undefined) update.line_comments = body.line_comments;
+      // "Make the student actively confirm they read this" - separate from
+      // feedback_reviewed_at (the confirmation itself, which this does not
+      // set or clear on its own).
+      if (body.feedback_ack_required !== undefined) update.feedback_ack_required = body.feedback_ack_required;
       // "Not grading this one" - a duplicate, an empty placeholder, a student
       // who dropped. Leaves score untouched: this removes it from the pile,
       // it does not grade it as a zero.
@@ -1045,7 +1132,13 @@ Deno.serve(async (req) => {
             (f) => body[f] !== undefined && JSON.stringify(body[f]) !== JSON.stringify(before[f as keyof typeof before])
           )
         : feedbackFields.some((f) => body[f] !== undefined);
-      if (changedFeedback) update.feedback_reviewed_at = null;
+      // Newly turning this on forces it back to outstanding even if the
+      // student had already quietly self-marked it reviewed before the
+      // teacher decided it needed an actual confirmation. Turning it off is
+      // not treated as a feedback change - it only relaxes a requirement, so
+      // whatever the reviewed state already was is left alone.
+      const newlyRequiringAck = body.feedback_ack_required === true && !before?.feedback_ack_required;
+      if (changedFeedback || newlyRequiringAck) update.feedback_reviewed_at = null;
 
       const { data, error } = await admin
         .from('submissions')

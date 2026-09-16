@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { format } from "date-fns";
 import CommentBank from "./CommentBank";
+import { Checkbox } from "@/components/ui/checkbox";
 import AnnotatedCodeView from "./AnnotatedCodeView";
 import AnswerKeyPanel from "./AnswerKeyPanel";
 import InteractiveRunner from "@/components/InteractiveRunner";
@@ -50,6 +51,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
   const [comments, setComments] = useState("");
   const [lineComments, setLineComments] = useState([]);
   const [release, setRelease] = useState(false);
+  const [ackRequired, setAckRequired] = useState(false);
   const [activeFile, setActiveFile] = useState(null);
   const [tab, setTab] = useState("feedback");
   // Kept across items on purpose: the pattern is looking at the key for the
@@ -121,6 +123,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
         setComments(s.teacher_comments || "");
         setLineComments(s.line_comments || []);
         setRelease(!!s.feedback_released);
+        setAckRequired(!!s.feedback_ack_required);
         setActiveFile((s.files || [])[0]?.filename ?? null);
         setTab("feedback");
       })
@@ -203,7 +206,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
     setSaving(true);
     setError("");
     try {
-      const patch = { teacher_comments: comments, line_comments: lineComments };
+      const patch = { teacher_comments: comments, line_comments: lineComments, feedback_ack_required: ackRequired };
       if (kind === "frq") {
         const parsed = Object.fromEntries(
           Object.entries(questionScores)
@@ -587,6 +590,24 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                     />
                     <CommentBank compact value={comments} onChange={setComments} scope={commentScope} />
                   </div>
+
+                  {/* Puts this on their dashboard's Outstanding Feedback
+                      shelf instead of the normal graded list, until they
+                      actively confirm they read it - for feedback that
+                      genuinely needs to land, not every routine grade. */}
+                  <label className="flex items-start gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={ackRequired}
+                      onCheckedChange={(v) => setAckRequired(!!v)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      Require the student to confirm they&rsquo;ve read this
+                      <span className="block text-xs text-muted-foreground">
+                        Shows up front on their dashboard until they actively acknowledge it.
+                      </span>
+                    </span>
+                  </label>
 
                   {/* Easy to miss up in the header next to the name and
                       timestamp - repeated here, right where the feedback

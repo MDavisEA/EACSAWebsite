@@ -289,10 +289,17 @@ export default function StudentDashboard() {
   const active = visible.filter((i) => i.status !== "reviewed");
   const reviewed = visible.filter((i) => i.status === "reviewed");
 
+  // A teacher-required acknowledgment is not just "not reviewed yet" the way
+  // the rest of active is - it needs to be impossible to miss, so it gets
+  // pulled out into its own section above everything else rather than
+  // competing for attention inside a unit's normal list.
+  const outstandingAck = active.filter((i) => i.needs_ack);
+  const activeRest = active.filter((i) => !i.needs_ack);
+
   // Once a single class is picked, its name on every unit heading is just
   // noise - it was only there to tell units from different classes apart.
   const showCourse = courses.length > 1 && !courseFilter;
-  const groups = groupWorkByUnit(active, units, courses);
+  const groups = groupWorkByUnit(activeRest, units, courses);
   const reviewedGroups = groupWorkByUnit(reviewed, units, courses);
 
   return (
@@ -315,6 +322,34 @@ export default function StudentDashboard() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+        {/* A teacher-required acknowledgment, not just a bare grade - shown
+            first, before anything else on the page, so it cannot be missed
+            the way an item sitting in its normal unit spot could be. Clicking
+            through opens the same detail dialog every other row does; the
+            "I've read this feedback" button already there is what actually
+            clears it. */}
+        {outstandingAck.length > 0 && (
+          <section className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-900">
+                Outstanding Feedback
+              </h2>
+              <Badge className="bg-amber-500 hover:bg-amber-500 text-white text-xs">
+                {outstandingAck.length}
+              </Badge>
+            </div>
+            <p className="text-xs text-amber-800 mb-3">
+              Your teacher asked you to confirm you&rsquo;ve read the feedback on{" "}
+              {outstandingAck.length === 1 ? "this" : "these"}.
+            </p>
+            <div className="space-y-2">
+              {outstandingAck.map((item) => (
+                <WorkRow key={`${item.kind}-${item.id}`} item={item} onOpen={openItem} />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Only worth showing once there is more than one class to pick
             between - a student on a single roster never sees this. */}
         {courses.length > 1 && (
@@ -564,15 +599,23 @@ export default function StudentDashboard() {
                     </>
                   ) : (
                     <>
-                      <Button onClick={() => toggleReviewed(true)} disabled={markingReviewed}>
+                      <Button
+                        onClick={() => toggleReviewed(true)}
+                        disabled={markingReviewed}
+                        className={detail.item.needs_ack ? "bg-amber-600 hover:bg-amber-700" : ""}
+                      >
                         {markingReviewed ? (
                           <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Saving...</>
+                        ) : detail.item.needs_ack ? (
+                          <><CheckCheck className="w-4 h-4 mr-1.5" /> Confirm I&rsquo;ve read this</>
                         ) : (
                           <><CheckCheck className="w-4 h-4 mr-1.5" /> I&rsquo;ve read this feedback</>
                         )}
                       </Button>
                       <span className="text-xs text-muted-foreground">
-                        Moves this into Reviewed at the bottom. You can always open it again.
+                        {detail.item.needs_ack
+                          ? "Your teacher asked you to confirm you've read this before it leaves Outstanding Feedback."
+                          : "Moves this into Reviewed at the bottom. You can always open it again."}
                       </span>
                     </>
                   )}

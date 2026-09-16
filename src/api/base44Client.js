@@ -263,6 +263,15 @@ const Submission = {
   async listNeedsGrading() {
     return (await callFunction('submissions', { action: 'listNeedsGrading' })).results;
   },
+  // How many graded submissions the teacher flagged "must confirm you read
+  // this" are still waiting on that confirmation.
+  async outstandingAckCount() {
+    const data = await callFunction('submissions', { action: 'outstandingAckCount' });
+    return data.result;
+  },
+  async listOutstandingAck() {
+    return (await callFunction('submissions', { action: 'listOutstandingAck' })).results;
+  },
   // One submission plus the assignment/problem/project it belongs to - what
   // the grading queue needs, since it crosses work types and cannot know what
   // the next item will be until it reaches it.

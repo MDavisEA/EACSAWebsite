@@ -455,7 +455,7 @@ Deno.serve(async (req) => {
           let q = admin
             .from('submissions')
             .select(
-              'id, assignment_id, coding_problem_id, project_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, feedback_released, feedback_reviewed_at'
+              'id, assignment_id, coding_problem_id, project_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, feedback_released, feedback_reviewed_at, feedback_ack_required'
             )
             .or(`assignment_id.in.(${slice}),coding_problem_id.in.(${slice}),project_id.in.(${slice})`);
           q = email
@@ -672,7 +672,7 @@ Deno.serve(async (req) => {
           const slice = workIds.slice(i, i + CHUNK).join(',');
           const { data, error } = await admin
             .from('submissions')
-            .select('id, assignment_id, coding_problem_id, project_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, feedback_released, feedback_reviewed_at')
+            .select('id, assignment_id, coding_problem_id, project_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, feedback_released, feedback_reviewed_at, feedback_ack_required')
             .or(`assignment_id.in.(${slice}),coding_problem_id.in.(${slice}),project_id.in.(${slice})`);
           if (error) return json({ error: error.message }, 500);
           courseSubs.push(...(data || []));
