@@ -12,6 +12,7 @@ import CommentBank from "./CommentBank";
 import { Checkbox } from "@/components/ui/checkbox";
 import AnnotatedCodeView from "./AnnotatedCodeView";
 import AnswerKeyPanel from "./AnswerKeyPanel";
+import HighlightedCode from "@/components/HighlightedCode";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import {
   Loader2, ChevronLeft, ChevronRight, CheckCircle2, EyeOff, FileCode, Terminal, Info,
@@ -58,6 +59,10 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
   // first few of a pile and then not needing it, so collapsing it once should
   // stay collapsed for the rest of the run rather than reopening every student.
   const [showKeys, setShowKeys] = useState(true);
+  // Same idea for a coding submission, but defaulted the other way: unlike an
+  // FRQ, you don't need the key to grade autograded/reviewed code most of the
+  // time - this is just a quick way to pull it up if you want a look.
+  const [showCodeKey, setShowCodeKey] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState(null);
 
   const [saving, setSaving] = useState(false);
@@ -427,9 +432,29 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                   ) : isCode ? (
                     (submission.code || "").trim() ? (
                       <>
-                        <div className="bg-slate-100 px-3 py-1.5 text-xs text-muted-foreground border-b">
-                          Click any line to comment on it
+                        <div className="bg-slate-100 px-3 py-1.5 text-xs text-muted-foreground border-b flex items-center gap-3">
+                          <span>Click any line to comment on it</span>
+                          {(work.answer_key_code || work.answer_key_notes_html) && (
+                            <button
+                              onClick={() => setShowCodeKey((v) => !v)}
+                              className="ml-auto flex items-center gap-1.5 text-amber-700 hover:text-amber-900"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                              {showCodeKey ? "Hide answer key" : "Show answer key"}
+                            </button>
+                          )}
                         </div>
+                        {showCodeKey && (work.answer_key_code || work.answer_key_notes_html) && (
+                          <div className="p-2 space-y-2 border-b bg-amber-50/30">
+                            {work.answer_key_code && (
+                              <HighlightedCode
+                                code={work.answer_key_code}
+                                className="rounded p-2 overflow-x-auto max-h-56 overflow-y-auto"
+                              />
+                            )}
+                            <AnswerKeyPanel keyHtml={work.answer_key_notes_html} />
+                          </div>
+                        )}
                         <AnnotatedCodeView
                           key={submission.id}
                           code={submission.code}
