@@ -2,6 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import HighlightedCode from "@/components/HighlightedCode";
 import { Pencil, Trash2 } from "lucide-react";
 
 const DIFFICULTY_COLOR = {
@@ -22,9 +23,13 @@ export default function LoopProblemCard({ problem, onEdit, onDelete, onToggleAct
           <span className="text-xs text-muted-foreground">{problem.topic}</span>
           {!problem.is_active && <Badge variant="secondary">Inactive</Badge>}
         </div>
-        <code className="text-xs text-muted-foreground line-clamp-2 whitespace-pre-wrap break-words">
-          {problem.code}
-        </code>
+        {problem.type === "trace" ? (
+          <HighlightedCode code={problem.code} className="rounded p-2 line-clamp-2" />
+        ) : (
+          <pre className="text-xs text-muted-foreground line-clamp-2 whitespace-pre-wrap break-words">
+            {problem.shown_output}
+          </pre>
+        )}
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
         <Switch checked={problem.is_active} onCheckedChange={onToggleActive} className="mr-1" />

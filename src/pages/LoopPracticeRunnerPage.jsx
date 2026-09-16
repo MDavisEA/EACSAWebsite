@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import HighlightedCode from "@/components/HighlightedCode";
 import { CheckCircle2, XCircle, Trophy, Home, Terminal, ListChecks } from "lucide-react";
 
 const DIFFICULTY_COLOR = {
@@ -177,9 +178,7 @@ export default function LoopPracticeRunnerPage() {
               </span>
               What does this print?
             </h2>
-            <pre className="bg-[#1e1e1e] border border-slate-700 rounded-lg p-4 text-sm text-slate-100 font-mono overflow-x-auto">
-              {problem.code}
-            </pre>
+            <HighlightedCode code={problem.code} className="rounded-lg p-4 border border-slate-700 overflow-x-auto" />
             <Textarea
               className="font-mono text-sm bg-[#1e1e1e] border-slate-700 text-slate-100 min-h-[100px]"
               value={traceAnswer}
@@ -219,9 +218,7 @@ export default function LoopPracticeRunnerPage() {
                     >
                       {style.letter}
                     </span>
-                    <span className="font-mono text-xs text-slate-100 whitespace-pre-wrap break-words">
-                      {c.code}
-                    </span>
+                    <HighlightedCode code={c.code} className="flex-1 rounded-md p-2" />
                   </button>
                 );
               })}
