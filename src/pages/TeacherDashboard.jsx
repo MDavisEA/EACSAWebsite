@@ -663,7 +663,7 @@ export default function TeacherDashboard() {
   return (
     <div className="min-h-screen bg-slate-50/50">
       <header className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="px-6 h-14 flex items-center justify-between gap-4">
           <button
             onClick={() => setOpenCourseId(null)}
             className="flex items-center gap-3 hover:opacity-70 transition-opacity"
