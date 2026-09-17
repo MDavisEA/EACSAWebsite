@@ -106,6 +106,15 @@ export default function StudentDashboard() {
   const [courses, setCourses] = useState([]);
   const [notes, setNotes] = useState([]);
   const [openNote, setOpenNote] = useState(null);
+  // Remembered across visits (unlike showReviewed below) - a student who
+  // minimizes this once is doing it to get it out of the way generally, not
+  // just for this one look at the page.
+  const [notesCollapsed, setNotesCollapsed] = useState(
+    () => localStorage.getItem("studentNotesCollapsed") === "true"
+  );
+  useEffect(() => {
+    localStorage.setItem("studentNotesCollapsed", String(notesCollapsed));
+  }, [notesCollapsed]);
   const [showReviewed, setShowReviewed] = useState(false);
   const [markingReviewed, setMarkingReviewed] = useState(false);
   const [studentName, setStudentName] = useState("");
@@ -409,22 +418,30 @@ export default function StudentDashboard() {
 
         {visibleNotes.length > 0 && (
           <section>
-            <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <button
+              onClick={() => setNotesCollapsed((v) => !v)}
+              className="w-full flex items-center gap-2 mb-3 flex-wrap text-left"
+            >
               <h2 className="text-sm font-semibold uppercase tracking-wide">Class Notes</h2>
               <Badge variant="outline" className="text-xs">{visibleNotes.length}</Badge>
-            </div>
-            <div className="space-y-2">
-              {visibleNotes.map((note) => (
-                <button
-                  key={note.id}
-                  onClick={() => setOpenNote(note)}
-                  className="w-full text-left bg-white border rounded-xl p-4 hover:shadow-md hover:border-primary/30 transition-all flex items-center justify-between gap-4"
-                >
-                  <span className="font-medium">{note.title}</span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                </button>
-              ))}
-            </div>
+              <span className="ml-auto text-muted-foreground">
+                {notesCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </span>
+            </button>
+            {!notesCollapsed && (
+              <div className="space-y-2">
+                {visibleNotes.map((note) => (
+                  <button
+                    key={note.id}
+                    onClick={() => setOpenNote(note)}
+                    className="w-full text-left bg-white border rounded-xl p-4 hover:shadow-md hover:border-primary/30 transition-all flex items-center justify-between gap-4"
+                  >
+                    <span className="font-medium">{note.title}</span>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
