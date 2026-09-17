@@ -1282,6 +1282,66 @@ Deno.serve(async (req) => {
       return json({ results });
     }
 
+    // A submission "needs a reply" when the LAST message in its
+    // comment_replies thread was written by the student - the moment the
+    // teacher writes back, that flips to false on its own (no separate
+    // "seen"/read flag to maintain), and it flips back to true if the
+    // student replies again after that. Same two-action shape
+    // (count + full list) as outstandingAckCount/listOutstandingAck above.
+    const needsReplySubmissionsFor = async (workIds: string[]) => {
+      const CHUNK = 100;
+      const out: Record<string, any>[] = [];
+      for (let i = 0; i < workIds.length; i += CHUNK) {
+        const slice = workIds.slice(i, i + CHUNK).join(',');
+        const { data, error } = await admin
+          .from('submissions')
+          .select('id, assignment_id, project_id, coding_problem_id, student_name, comment_replies')
+          .or(`assignment_id.in.(${slice}),project_id.in.(${slice}),coding_problem_id.in.(${slice})`);
+        if (error) throw new Error(error.message);
+        out.push(...(data || []));
+      }
+      return out;
+    };
+    const lastReplyIsFromStudent = (row: Record<string, any>) => {
+      const replies = row.comment_replies || [];
+      return replies.length > 0 && replies[replies.length - 1]?.author === 'student';
+    };
+
+    if (action === 'needsReplyCount') {
+      const index = await myWorkIndex();
+      const workIds = [...index.keys()].filter((id) => !index.get(id)?.archived);
+      if (workIds.length === 0) return json({ result: 0 });
+      const rows = await needsReplySubmissionsFor(workIds);
+      return json({ result: rows.filter(lastReplyIsFromStudent).length });
+    }
+
+    if (action === 'listNeedsReply') {
+      const index = await myWorkIndex();
+      const workIds = [...index.keys()].filter((id) => !index.get(id)?.archived);
+      if (workIds.length === 0) return json({ results: [] });
+      const rows = await needsReplySubmissionsFor(workIds);
+      const results = rows.filter(lastReplyIsFromStudent).map((row) => {
+        const workId = row.assignment_id || row.project_id || row.coding_problem_id;
+        const meta = index.get(workId);
+        const replies = row.comment_replies || [];
+        const last = replies[replies.length - 1];
+        return {
+          id: row.id,
+          kind: meta?.kind,
+          work_id: workId,
+          course_id: meta?.course_id,
+          title: meta?.title,
+          student_name: row.student_name,
+          last_reply_text: last?.text || '',
+          last_reply_at: last?.at || null,
+        };
+      });
+      results.sort(
+        (a, b) => new Date(a.last_reply_at ?? 0).getTime() - new Date(b.last_reply_at ?? 0).getTime()
+      );
+      return json({ results });
+    }
+
     // Everything needed to grade ONE submission, whatever kind it is: the full
     // row plus the assignment/problem/project it belongs to. The grading queue
     // walks a list that spans all three types and all courses, so it cannot

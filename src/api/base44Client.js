@@ -272,6 +272,17 @@ const Submission = {
   async listOutstandingAck() {
     return (await callFunction('submissions', { action: 'listOutstandingAck' })).results;
   },
+  // How many submissions' reply threads currently end with a student's
+  // message (i.e. are waiting on the teacher to write back), and the full
+  // list of them - same count+list pairing as outstandingAckCount/
+  // listOutstandingAck above.
+  async needsReplyCount() {
+    const data = await callFunction('submissions', { action: 'needsReplyCount' });
+    return data.result;
+  },
+  async listNeedsReply() {
+    return (await callFunction('submissions', { action: 'listNeedsReply' })).results;
+  },
   // One submission plus the assignment/problem/project it belongs to - what
   // the grading queue needs, since it crosses work types and cannot know what
   // the next item will be until it reaches it.

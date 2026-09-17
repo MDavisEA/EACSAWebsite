@@ -213,6 +213,11 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
       const updated = await base44.entities.Submission.addTeacherReply(submission.id, text);
       setDetail((d) => (d ? { ...d, submission: updated } : d));
       setReplyText("");
+      // Writing back is exactly what takes this submission off the "needs
+      // your reply" pile - refresh that count live rather than waiting for
+      // the next grading save (which may never come, on an item like this
+      // that's otherwise already fully graded).
+      onChanged?.();
     } catch (e) {
       setError(e.message || "Couldn't send that reply.");
     } finally {

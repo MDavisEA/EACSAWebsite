@@ -25,6 +25,7 @@ import GlobalCommentsPanel from "@/components/teacher/GlobalCommentsPanel";
 import MyStudentsDialog from "@/components/teacher/MyStudentsDialog";
 import NeedsGradingPanel from "@/components/teacher/NeedsGradingPanel";
 import OutstandingAckPanel from "@/components/teacher/OutstandingAckPanel";
+import NeedsReplyPanel from "@/components/teacher/NeedsReplyPanel";
 import GradingQueue from "@/components/teacher/GradingQueue";
 import TeacherHome from "@/components/teacher/TeacherHome";
 import CourseUnitsView from "@/components/teacher/CourseUnitsView";
@@ -44,6 +45,8 @@ export default function TeacherDashboard() {
   const [showNeedsGrading, setShowNeedsGrading] = useState(false);
   const [showOutstandingAck, setShowOutstandingAck] = useState(false);
   const [outstandingAckCount, setOutstandingAckCount] = useState(0);
+  const [showNeedsReply, setShowNeedsReply] = useState(false);
+  const [needsReplyCount, setNeedsReplyCount] = useState(0);
   const [showStudents, setShowStudents] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   // Set when the queue is opened on one specific submission - from a
@@ -170,6 +173,7 @@ export default function TeacherDashboard() {
         loadCourses(),
         loadGradingCounts(),
         loadOutstandingAckCount(),
+        loadNeedsReplyCount(),
         loadAssignments(),
         loadLoopProblems(),
         loadLoopAssignments(),
@@ -265,10 +269,17 @@ export default function TeacherDashboard() {
     setOutstandingAckCount(await base44.entities.Submission.outstandingAckCount());
   };
 
+  const loadNeedsReplyCount = async () => {
+    setNeedsReplyCount(await base44.entities.Submission.needsReplyCount());
+  };
+
   // Grading and "require acknowledgment" are saved together in every grader,
   // so anything that used to just refresh gradingCounts after a save needs
-  // to refresh this too.
-  const refreshGradingState = () => Promise.all([loadGradingCounts(), loadOutstandingAckCount()]);
+  // to refresh this too. Also reused as GradingQueue's onChanged, so posting
+  // a teacher reply (which is not a grading save) refreshes needsReplyCount
+  // the same way.
+  const refreshGradingState = () =>
+    Promise.all([loadGradingCounts(), loadOutstandingAckCount(), loadNeedsReplyCount()]);
 
   const loadAssignments = async () => {
     const results = await base44.entities.Assignment.list("-created_date");
@@ -705,6 +716,19 @@ export default function TeacherDashboard() {
                 </span>
               </Button>
             )}
+            {needsReplyCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowNeedsReply(true)}
+                className="border-blue-300 text-blue-800 hover:bg-blue-50"
+              >
+                Student Replies
+                <span className="ml-1.5 rounded-full bg-blue-500 px-1.5 text-[10px] font-semibold text-white">
+                  {needsReplyCount}
+                </span>
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setShowStudents(true)}>
               Students
             </Button>
@@ -971,6 +995,12 @@ export default function TeacherDashboard() {
       <OutstandingAckPanel
         open={showOutstandingAck}
         onOpenChange={setShowOutstandingAck}
+        onGrade={openGradingFor}
+      />
+
+      <NeedsReplyPanel
+        open={showNeedsReply}
+        onOpenChange={setShowNeedsReply}
         onGrade={openGradingFor}
       />
 
