@@ -598,7 +598,13 @@ Deno.serve(async (req) => {
         const choices = problem.choices || [];
         const idx = Number(answer);
         correct = Number.isInteger(idx) && !!choices[idx]?.correct;
-        correctAnswer = choices.findIndex((c: Record<string, any>) => c.correct);
+        // The client only ever sees choices in a SHUFFLED display order (see
+        // sanitizeProblemForStudent in loop-practice/index.ts) - an index into
+        // the original `choices` array means nothing next to what the student
+        // is actually looking at, and would report a "correct choice" number
+        // that doesn't match either the shuffled order or its own letter
+        // labels. Returning the actual code sidesteps indexing entirely.
+        correctAnswer = choices.find((c: Record<string, any>) => c.correct)?.code ?? null;
       }
 
       const delta = correct ? 1 : -Number(assignment.wrong_penalty || 0);

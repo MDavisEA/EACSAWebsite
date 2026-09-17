@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import HighlightedCode from "@/components/HighlightedCode";
-import { CheckCircle2, XCircle, Trophy, Home, Terminal, ListChecks } from "lucide-react";
+import { CheckCircle2, XCircle, Trophy, Home, Terminal, ListChecks, Circle } from "lucide-react";
 
 const DIFFICULTY_COLOR = {
   easy: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
@@ -40,6 +40,12 @@ export default function LoopPracticeRunnerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [traceAnswer, setTraceAnswer] = useState("");
+  // Picking a multiple-choice option only highlights it - grading happens on
+  // an explicit Submit click, same as trace. A bare onClick-to-grade design
+  // meant one accidental/mistimed click (a stray double-click, a click that
+  // lands right as the page finishes loading) silently graded a wrong answer
+  // nobody meant to give.
+  const [selectedChoice, setSelectedChoice] = useState(null);
   const [feedback, setFeedback] = useState(null); // { correct, correct_answer }
   const [submitting, setSubmitting] = useState(false);
 
@@ -89,6 +95,7 @@ export default function LoopPracticeRunnerPage() {
   const loadNextProblem = async (excludeId) => {
     setFeedback(null);
     setTraceAnswer("");
+    setSelectedChoice(null);
     try {
       const p = await base44.entities.LoopAssignment.getProblemToAttempt(assignmentId, excludeId);
       setProblem(p);
@@ -227,13 +234,21 @@ export default function LoopPracticeRunnerPage() {
             <div className="grid gap-3">
               {problem.choices.map((c, i) => {
                 const style = OPTION_STYLE[i % OPTION_STYLE.length];
+                const selected = selectedChoice === c.choice_index;
                 return (
                   <button
                     key={c.choice_index}
                     disabled={!!feedback || submitting}
-                    onClick={() => submitAnswer(c.choice_index)}
-                    className="flex items-start gap-3 text-left bg-[#1e1e1e] border border-slate-700 rounded-lg p-3 hover:border-slate-500 disabled:opacity-60 transition-colors"
+                    onClick={() => setSelectedChoice(c.choice_index)}
+                    className={`flex items-start gap-3 text-left bg-[#1e1e1e] border rounded-lg p-3 disabled:opacity-60 transition-colors ${
+                      selected ? "border-emerald-400 ring-1 ring-emerald-400/50" : "border-slate-700 hover:border-slate-500"
+                    }`}
                   >
+                    {selected ? (
+                      <CheckCircle2 className="w-4 h-4 mt-1 flex-shrink-0 text-emerald-400" />
+                    ) : (
+                      <Circle className="w-4 h-4 mt-1 flex-shrink-0 text-slate-600" />
+                    )}
                     <span
                       className={`flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-md border text-xs font-semibold ${style.classes}`}
                     >
@@ -244,6 +259,11 @@ export default function LoopPracticeRunnerPage() {
                 );
               })}
             </div>
+            {!feedback && (
+              <Button onClick={() => submitAnswer(selectedChoice)} disabled={submitting || selectedChoice === null}>
+                Submit
+              </Button>
+            )}
           </div>
         )}
 
@@ -268,9 +288,10 @@ export default function LoopPracticeRunnerPage() {
                 </pre>
               )}
               {!feedback.correct && problem.type === "multiple_choice" && (
-                <pre className="text-xs text-slate-300 font-mono mt-1 whitespace-pre-wrap">
-                  Correct choice: #{Number(feedback.correct_answer) + 1}
-                </pre>
+                <div className="mt-1.5 space-y-1">
+                  <p className="text-xs text-slate-400">The correct loop was:</p>
+                  <HighlightedCode code={feedback.correct_answer} className="rounded p-2" />
+                </div>
               )}
               <Button size="sm" className="mt-3" onClick={handleNext}>
                 Next
