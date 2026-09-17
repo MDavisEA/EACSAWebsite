@@ -18,13 +18,32 @@ Vercel so the teacher owns the whole stack.
   student Java code for the autograder
 - **Gist ingestion**: GitHub Gist API (`GITHUB_TOKEN` secret - optional but
   needed above 60 requests/hr) for Project submissions and starter code
-- **Grade notification emails**: Resend (`RESEND_API_KEY` secret, plus
-  `SITE_URL` and optionally `GRADE_EMAIL_FROM`) - see
-  `supabase/functions/_shared/email.ts`. Until `RESEND_API_KEY` is set this
-  quietly no-ops (logs and moves on); nothing else about grading breaks.
-  Sending real email to students requires a verified sending domain in
-  Resend's dashboard, not just an API key - Resend's default test sender can
-  only deliver to the account's own address.
+- **Grade notification emails**: sent through the Gmail API, authenticated as
+  one Google account via a long-lived OAuth refresh token - not a
+  third-party vendor, since Google is already this app's trust boundary for
+  sign-in. Secrets: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`,
+  `GMAIL_REFRESH_TOKEN`, `GMAIL_SENDER` (the account's own address - Gmail's
+  API only lets you send "From" the authenticated account itself), plus
+  `SITE_URL`. See `supabase/functions/_shared/email.ts`. Until all four
+  Gmail secrets are set this quietly no-ops (logs and moves on); nothing
+  else about grading breaks.
+  - **Getting a refresh token** (one-time, manual - Google doesn't hand
+    these out any other way): in Google Cloud Console, under the same
+    project (create one under the school's Google Workspace account if
+    starting fresh - see below for why that matters), enable the Gmail API,
+    set the OAuth consent screen's **User Type to Internal** (only offered
+    for a Workspace-owned project - this matters because an External app's
+    refresh tokens expire after 7 days unless Google reviews/verifies it,
+    while Internal apps have neither restriction), add the
+    `https://www.googleapis.com/auth/gmail.send` scope, then create an OAuth
+    **Web application** client with `https://developers.google.com/oauthplayground`
+    as an authorized redirect URI. Then use
+    [Google's OAuth Playground](https://developers.google.com/oauthplayground):
+    gear icon → "Use your own OAuth credentials" → paste the client
+    id/secret → pick the Gmail API `.../auth/gmail.send` scope → Authorize
+    APIs (sign in as whichever account should send) → Exchange authorization
+    code for tokens. The refresh token shown there is `GMAIL_REFRESH_TOKEN`;
+    the account signed into is `GMAIL_SENDER`.
 
 ## The most important architectural fact: the shim
 `src/api/base44Client.js` is a compatibility layer. Every existing page
