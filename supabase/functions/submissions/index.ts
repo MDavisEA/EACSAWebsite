@@ -582,6 +582,13 @@ Deno.serve(async (req) => {
 
       let correct = false;
       let correctAnswer: unknown = null;
+      // What their own (wrong) choice actually prints - only meaningful for
+      // multiple_choice, and only worth computing when they got it wrong.
+      // Requires the bank to carry an `output` per choice (see
+      // loop-practice/index.ts's bulkImportProblems); older items imported
+      // before that field existed just won't have one, so this stays null
+      // rather than erroring.
+      let pickedOutput: unknown = null;
       if (problem.type === 'trace') {
         // Trim trailing whitespace per line and trailing blank lines, but
         // otherwise exact - this still teaches output precision without
@@ -597,7 +604,8 @@ Deno.serve(async (req) => {
       } else {
         const choices = problem.choices || [];
         const idx = Number(answer);
-        correct = Number.isInteger(idx) && !!choices[idx]?.correct;
+        const pickedChoice = Number.isInteger(idx) ? choices[idx] : undefined;
+        correct = !!pickedChoice?.correct;
         // The client only ever sees choices in a SHUFFLED display order (see
         // sanitizeProblemForStudent in loop-practice/index.ts) - an index into
         // the original `choices` array means nothing next to what the student
@@ -605,6 +613,7 @@ Deno.serve(async (req) => {
         // that doesn't match either the shuffled order or its own letter
         // labels. Returning the actual code sidesteps indexing entirely.
         correctAnswer = choices.find((c: Record<string, any>) => c.correct)?.code ?? null;
+        if (!correct) pickedOutput = pickedChoice?.output ?? null;
       }
 
       const delta = correct ? 1 : -Number(assignment.wrong_penalty || 0);
@@ -635,7 +644,7 @@ Deno.serve(async (req) => {
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
-      return json({ result: updated, correct, correct_answer: correctAnswer });
+      return json({ result: updated, correct, correct_answer: correctAnswer, picked_output: pickedOutput });
     }
 
     if (action === 'submitProject') {

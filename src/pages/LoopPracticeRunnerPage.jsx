@@ -115,7 +115,7 @@ export default function LoopPracticeRunnerPage() {
         submission.session_token
       );
       setSubmission(data.result);
-      setFeedback({ correct: data.correct, correct_answer: data.correct_answer });
+      setFeedback({ correct: data.correct, correct_answer: data.correct_answer, picked_output: data.picked_output });
     } catch (e) {
       setError(e.message || "Couldn't grade that answer.");
     } finally {
@@ -288,9 +288,19 @@ export default function LoopPracticeRunnerPage() {
                 </pre>
               )}
               {!feedback.correct && problem.type === "multiple_choice" && (
-                <div className="mt-1.5 space-y-1">
-                  <p className="text-xs text-slate-400">The correct loop was:</p>
-                  <HighlightedCode code={feedback.correct_answer} className="rounded p-2" />
+                <div className="mt-1.5 space-y-3">
+                  {feedback.picked_output != null && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-slate-400">The loop you picked actually prints:</p>
+                      <pre className="text-xs text-slate-300 font-mono bg-[#1e1e1e] border border-slate-700 rounded p-2 whitespace-pre-wrap">
+                        {feedback.picked_output}
+                      </pre>
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-400">The correct loop was:</p>
+                    <HighlightedCode code={feedback.correct_answer} className="rounded p-2" />
+                  </div>
                 </div>
               )}
               <Button size="sm" className="mt-3" onClick={handleNext}>

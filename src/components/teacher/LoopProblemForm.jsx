@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Check } from "lucide-react";
 
-const emptyChoice = () => ({ code: "", correct: false, why_tempting: "" });
+const emptyChoice = () => ({ code: "", correct: false, output: "", why_tempting: "" });
 
 // A single bank item, hand-authored or opened for editing after bulk import.
 // Mirrors the JSON shape the AI-generated bank uses (see LoopBulkImportDialog)
@@ -46,7 +46,12 @@ export default function LoopProblemForm({ initial, onSave, onCancel }) {
       onSave({
         ...base,
         shown_output: shownOutput,
-        choices: choices.map((c) => ({ code: c.code, correct: c.correct, why_tempting: c.why_tempting || "" })),
+        choices: choices.map((c) => ({
+          code: c.code,
+          correct: c.correct,
+          output: c.output || "",
+          why_tempting: c.why_tempting || "",
+        })),
       });
     }
   };
@@ -135,6 +140,16 @@ export default function LoopProblemForm({ initial, onSave, onCancel }) {
                     placeholder="for (...) { ... }"
                   />
                 </div>
+                <Input
+                  value={c.output || ""}
+                  onChange={(e) => updateChoice(i, { output: e.target.value })}
+                  placeholder={
+                    c.correct
+                      ? "What this prints (should match the output above)"
+                      : "What this one actually prints - shown to a student who picks it"
+                  }
+                  className="text-xs font-mono"
+                />
                 {!c.correct && (
                   <Input
                     value={c.why_tempting}
