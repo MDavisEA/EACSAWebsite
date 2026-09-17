@@ -378,6 +378,20 @@ const Submission = {
     return data.result;
   },
 
+  // A student replying to their teacher's feedback on this submission.
+  async addCommentReply(submission_id, body) {
+    const data = await callFunction('submissions', { action: 'addCommentReply', submission_id, body });
+    return data.result;
+  },
+
+  // The teacher's side of that same thread - reusing this shim's Submission
+  // namespace rather than a separate one, since it's the same underlying
+  // conversation, just posted by whichever side is signed in.
+  async addTeacherReply(submission_id, body) {
+    const data = await callFunction('submissions', { action: 'addTeacherReply', submission_id, body });
+    return data.result;
+  },
+
   // Teacher-only: seed a project's submissions from a name,gist_url list -
   // no student sign-in needed. Returns a per-row {student_name, status,
   // error?} so the caller can show which ones failed and why.

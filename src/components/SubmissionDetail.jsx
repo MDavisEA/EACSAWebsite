@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { highlightJava, ONE_DARK } from "@/lib/javaHighlight";
-import { Star, MessageSquare, FileCode, KeyRound, CheckCircle2, XCircle, EyeOff } from "lucide-react";
+import { Star, MessageSquare, FileCode, KeyRound, CheckCircle2, XCircle, EyeOff, Send } from "lucide-react";
 
 // Renders one graded submission - code + checks for a coding problem, or a
 // per-question breakdown for an FRQ assignment. Factored out of MyScore.jsx
@@ -100,7 +102,83 @@ function CodeWithNotes({ code, file = null, lineComments = [] }) {
   );
 }
 
-export default function SubmissionDetail({ result, assignment, codingProblem, project }) {
+// The teacher's overall comment plus whatever back-and-forth has happened
+// since - shared across all three kinds (previously FRQ showed no general
+// comment at all here, only a Coding submission and a released Project did;
+// this fixes that gap too, since a reply thread needs somewhere to live for
+// every kind). `onReply` is only passed where posting one is actually wired
+// up (StudentDashboard's own dialog) - omitted entirely (as in MyScore's
+// access-code lookup, which has no signed-in identity to post as), this
+// still shows the thread, just without the box to add to it.
+function FeedbackThread({ comments, replies, canReply, onReply }) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  if (!comments && (!replies || replies.length === 0) && !canReply) return null;
+
+  const submit = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+    setSending(true);
+    setError("");
+    try {
+      await onReply(trimmed);
+      setText("");
+    } catch (e) {
+      setError(e.message || "Couldn't send that. Try again.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Feedback</p>
+      <div className="space-y-2">
+        {comments && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <p className="text-sm text-amber-900 whitespace-pre-wrap">{comments}</p>
+          </div>
+        )}
+        {(replies || []).map((r, i) => (
+          <div
+            key={i}
+            className={`rounded-lg p-3 text-sm whitespace-pre-wrap ${
+              r.author === "teacher"
+                ? "bg-amber-50 border border-amber-200 text-amber-900"
+                : "bg-blue-50 border border-blue-200 text-blue-900 ml-6"
+            }`}
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide mb-1 opacity-70">
+              {r.author === "teacher" ? "Teacher" : "You"}
+            </p>
+            {r.text}
+          </div>
+        ))}
+      </div>
+      {canReply && (
+        <div className="mt-2 space-y-1.5">
+          <div className="flex gap-2 items-start">
+            <Textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Write a reply to your teacher..."
+              rows={2}
+              className="text-sm"
+            />
+            <Button size="sm" disabled={sending || !text.trim()} onClick={submit} className="flex-shrink-0">
+              <Send className="w-3.5 h-3.5 mr-1.5" /> Send
+            </Button>
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function SubmissionDetail({ result, assignment, codingProblem, project, onReply }) {
   // A project's score and written feedback stay hidden until the teacher
   // releases them, so nothing AI-assisted reaches a student before a human
   // has reviewed it.
@@ -133,6 +211,13 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
   const hasGeneralComment =
     !(isProject && !projectFeedbackVisible) && !!(result.teacher_comments || "").trim();
   const hasLineComments = visibleLineComments.length > 0;
+  // Same visibility rule as the comment itself - once there's an actual grade
+  // to discuss (and, for a Project, only once feedback is released), a reply
+  // box makes sense. `onReply` being passed at all is what actually gates
+  // this on - MyScore's access-code lookup never wires it up, since there is
+  // no signed-in identity there to post a reply as.
+  const feedbackVisible = !(isProject && !projectFeedbackVisible);
+  const canReply = feedbackVisible && displayScore != null && typeof onReply === "function";
 
   return (
     // min-w-0 matters here, not just space-y-4: DialogContent (dialog.jsx) is
@@ -182,6 +267,17 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
         )}
       </div>
 
+      {(hasGeneralComment || (result.comment_replies || []).length > 0 || canReply) && (
+        <div className="bg-white rounded-xl border shadow-sm p-5">
+          <FeedbackThread
+            comments={feedbackVisible ? result.teacher_comments : ""}
+            replies={feedbackVisible ? result.comment_replies : []}
+            canReply={canReply}
+            onReply={onReply}
+          />
+        </div>
+      )}
+
       {/* A comment sitting on line 34 of a 60-line file is very easy to
           scroll straight past without noticing - this is the one thing on
           the page guaranteed to be seen, so it says up front that there is
@@ -206,14 +302,6 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
 
       {isProject ? (
         <div className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
-          {projectFeedbackVisible && result.teacher_comments && (
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Feedback</p>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <p className="text-sm text-amber-900 whitespace-pre-wrap">{result.teacher_comments}</p>
-              </div>
-            </div>
-          )}
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
               What You Turned In
@@ -253,19 +341,6 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
         </div>
       ) : result.coding_problem_id ? (
         <div className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
-          {/* General feedback first, above the code - a student asked to
-              scroll past their own code to find it before this was easy to
-              miss entirely. */}
-          {result.teacher_comments && (
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                Teacher Feedback
-              </p>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-sm text-amber-900 whitespace-pre-wrap">{result.teacher_comments}</p>
-              </div>
-            </div>
-          )}
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Your Code</p>
             {/* One rendering whether or not there are line comments: the

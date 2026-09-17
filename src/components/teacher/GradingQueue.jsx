@@ -68,6 +68,12 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // The reply thread's own send box - deliberately separate from `comments`/
+  // `save()` above: posting a reply shouldn't wait for (or be bundled with)
+  // whatever else is mid-edit in the grading form.
+  const [replyText, setReplyText] = useState("");
+  const [sendingReply, setSendingReply] = useState(false);
+
   useEffect(() => {
     if (!open) return;
     setLoadError("");
@@ -194,6 +200,25 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
     const n = parseFloat(v);
     return sum + (isNaN(n) ? 0 : n);
   }, 0);
+
+  // Posts a reply and merges the updated row into `detail` in place - keeps
+  // the panel open on the same item, same as everywhere else in this file
+  // treats a small in-place update differently from advancing the queue.
+  const postTeacherReply = async () => {
+    const text = replyText.trim();
+    if (!text || sendingReply || !submission) return;
+    setSendingReply(true);
+    setError("");
+    try {
+      const updated = await base44.entities.Submission.addTeacherReply(submission.id, text);
+      setDetail((d) => (d ? { ...d, submission: updated } : d));
+      setReplyText("");
+    } catch (e) {
+      setError(e.message || "Couldn't send that reply.");
+    } finally {
+      setSendingReply(false);
+    }
+  };
 
   const advance = () => {
     // Removing the graded item rather than stepping past it keeps the counter
@@ -614,6 +639,50 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                       className="text-sm"
                     />
                     <CommentBank compact value={comments} onChange={setComments} scope={commentScope} />
+                  </div>
+
+                  {(submission?.comment_replies || []).length > 0 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-slate-500">Conversation</Label>
+                      <div className="space-y-2">
+                        {submission.comment_replies.map((r, i) => (
+                          <div
+                            key={i}
+                            className={`rounded-lg p-2.5 text-sm whitespace-pre-wrap ${
+                              r.author === "teacher"
+                                ? "bg-slate-100 text-slate-700"
+                                : "bg-blue-50 border border-blue-200 text-blue-900"
+                            }`}
+                          >
+                            <p className="text-xs font-semibold uppercase tracking-wide mb-1 opacity-70">
+                              {r.author === "teacher" ? "You" : "Student"}
+                            </p>
+                            {r.text}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-500">Reply to student</Label>
+                    <div className="flex gap-2 items-start">
+                      <Textarea
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder="Reply to what they wrote back..."
+                        rows={2}
+                        className="text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={sendingReply || !replyText.trim()}
+                        onClick={postTeacherReply}
+                        className="flex-shrink-0"
+                      >
+                        Send
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Puts this on their dashboard's Outstanding Feedback

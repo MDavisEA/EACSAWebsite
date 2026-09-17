@@ -58,33 +58,24 @@ function base64UrlEncode(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-export async function sendGradeNotification(opts: {
-  to: string;
-  studentName: string;
-  title: string;
-}): Promise<{ ok: true } | { error: string }> {
+// The one thing that actually talks to Gmail - both notification types below
+// are just different subject/body text wrapped around this.
+async function sendEmail(opts: { to: string; subject: string; text: string }): Promise<{ ok: true } | { error: string }> {
   const sender = Deno.env.get('GMAIL_SENDER');
   if (!sender) {
-    console.log('sendGradeNotification: GMAIL_SENDER not set, skipping');
+    console.log('sendEmail: GMAIL_SENDER not set, skipping');
     return { error: 'not configured' };
   }
   const accessToken = await getAccessToken();
   if (!accessToken) return { error: 'not configured' };
 
-  const siteUrl = Deno.env.get('SITE_URL') || '';
-  const firstName = (opts.studentName || '').trim().split(/\s+/)[0] || 'there';
-  const subject = `New feedback on ${opts.title}`;
-  const body = `Hi ${firstName},\n\nYou have new feedback on "${opts.title}" in AP CSA Practice.\n${
-    siteUrl ? `\nCheck it out: ${siteUrl}\n` : ''
-  }`;
-
   const message =
     `From: AP CSA Practice <${sender}>\r\n` +
     `To: ${opts.to}\r\n` +
-    `Subject: ${subject}\r\n` +
+    `Subject: ${opts.subject}\r\n` +
     `MIME-Version: 1.0\r\n` +
     `Content-Type: text/plain; charset="UTF-8"\r\n\r\n` +
-    body;
+    opts.text;
   const raw = base64UrlEncode(new TextEncoder().encode(message));
 
   try {
@@ -98,12 +89,50 @@ export async function sendGradeNotification(opts: {
     });
     if (!resp.ok) {
       const errBody = await resp.text().catch(() => '');
-      console.error(`sendGradeNotification: Gmail API returned ${resp.status}: ${errBody}`);
+      console.error(`sendEmail: Gmail API returned ${resp.status}: ${errBody}`);
       return { error: `Gmail API error ${resp.status}` };
     }
     return { ok: true };
   } catch (e) {
-    console.error(`sendGradeNotification threw: ${(e as Error).message}`);
+    console.error(`sendEmail threw: ${(e as Error).message}`);
     return { error: (e as Error).message };
   }
+}
+
+export async function sendGradeNotification(opts: {
+  to: string;
+  studentName: string;
+  title: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const siteUrl = Deno.env.get('SITE_URL') || '';
+  const firstName = (opts.studentName || '').trim().split(/\s+/)[0] || 'there';
+  return sendEmail({
+    to: opts.to,
+    subject: `New feedback on ${opts.title}`,
+    text: `Hi ${firstName},\n\nYou have new feedback on "${opts.title}" in AP CSA Practice.\n${
+      siteUrl ? `\nCheck it out: ${siteUrl}\n` : ''
+    }`,
+  });
+}
+
+// Used in both directions - a student replying emails the teacher, and a
+// teacher replying emails the student back. `greetingName` is whoever is
+// receiving this email; `fromLabel` names whoever just wrote the reply.
+export async function sendReplyNotification(opts: {
+  to: string;
+  greetingName: string;
+  fromLabel: string;
+  title: string;
+  preview: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const siteUrl = Deno.env.get('SITE_URL') || '';
+  const firstName = (opts.greetingName || '').trim().split(/\s+/)[0] || 'there';
+  const snippet = opts.preview.length > 300 ? `${opts.preview.slice(0, 300)}…` : opts.preview;
+  return sendEmail({
+    to: opts.to,
+    subject: `New reply on ${opts.title}`,
+    text: `Hi ${firstName},\n\n${opts.fromLabel} replied on "${opts.title}" in AP CSA Practice:\n\n"${snippet}"\n${
+      siteUrl ? `\nView and reply: ${siteUrl}\n` : ''
+    }`,
+  });
 }

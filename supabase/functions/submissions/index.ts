@@ -4,7 +4,7 @@ import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { extractGistId, fetchGistJavaFiles, fetchGistUpdatedAt } from '../_shared/gist.ts';
 import { fetchOverridesByWorkId } from '../_shared/sectionDueDates.ts';
 import { validateAiHelp } from '../_shared/aiHelp.ts';
-import { sendGradeNotification } from '../_shared/email.ts';
+import { sendGradeNotification, sendReplyNotification } from '../_shared/email.ts';
 
 // The title students see in the "new feedback" email - looked up only when
 // we're actually about to send one (see saveGrade), not on every save.
@@ -22,6 +22,29 @@ async function titleForWork(admin: any, before: Record<string, any>): Promise<st
     return data?.title || 'your project';
   }
   return 'your assignment';
+}
+
+// The opposite direction from titleForWork - given a submission, find which
+// teacher owns the course its work belongs to, so a student's reply can
+// email them. Only ever looked up right before actually sending one.
+async function teacherEmailForWork(
+  admin: any,
+  before: Record<string, any>
+): Promise<{ email: string; name: string } | null> {
+  const table = before.assignment_id ? 'assignments' : before.coding_problem_id ? 'coding_problems' : before.project_id ? 'projects' : null;
+  const workId = before.assignment_id || before.coding_problem_id || before.project_id;
+  if (!table || !workId) return null;
+  const { data: work } = await admin.from(table).select('course_id').eq('id', workId).maybeSingle();
+  if (!work?.course_id) return null;
+  const { data: course } = await admin.from('courses').select('teacher_id').eq('id', work.course_id).maybeSingle();
+  if (!course?.teacher_id) return null;
+  const { data: profile } = await admin
+    .from('teacher_profiles')
+    .select('email, display_name')
+    .eq('id', course.teacher_id)
+    .maybeSingle();
+  if (!profile?.email) return null;
+  return { email: profile.email, name: profile.display_name || '' };
 }
 
 function generateAccessCode(): string {
@@ -297,6 +320,46 @@ Deno.serve(async (req) => {
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
+      return json({ result: withheldIfUnreleased(data) });
+    }
+
+    // A student replying to their teacher's feedback - only once there is
+    // actually feedback to reply to (same visibility rule as everything
+    // else: a Project additionally needs feedback_released). Emails the
+    // teacher who owns this piece of work, best-effort.
+    if (action === 'addCommentReply') {
+      const { submission_id } = body;
+      const replyText = String(body.body || '').trim();
+      if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      if (!submission_id || !replyText) return json({ error: 'submission_id and body are required' }, 400);
+
+      const sub = await verifyOwnership(admin, submission_id, body.session_token || '', student);
+      if (!sub) return json({ error: 'Not found' }, 404);
+
+      const isProject = !!sub.project_id;
+      const visible = sub.score != null && (!isProject || sub.feedback_released === true);
+      if (!visible) return json({ error: 'There is no feedback to reply to yet.' }, 409);
+
+      const newThread = [...(sub.comment_replies || []), { author: 'student', text: replyText, at: new Date().toISOString() }];
+      const { data, error } = await admin
+        .from('submissions')
+        .update({ comment_replies: newThread })
+        .eq('id', submission_id)
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+
+      const teacher = await teacherEmailForWork(admin, sub);
+      if (teacher) {
+        const title = await titleForWork(admin, sub);
+        await sendReplyNotification({
+          to: teacher.email,
+          greetingName: teacher.name,
+          fromLabel: sub.student_name || 'A student',
+          title,
+          preview: replyText,
+        });
+      }
       return json({ result: withheldIfUnreleased(data) });
     }
 
@@ -1405,6 +1468,42 @@ Deno.serve(async (req) => {
         await sendGradeNotification({ to: before!.student_email, studentName: before!.student_name, title });
       }
 
+      return json({ result: data });
+    }
+
+    // A teacher replying in the same thread a student started (or starting
+    // one themselves). Separate from saveGrade on purpose - this isn't a
+    // grading action, and shouldn't run through its changed-feedback-diff/
+    // perfect-score logic. Clears feedback_reviewed_at so a student who had
+    // already marked this Reviewed sees it resurface as needing another look,
+    // the same way any other feedback change does in saveGrade.
+    if (action === 'addTeacherReply') {
+      if (!(await ownsSubmissionId(body.submission_id))) return json({ error: 'Not found' }, 404);
+      const replyText = String(body.body || '').trim();
+      if (!replyText) return json({ error: 'body is required' }, 400);
+
+      const { data: sub } = await admin.from('submissions').select('*').eq('id', body.submission_id).maybeSingle();
+      if (!sub) return json({ error: 'Not found' }, 404);
+
+      const newThread = [...(sub.comment_replies || []), { author: 'teacher', text: replyText, at: new Date().toISOString() }];
+      const { data, error } = await admin
+        .from('submissions')
+        .update({ comment_replies: newThread, feedback_reviewed_at: null })
+        .eq('id', body.submission_id)
+        .select()
+        .single();
+      if (error) return json({ error: error.message }, 500);
+
+      if (sub.student_email) {
+        const title = await titleForWork(admin, sub);
+        await sendReplyNotification({
+          to: sub.student_email,
+          greetingName: sub.student_name || '',
+          fromLabel: 'Your teacher',
+          title,
+          preview: replyText,
+        });
+      }
       return json({ result: data });
     }
 

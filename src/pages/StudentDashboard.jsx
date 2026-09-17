@@ -241,6 +241,16 @@ export default function StudentDashboard() {
     }
   };
 
+  // Posts a reply and updates the open dialog in place - unlike resubmit/
+  // toggleReviewed above, this deliberately does NOT close the dialog or
+  // reload the whole list, since a student replying is likely to want to
+  // keep reading/writing right where they are.
+  const postReply = async (text) => {
+    if (!detail?.submission) return;
+    const updated = await base44.entities.Submission.addCommentReply(detail.submission.id, text);
+    setDetail((d) => (d ? { ...d, submission: updated } : d));
+  };
+
   const load = async () => {
     setLoading(true);
     setLoadError("");
@@ -575,6 +585,7 @@ export default function StudentDashboard() {
                       }
                     : undefined
                 }
+                onReply={postReply}
               />
 
               {detail.item.kind === "frq" && (

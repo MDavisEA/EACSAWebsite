@@ -171,6 +171,22 @@ pattern under `src/components/teacher/`.
   round of grading notifies again. Autograded Mini Problems never notify -
   the student is already looking at their own result live the moment
   `run-java-tests` returns it.
+- **Feedback reply threads**: `submissions.comment_replies` is a back-and-
+  forth conversation layered on top of the original `teacher_comments`
+  field, which is untouched and still edited the same way it always was -
+  this is additive, not a redesign of grading. `addCommentReply` (student,
+  in `submissions/index.ts`) only works once feedback is actually visible to
+  them (same score/`feedback_released` gate as everywhere else) and emails
+  the teacher who owns the course; `addTeacherReply` (teacher) has no such
+  gate - a teacher can write to a student on anything - and clears
+  `feedback_reviewed_at` so the item resurfaces as needing another look, the
+  same way any other feedback change does. Covers FRQ, Coding Assignment,
+  and Project only (not autograded Mini Problems, which have no teacher
+  comment to reply to in the first place). Student UI is a shared
+  `FeedbackThread` component in `SubmissionDetail.jsx` (which also fixed a
+  pre-existing gap: FRQ never showed an overall comment there at all before
+  this); teacher UI is in `GradingQueue.jsx`, separate from the main
+  `saveGrade`/`save()` flow on purpose - a reply isn't a grading action.
 
 ## Deliberate design decisions worth not undoing
 - **Projects are separate from the autograder on purpose.** Autograder = small
