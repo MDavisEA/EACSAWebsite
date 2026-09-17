@@ -415,7 +415,7 @@ Deno.serve(async (req) => {
       if (mine.length === 0) return json({ result: null });
       const theirCourseIds = [...new Set(mine.map((r: Record<string, any>) => r.course_id))];
 
-      const [assignments, problems, projects, units, coursesRes] = await Promise.all([
+      const [assignments, problems, projects, loopAssignments, units, coursesRes] = await Promise.all([
         admin
           .from('assignments')
           .select('id, title, due_date, course_id, unit_id, sort_order, questions, is_active')
@@ -428,10 +428,14 @@ Deno.serve(async (req) => {
           .from('projects')
           .select('id, title, due_date, course_id, unit_id, sort_order, is_active')
           .in('course_id', theirCourseIds),
+        admin
+          .from('loop_assignments')
+          .select('id, title, due_date, course_id, unit_id, sort_order, target_score, is_active')
+          .in('course_id', theirCourseIds),
         admin.from('units').select('id, course_id, name, position').in('course_id', theirCourseIds),
         admin.from('courses').select('id, name').in('id', theirCourseIds),
       ]);
-      for (const r of [assignments, problems, projects, units, coursesRes]) {
+      for (const r of [assignments, problems, projects, loopAssignments, units, coursesRes]) {
         if (r.error) return json({ error: r.error.message }, 500);
       }
 
@@ -443,6 +447,7 @@ Deno.serve(async (req) => {
         ...(assignments.data || []).map((a: Record<string, any>) => a.id),
         ...(problems.data || []).map((p: Record<string, any>) => p.id),
         ...(projects.data || []).map((p: Record<string, any>) => p.id),
+        ...(loopAssignments.data || []).map((la: Record<string, any>) => la.id),
       ];
 
       let theirSubs: Record<string, any>[] = [];
@@ -455,9 +460,11 @@ Deno.serve(async (req) => {
           let q = admin
             .from('submissions')
             .select(
-              'id, assignment_id, coding_problem_id, project_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, feedback_released, feedback_reviewed_at, feedback_ack_required'
+              'id, assignment_id, coding_problem_id, project_id, loop_assignment_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, loop_score, feedback_released, feedback_reviewed_at, feedback_ack_required'
             )
-            .or(`assignment_id.in.(${slice}),coding_problem_id.in.(${slice}),project_id.in.(${slice})`);
+            .or(
+              `assignment_id.in.(${slice}),coding_problem_id.in.(${slice}),project_id.in.(${slice}),loop_assignment_id.in.(${slice})`
+            );
           q = email
             ? q.ilike('student_email', email)
             : q.is('student_email', null).ilike('student_name', name);
@@ -484,7 +491,8 @@ Deno.serve(async (req) => {
         resolveDueDates(assignments.data || [], assignmentOverrides, sectionForRow),
         resolveDueDates(problems.data || [], problemOverrides, sectionForRow),
         resolveDueDates(projects.data || [], projectOverrides, sectionForRow),
-        theirSubs
+        theirSubs,
+        loopAssignments.data || []
       );
 
       return json({
@@ -509,7 +517,7 @@ Deno.serve(async (req) => {
       if (!(await owns(body.course_id))) return json({ error: 'Not found' }, 404);
       const courseId = body.course_id;
 
-      const [assignments, problems, projects, units, notes, courseRes] = await Promise.all([
+      const [assignments, problems, projects, loopAssignments, units, notes, courseRes] = await Promise.all([
         admin
           .from('assignments')
           .select('id, title, due_date, course_id, unit_id, sort_order, questions')
@@ -525,6 +533,11 @@ Deno.serve(async (req) => {
           .select('id, title, due_date, course_id, unit_id, sort_order')
           .eq('course_id', courseId)
           .eq('is_active', true),
+        admin
+          .from('loop_assignments')
+          .select('id, title, due_date, course_id, unit_id, sort_order, target_score')
+          .eq('course_id', courseId)
+          .eq('is_active', true),
         admin.from('units').select('id, course_id, name, position').eq('course_id', courseId),
         admin
           .from('notes')
@@ -533,11 +546,17 @@ Deno.serve(async (req) => {
           .eq('is_published', true),
         admin.from('courses').select('id, name').eq('id', courseId).maybeSingle(),
       ]);
-      for (const r of [assignments, problems, projects, units, notes, courseRes]) {
+      for (const r of [assignments, problems, projects, loopAssignments, units, notes, courseRes]) {
         if (r.error) return json({ error: r.error.message }, 500);
       }
 
-      const items = buildWorkItems(assignments.data || [], problems.data || [], projects.data || [], []);
+      const items = buildWorkItems(
+        assignments.data || [],
+        problems.data || [],
+        projects.data || [],
+        [],
+        loopAssignments.data || []
+      );
 
       return json({
         result: {
@@ -631,20 +650,22 @@ Deno.serve(async (req) => {
       if (!(await owns(body.course_id))) return json({ error: 'Not found' }, 404);
       const course_id = body.course_id;
 
-      const [rosterRes, assignments, problems, projects, units] = await Promise.all([
+      const [rosterRes, assignments, problems, projects, loopAssignments, units] = await Promise.all([
         admin.from('roster_students').select('*').eq('course_id', course_id).order('student_name', { ascending: true }),
         admin.from('assignments').select('id, title, due_date, course_id, unit_id, sort_order, questions').eq('course_id', course_id).eq('is_active', true),
         admin.from('coding_problems').select('id, title, due_date, course_id, unit_id, sort_order, points_possible').eq('course_id', course_id).eq('is_active', true),
         admin.from('projects').select('id, title, due_date, course_id, unit_id, sort_order').eq('course_id', course_id).eq('is_active', true),
+        admin.from('loop_assignments').select('id, title, due_date, course_id, unit_id, sort_order, target_score').eq('course_id', course_id).eq('is_active', true),
         admin.from('units').select('id, course_id, name, position').eq('course_id', course_id),
       ]);
-      for (const r of [rosterRes, assignments, problems, projects, units]) {
+      for (const r of [rosterRes, assignments, problems, projects, loopAssignments, units]) {
         if (r.error) return json({ error: r.error.message }, 500);
       }
 
       const activeAssignments = assignments.data || [];
       const activeProblems = problems.data || [];
       const activeProjects = projects.data || [];
+      const activeLoopAssignments = loopAssignments.data || [];
 
       // Same "has this email ever submitted anything at all" check listRoster
       // already does, kept separate from and unrelated to the course-scoped
@@ -657,6 +678,7 @@ Deno.serve(async (req) => {
         ...activeAssignments.map((a: Record<string, any>) => a.id),
         ...activeProblems.map((p: Record<string, any>) => p.id),
         ...activeProjects.map((p: Record<string, any>) => p.id),
+        ...activeLoopAssignments.map((la: Record<string, any>) => la.id),
       ];
       let courseSubs: Record<string, any>[] = [];
       if (workIds.length > 0) {
@@ -672,8 +694,10 @@ Deno.serve(async (req) => {
           const slice = workIds.slice(i, i + CHUNK).join(',');
           const { data, error } = await admin
             .from('submissions')
-            .select('id, assignment_id, coding_problem_id, project_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, feedback_released, feedback_reviewed_at, feedback_ack_required')
-            .or(`assignment_id.in.(${slice}),coding_problem_id.in.(${slice}),project_id.in.(${slice})`);
+            .select('id, assignment_id, coding_problem_id, project_id, loop_assignment_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, loop_score, feedback_released, feedback_reviewed_at, feedback_ack_required')
+            .or(
+              `assignment_id.in.(${slice}),coding_problem_id.in.(${slice}),project_id.in.(${slice}),loop_assignment_id.in.(${slice})`
+            );
           if (error) return json({ error: error.message }, 500);
           courseSubs.push(...(data || []));
         }
@@ -709,7 +733,8 @@ Deno.serve(async (req) => {
             resolveDueDates(activeAssignments, assignmentOverrides, forThisRow),
             resolveDueDates(activeProblems, problemOverrides, forThisRow),
             resolveDueDates(activeProjects, projectOverrides, forThisRow),
-            subsForRow(r)
+            subsForRow(r),
+            activeLoopAssignments
           ),
         };
       });

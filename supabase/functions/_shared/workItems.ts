@@ -6,11 +6,13 @@
 
 // The five states a dashboard sorts work into. 'graded' means "scored, and
 // they have not told us they read the feedback yet"; 'reviewed' is that same
-// work after they mark it, which moves it out of the main list.
-export type Status = 'not_started' | 'in_progress' | 'submitted' | 'graded' | 'reviewed';
+// work after they mark it, which moves it out of the main list. 'complete'
+// is loop practice only - there's no teacher grading step to wait for or
+// feedback to read, just "reached the target score or not."
+export type Status = 'not_started' | 'in_progress' | 'submitted' | 'graded' | 'reviewed' | 'complete';
 
 export interface WorkItem {
-  kind: 'frq' | 'code' | 'project';
+  kind: 'frq' | 'code' | 'project' | 'loop';
   id: string;
   title: string;
   due_date: string | null;
@@ -87,7 +89,8 @@ export function buildWorkItems(
   assignments: Record<string, any>[],
   problems: Record<string, any>[],
   projects: Record<string, any>[],
-  subs: Record<string, any>[]
+  subs: Record<string, any>[],
+  loopAssignments: Record<string, any>[] = []
 ): WorkItem[] {
   // A student can legitimately end up with more than one row for the same
   // item (reopening something already finished creates a second, empty one
@@ -176,6 +179,33 @@ export function buildWorkItems(
       sort_order: pr.sort_order ?? null,
       ...feedbackFlags(sub, true),
       needs_ack: status === 'graded' && !!sub?.feedback_ack_required,
+    });
+  }
+
+  // No teacher grading step: 'complete' just means the running score reached
+  // the assignment's target (see submitLoopAnswer in submissions/index.ts,
+  // which is what actually flips submitted to true). points_possible here is
+  // the target_score, not a max earned some other way.
+  for (const la of loopAssignments) {
+    const sub = findSub('loop_assignment_id', la.id);
+    const status: Status = !sub ? 'not_started' : !sub.submitted ? 'in_progress' : 'complete';
+    items.push({
+      kind: 'loop',
+      id: la.id,
+      title: la.title,
+      due_date: la.due_date ?? null,
+      status,
+      score: status === 'complete' ? sub?.loop_score ?? null : null,
+      points_possible: la.target_score ?? null,
+      submitted_at: sub?.submitted_at ?? null,
+      is_late: false,
+      submission_id: sub?.id ?? null,
+      course_id: la.course_id ?? null,
+      unit_id: la.unit_id ?? null,
+      sort_order: la.sort_order ?? null,
+      has_comment: false,
+      has_line_comments: false,
+      needs_ack: false,
     });
   }
 

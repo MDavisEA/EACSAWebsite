@@ -1,4 +1,4 @@
-import { BookOpen, Code2, FolderGit2, Clock, CircleDashed, CheckCircle2, Star, CheckCheck } from "lucide-react";
+import { BookOpen, Code2, FolderGit2, Clock, CircleDashed, CheckCircle2, Star, CheckCheck, Repeat2 } from "lucide-react";
 
 // Shared between StudentDashboard (a student looking at their own work) and
 // the teacher's per-student roster detail (looking at someone else's, from
@@ -14,12 +14,15 @@ export const WORK_KIND_META = {
   frq: { label: "FRQ", icon: BookOpen, accent: "text-primary", chip: "bg-blue-50" },
   code: { label: "Code", icon: Code2, accent: "text-emerald-600", chip: "bg-emerald-50" },
   project: { label: "Project", icon: FolderGit2, accent: "text-violet-600", chip: "bg-violet-50" },
+  loop: { label: "Loop Practice", icon: Repeat2, accent: "text-teal-600", chip: "bg-teal-50" },
 };
 
 // The five states, in the order they should draw attention: whatever needs
 // action first, work that is genuinely finished last. 'reviewed' is not in
 // this list because it leaves the main view entirely into its own section.
-export const STATUS_ORDER = ["graded", "in_progress", "not_started", "submitted"];
+// 'complete' (loop practice reaching its target score) sorts last alongside
+// it - also fully done, no teacher feedback step to wait for or read.
+export const STATUS_ORDER = ["graded", "in_progress", "not_started", "submitted", "complete"];
 
 export const STATUS = {
   not_started: { label: "Not opened", icon: CircleDashed, className: "bg-slate-100 text-slate-600" },
@@ -29,6 +32,9 @@ export const STATUS = {
   submitted: { label: "Waiting on grade", icon: CheckCircle2, className: "bg-blue-100 text-blue-800" },
   graded: { label: "New feedback", icon: Star, className: "bg-emerald-100 text-emerald-800" },
   reviewed: { label: "Reviewed", icon: CheckCheck, className: "bg-slate-100 text-slate-500" },
+  // Loop practice only - reached its target score. No feedback to review, so
+  // unlike 'graded' this never needs an ack and never becomes 'reviewed'.
+  complete: { label: "Complete", icon: CheckCircle2, className: "bg-teal-100 text-teal-800" },
 };
 
 // Groups a WorkItem[] into one entry per unit, ordered by course then the

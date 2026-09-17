@@ -22,6 +22,7 @@ const KINDS = {
   frq: { ...WORK_KIND_META.frq, route: (id) => `/student?id=${id}` },
   code: { ...WORK_KIND_META.code, route: (id) => `/code?id=${id}` },
   project: { ...WORK_KIND_META.project, route: (id) => `/project?id=${id}` },
+  loop: { ...WORK_KIND_META.loop, route: (id) => `/loop-practice-run?id=${id}` },
 };
 
 // One row of work. Shared so the main unit lists and the Reviewed section at
@@ -70,7 +71,7 @@ function WorkRow({ item, onOpen }) {
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
-        {(item.status === "graded" || item.status === "reviewed") && item.score != null && (
+        {(item.status === "graded" || item.status === "reviewed" || item.status === "complete") && item.score != null && (
           <span className={`text-sm font-semibold ${item.status === "reviewed" ? "text-muted-foreground" : ""}`}>
             {item.score}
             {item.points_possible ? `/${item.points_possible}` : ""}
@@ -145,7 +146,11 @@ export default function StudentDashboard() {
   // Clicking work you have finished should show you what you handed in, not
   // silently start it over - which is what navigating to the work route did.
   const openItem = async (item, route) => {
-    if (item.status !== "submitted" && item.status !== "graded" && item.status !== "reviewed") {
+    // Loop practice has no separate "view feedback" detail screen - the
+    // runner itself already shows a completion screen for a finished set and
+    // resumes an in-progress one, so it's always just a navigate, regardless
+    // of status.
+    if (item.kind === "loop" || (item.status !== "submitted" && item.status !== "graded" && item.status !== "reviewed")) {
       navigate(route(item.id));
       return;
     }

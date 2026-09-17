@@ -61,13 +61,14 @@ Deno.serve(async (req) => {
     // for students on that roster.
     const visibleToMe = (courseId: string | null) => courseId === null || myCourseIds.includes(courseId);
 
-    const [assignments, problems, projects, subs, units, courses, notes] = await Promise.all([
+    const [assignments, problems, projects, loopAssignments, subs, units, courses, notes] = await Promise.all([
       admin.from('assignments').select('id, title, due_date, course_id, unit_id, sort_order, questions').eq('is_active', true),
       admin.from('coding_problems').select('id, title, due_date, course_id, unit_id, sort_order, points_possible').eq('is_active', true),
       admin.from('projects').select('id, title, due_date, course_id, unit_id, sort_order').eq('is_active', true),
+      admin.from('loop_assignments').select('id, title, due_date, course_id, unit_id, sort_order, target_score').eq('is_active', true),
       // Same reason as courses/index.ts: this builds statuses, not detail
       // views, so the heavy columns stay on the server.
-      admin.from('submissions').select('id, assignment_id, coding_problem_id, project_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, feedback_released, feedback_reviewed_at, teacher_comments, line_comments, feedback_ack_required').eq('student_user_id', student.id),
+      admin.from('submissions').select('id, assignment_id, coding_problem_id, project_id, loop_assignment_id, student_name, student_email, student_user_id, submitted, submitted_at, score, autograde_score, loop_score, feedback_released, feedback_reviewed_at, teacher_comments, line_comments, feedback_ack_required').eq('student_user_id', student.id),
       // Only this student's own courses' units/names are ever returned, since
       // everything below is filtered by visibleToMe.
       myCourseIds.length > 0
@@ -84,13 +85,18 @@ Deno.serve(async (req) => {
         : Promise.resolve({ data: [], error: null }),
     ]);
 
-    for (const r of [assignments, problems, projects, subs, units, courses, notes]) {
+    for (const r of [assignments, problems, projects, loopAssignments, subs, units, courses, notes]) {
       if (r.error) return json({ error: r.error.message }, 500);
     }
 
     const visibleAssignments = (assignments.data || []).filter((a: Record<string, any>) => visibleToMe(a.course_id ?? null));
     const visibleProblems = (problems.data || []).filter((p: Record<string, any>) => visibleToMe(p.course_id ?? null));
     const visibleProjects = (projects.data || []).filter((pr: Record<string, any>) => visibleToMe(pr.course_id ?? null));
+    // Standalone (course_id null) or on a course this student's roster is on -
+    // same visibleToMe rule as everything else here.
+    const visibleLoopAssignments = (loopAssignments.data || []).filter((la: Record<string, any>) =>
+      visibleToMe(la.course_id ?? null)
+    );
 
     const [assignmentOverrides, problemOverrides, projectOverrides] = await Promise.all([
       fetchOverridesByWorkId(admin, 'assignment_id', visibleAssignments.map((a: Record<string, any>) => a.id)),
@@ -102,7 +108,8 @@ Deno.serve(async (req) => {
       resolveDueDates(visibleAssignments, assignmentOverrides, sectionForRow),
       resolveDueDates(visibleProblems, problemOverrides, sectionForRow),
       resolveDueDates(visibleProjects, projectOverrides, sectionForRow),
-      subs.data || []
+      subs.data || [],
+      visibleLoopAssignments
     );
 
     return json({
