@@ -9,8 +9,12 @@ import SubmissionDetail from "@/components/SubmissionDetail";
 import { format, isPast } from "date-fns";
 import {
   BookOpen, LogIn, LogOut, ChevronRight, Loader2, RotateCcw, CheckCheck, ChevronDown, ChevronUp,
-  MessageSquare, FileCode,
+  MessageSquare, FileCode, Sparkles, ExternalLink,
 } from "lucide-react";
+
+// Requested by students, so it's the first thing on the page - deliberately
+// bigger/bolder than everything else here, per that same ask.
+const GEMINI_ASSISTANT_URL = "https://gemini.google.com/gem/1yvKDzNaQh3sSPDROcxL7CO37BI-kMbi-?usp=sharing";
 import { WORK_KIND_META, STATUS, groupWorkByUnit } from "@/lib/workStatus";
 import { highlightNoteCode } from "@/lib/highlightNoteCode";
 
@@ -327,6 +331,24 @@ export default function StudentDashboard() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+        <a
+          href={GEMINI_ASSISTANT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-4 bg-gradient-to-r from-blue-50 to-violet-50 border-2 border-blue-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-md transition-all group"
+        >
+          <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center">
+            <Sparkles className="w-6 h-6 text-blue-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-lg font-bold text-blue-900 group-hover:text-blue-700 transition-colors">
+              Davis Gemini Assistant
+            </p>
+            <p className="text-sm text-blue-700/80">Your AI helper for this class - opens in a new tab</p>
+          </div>
+          <ExternalLink className="w-5 h-5 text-blue-500 flex-shrink-0" />
+        </a>
+
         {/* A teacher-required acknowledgment, not just a bare grade - shown
             first, before anything else on the page, so it cannot be missed
             the way an item sitting in its normal unit spot could be. Clicking
