@@ -4,6 +4,25 @@ import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { extractGistId, fetchGistJavaFiles, fetchGistUpdatedAt } from '../_shared/gist.ts';
 import { fetchOverridesByWorkId } from '../_shared/sectionDueDates.ts';
 import { validateAiHelp } from '../_shared/aiHelp.ts';
+import { sendGradeNotification } from '../_shared/email.ts';
+
+// The title students see in the "new feedback" email - looked up only when
+// we're actually about to send one (see saveGrade), not on every save.
+async function titleForWork(admin: any, before: Record<string, any>): Promise<string> {
+  if (before.assignment_id) {
+    const { data } = await admin.from('assignments').select('title').eq('id', before.assignment_id).maybeSingle();
+    return data?.title || 'your assignment';
+  }
+  if (before.coding_problem_id) {
+    const { data } = await admin.from('coding_problems').select('title').eq('id', before.coding_problem_id).maybeSingle();
+    return data?.title || 'your assignment';
+  }
+  if (before.project_id) {
+    const { data } = await admin.from('projects').select('title').eq('id', before.project_id).maybeSingle();
+    return data?.title || 'your project';
+  }
+  return 'your assignment';
+}
 
 function generateAccessCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 - avoids ambiguity
@@ -415,6 +434,7 @@ Deno.serve(async (req) => {
             line_comments: [],
             feedback_released: false,
             feedback_reviewed_at: null,
+            graded_notified_at: null,
           })
           .eq('id', body.submission_id)
           .select()
@@ -1259,7 +1279,7 @@ Deno.serve(async (req) => {
       const { data: before } = await admin
         .from('submissions')
         .select(
-          'score, question_scores, part_comments, style_score, style_comments, teacher_comments, line_comments, feedback_ack_required, assignment_id, coding_problem_id, project_id'
+          'score, question_scores, part_comments, style_score, style_comments, teacher_comments, line_comments, feedback_ack_required, assignment_id, coding_problem_id, project_id, feedback_released, graded_notified_at, student_email, student_name'
         )
         .eq('id', body.submission_id)
         .maybeSingle();
@@ -1357,6 +1377,19 @@ Deno.serve(async (req) => {
         }
       }
 
+      // "New feedback" email - fires the first time a score becomes actually
+      // visible to the student, never again after that for this same round
+      // of grading (graded_notified_at, set right here, is the guard - see
+      // reopenMine for the one place it gets cleared, letting a genuinely new
+      // round notify again). A Project additionally needs feedback_released,
+      // matching the same gate withheldIfUnreleased enforces on every read.
+      const isProject = !!before?.project_id;
+      const rawFeedbackReleased =
+        update.feedback_released !== undefined ? update.feedback_released : before?.feedback_released ?? false;
+      const nowVisible = effectiveScore != null && (!isProject || rawFeedbackReleased === true);
+      const shouldNotify = nowVisible && !before?.graded_notified_at && !!before?.student_email;
+      if (shouldNotify) update.graded_notified_at = new Date().toISOString();
+
       const { data, error } = await admin
         .from('submissions')
         .update(update)
@@ -1364,6 +1397,14 @@ Deno.serve(async (req) => {
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
+
+      if (shouldNotify) {
+        // Best-effort, after the grade is already safely saved - a slow or
+        // failed email must never be why a save appears to fail.
+        const title = await titleForWork(admin, before!);
+        await sendGradeNotification({ to: before!.student_email, studentName: before!.student_name, title });
+      }
+
       return json({ result: data });
     }
 

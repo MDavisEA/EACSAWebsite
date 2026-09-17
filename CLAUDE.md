@@ -18,6 +18,13 @@ Vercel so the teacher owns the whole stack.
   student Java code for the autograder
 - **Gist ingestion**: GitHub Gist API (`GITHUB_TOKEN` secret - optional but
   needed above 60 requests/hr) for Project submissions and starter code
+- **Grade notification emails**: Resend (`RESEND_API_KEY` secret, plus
+  `SITE_URL` and optionally `GRADE_EMAIL_FROM`) - see
+  `supabase/functions/_shared/email.ts`. Until `RESEND_API_KEY` is set this
+  quietly no-ops (logs and moves on); nothing else about grading breaks.
+  Sending real email to students requires a verified sending domain in
+  Resend's dashboard, not just an API key - Resend's default test sender can
+  only deliver to the account's own address.
 
 ## The most important architectural fact: the shim
 `src/api/base44Client.js` is a compatibility layer. Every existing page
@@ -134,6 +141,17 @@ pattern under `src/components/teacher/`.
   `loop_problems` has no `course_id` of its own to key a link off of) - like
   every other kind of propagated work, a copy always lands inactive and only
   on create, never on edit.
+- **Grade notification emails**: `saveGrade` (FRQ, Coding Assignment,
+  Project) emails the student the first time their score actually becomes
+  visible to them - for a Project that means both a score AND
+  `feedback_released`, not just the score. `submissions.graded_notified_at`
+  is the guard: set the moment an email goes out, checked before ever
+  sending another one, so re-saving the same grade (fixing a typo, adding a
+  late comment) never re-notifies. Cleared back to null only by `reopenMine`
+  (a Coding Assignment reopened for another attempt), so a genuinely new
+  round of grading notifies again. Autograded Mini Problems never notify -
+  the student is already looking at their own result live the moment
+  `run-java-tests` returns it.
 
 ## Deliberate design decisions worth not undoing
 - **Projects are separate from the autograder on purpose.** Autograder = small
