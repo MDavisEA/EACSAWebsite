@@ -1001,29 +1001,43 @@ Deno.serve(async (req) => {
       // Ownership by way of the ONE work item being asked about, rather than
       // building the whole index of everything this teacher owns: that meant
       // three table scans (every assignment, problem, and project across all
-      // their courses) just to answer "is this one id mine?".
+      // their courses) just to answer "is this one id mine?". loop_assignments
+      // is the odd one out - it's owned by a direct teacher_id, not derived
+      // through course_id (see 0030_loop_practice.sql), since a practice set
+      // can be standalone with no course at all.
       const table = body.assignment_id
         ? 'assignments'
         : body.coding_problem_id
         ? 'coding_problems'
         : body.project_id
         ? 'projects'
+        : body.loop_assignment_id
+        ? 'loop_assignments'
         : null;
-      const requested = body.assignment_id || body.coding_problem_id || body.project_id;
+      const requested = body.assignment_id || body.coding_problem_id || body.project_id || body.loop_assignment_id;
       if (!table || !requested) return json({ results: [] });
+      const isLoop = table === 'loop_assignments';
       const { data: workRow } = await admin
         .from(table)
-        .select('course_id')
+        .select(isLoop ? 'teacher_id' : 'course_id')
         .eq('id', requested)
         .maybeSingle();
-      if (!workRow || !myCourses.includes(workRow.course_id)) return json({ results: [] });
+      const owns = isLoop ? workRow?.teacher_id === teacher.id : !!workRow && myCourses.includes(workRow.course_id);
+      if (!owns) return json({ results: [] });
 
-      const column = body.sort?.column || 'submitted_at';
+      // Everywhere else, "submitted" means "turned in" - a real, one-time
+      // event worth filtering the list down to. For loop practice it means
+      // "reached the target score," and a teacher asking "how are my kids
+      // doing" very much wants to see who's still in progress too, not just
+      // who's finished - so this is the one case that skips the filter.
+      const column = body.sort?.column || (isLoop ? 'updated_at' : 'submitted_at');
       const ascending = body.sort?.ascending ?? false;
-      let query = admin.from('submissions').select('*').eq('submitted', true);
+      let query = admin.from('submissions').select('*');
+      if (!isLoop) query = query.eq('submitted', true);
       if (body.assignment_id) query = query.eq('assignment_id', body.assignment_id);
       if (body.coding_problem_id) query = query.eq('coding_problem_id', body.coding_problem_id);
       if (body.project_id) query = query.eq('project_id', body.project_id);
+      if (body.loop_assignment_id) query = query.eq('loop_assignment_id', body.loop_assignment_id);
       const { data, error } = await query.order(column, { ascending });
       if (error) return json({ error: error.message }, 500);
       const rows = data || [];

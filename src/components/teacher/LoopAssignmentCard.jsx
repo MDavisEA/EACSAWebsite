@@ -2,10 +2,12 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Pencil, Trash2, Link2, Copy, Check, Repeat2 } from "lucide-react";
+import { Pencil, Trash2, Link2, Copy, Check, Repeat2, Users, ChevronDown, ChevronUp } from "lucide-react";
+import LoopSubmissionViewer from "./LoopSubmissionViewer";
 
 export default function LoopAssignmentCard({ assignment, onEdit, onDelete, onToggleActive, dragHandleProps }) {
   const [copied, setCopied] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(false);
   const studentLink = `${window.location.origin}/loop-practice?id=${assignment.id}`;
 
   const copyLink = () => {
@@ -46,6 +48,22 @@ export default function LoopAssignmentCard({ assignment, onEdit, onDelete, onTog
           {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
           <span className="ml-1 text-xs">{copied ? "Copied!" : "Copy"}</span>
         </Button>
+      </div>
+
+      <div className="border-t -mx-4 -mb-4">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full flex items-center justify-center gap-1 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-slate-50/50 transition-colors"
+        >
+          <Users className="w-4 h-4" />
+          View Submissions
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+        {expanded && (
+          <div className="px-4 pb-4 pt-1 border-t">
+            <LoopSubmissionViewer assignment={assignment} />
+          </div>
+        )}
       </div>
     </div>
   );

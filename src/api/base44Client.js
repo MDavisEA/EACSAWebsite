@@ -232,6 +232,7 @@ const Submission = {
       assignment_id: criteria.assignment_id,
       coding_problem_id: criteria.coding_problem_id,
       project_id: criteria.project_id,
+      loop_assignment_id: criteria.loop_assignment_id,
       sort: parseSort(sort),
       summary: true,
     });

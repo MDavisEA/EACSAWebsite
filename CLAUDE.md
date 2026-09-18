@@ -156,7 +156,14 @@ pattern under `src/components/teacher/`.
   option is correct before answering. Teacher UI lives under its own
   "Loop Practice" top-level tab (`LoopPracticePanel`), and a course-scoped
   practice set also shows up in that course's own Loop Practice tab inside
-  `CourseUnitsView`. Students use it at `/loop-practice`. A standalone
+  `CourseUnitsView`. Each `LoopAssignmentCard` has its own "View
+  Submissions" (`LoopSubmissionViewer`) - read-only, unlike every other
+  work type's, since there's nothing to grade - showing everyone who has
+  STARTED the set, in progress or complete. It's the one caller of
+  `listForAssignment` (submissions/index.ts) that does NOT filter on
+  `submitted=true`: that column means "turned in" everywhere else, but here
+  it means "reached the target score," and a teacher checking progress
+  wants to see who's still working too. Students use it at `/loop-practice`. A standalone
   practice set (`course_id` null) needs no student sign-in at all - progress
   is tracked by a server-generated `session_token` cached client-side,
   the same ownership model every submission used before Google sign-in was
