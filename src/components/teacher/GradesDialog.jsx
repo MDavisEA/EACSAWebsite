@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Check, Loader2, Mail } from "lucide-react";
-import { latestPerStudent } from "@/lib/groupSubmissionsByStudent";
+import { latestPerStudent, nameParts } from "@/lib/groupSubmissionsByStudent";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
 import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 
@@ -15,16 +15,10 @@ import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 //
 // Sorting by first or last name is the whole reason this is not just the
 // submissions table: Canvas sorts by last name, so a list ordered by first
-// name means hunting for every row. `student_name` is one string, so the two
-// orders come from splitting it - imperfect for compound surnames, but the
-// alternative is asking teachers to maintain two name fields.
-function nameParts(full) {
-  const cleaned = String(full ?? "").trim().replace(/\s+/g, " ");
-  if (!cleaned) return { first: "", last: "" };
-  const bits = cleaned.split(" ");
-  if (bits.length === 1) return { first: bits[0], last: bits[0] };
-  return { first: bits[0], last: bits[bits.length - 1] };
-}
+// name means hunting for every row. nameParts (shared - every other
+// submissions list in the app uses the same split for the same reason) is
+// imperfect for compound surnames, but the alternative is asking teachers to
+// maintain two name fields.
 
 export default function GradesDialog({
   open,

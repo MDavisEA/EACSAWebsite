@@ -45,3 +45,26 @@ export function groupByStudent(submissions) {
     return { key: studentKey(sorted[0]), name: sorted[0].student_name, latest: sorted[0], all: sorted };
   });
 }
+
+// student_name is one free-text string ("Logan Bradica" - Google account
+// order, first name first), not separate first/last columns, so "sort by
+// last name" has to be derived by splitting it. Imperfect for compound
+// surnames, but the alternative is asking teachers to maintain two name
+// fields just for this. Matches the convention GradesDialog already used for
+// its own Canvas-style last/first sort - lifted here so every submissions
+// list can share it instead of re-deriving it.
+export function nameParts(full) {
+  const cleaned = String(full ?? "").trim().replace(/\s+/g, " ");
+  if (!cleaned) return { first: "", last: "" };
+  const bits = cleaned.split(" ");
+  if (bits.length === 1) return { first: bits[0], last: bits[0] };
+  return { first: bits[0], last: bits[bits.length - 1] };
+}
+
+/** Comparator for Array.sort: alphabetical by last name, then first name to
+ * break ties between two people who share a surname. */
+export function byLastName(a, b) {
+  const pa = nameParts(a.student_name);
+  const pb = nameParts(b.student_name);
+  return pa.last.localeCompare(pb.last) || pa.first.localeCompare(pb.first);
+}

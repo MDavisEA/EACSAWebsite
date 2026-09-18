@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { FileDown, Clock, User, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Check, Link2, CheckCircle2, XCircle, EyeOff, AlertTriangle } from "lucide-react";
-import { latestPerStudent, studentKey } from "@/lib/groupSubmissionsByStudent";
+import { latestPerStudent, studentKey, byLastName } from "@/lib/groupSubmissionsByStudent";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
@@ -44,7 +44,11 @@ export default function CodingSubmissionViewer({ problem }) {
   const [loadError, setLoadError] = useState("");
   const [selected, setSelected] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
-  const [sortOrder, setSortOrder] = useState("newest");
+  // Alphabetical by last name is the default - a class list, so finding one
+  // particular person matters more than who happened to submit last. The
+  // toggle still offers newest/oldest for a teacher working through a batch
+  // in submission order instead.
+  const [sortOrder, setSortOrder] = useState("lastName");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [copiedCode, setCopiedCode] = useState(null);
   const [expandedAttempt, setExpandedAttempt] = useState(null);
@@ -102,11 +106,14 @@ export default function CodingSubmissionViewer({ problem }) {
   // since deleting a specific duplicate still needs its real id.
   const visible = latestPerStudent(submissions);
 
-  const sortedSubmissions = [...visible].sort((a, b) => {
-    const aTime = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
-    const bTime = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
-    return sortOrder === "newest" ? bTime - aTime : aTime - bTime;
-  });
+  const sortedSubmissions =
+    sortOrder === "lastName"
+      ? [...visible].sort(byLastName)
+      : [...visible].sort((a, b) => {
+          const aTime = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
+          const bTime = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
+          return sortOrder === "newest" ? bTime - aTime : aTime - bTime;
+        });
 
   // The list row is a summary, so the code, per-attempt history, and line
   // comments arrive here rather than with the list. Shows the row we already
@@ -274,9 +281,15 @@ export default function CodingSubmissionViewer({ problem }) {
         </h3>
         {visible.length > 0 && (
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setSortOrder((o) => (o === "newest" ? "oldest" : "newest"))}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setSortOrder((o) => (o === "lastName" ? "newest" : o === "newest" ? "oldest" : "lastName"))
+              }
+            >
               <ArrowUpDown className="w-3.5 h-3.5 mr-1" />
-              {sortOrder === "newest" ? "Newest First" : "Oldest First"}
+              {sortOrder === "lastName" ? "Last Name (A-Z)" : sortOrder === "newest" ? "Newest First" : "Oldest First"}
             </Button>
             <Button variant="outline" size="sm" onClick={exportCSV}>
               <FileDown className="w-4 h-4 mr-1" /> Export CSV

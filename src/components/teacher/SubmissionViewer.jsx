@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
 import { Checkbox } from "@/components/ui/checkbox";
 import ByQuestionGrader from "./ByQuestionGrader";
-import { latestPerStudent, studentKey } from "@/lib/groupSubmissionsByStudent";
+import { latestPerStudent, studentKey, byLastName } from "@/lib/groupSubmissionsByStudent";
 import GradesDialog from "./GradesDialog";
 import AnswerKeyPanel from "./AnswerKeyPanel";
 import { FileDown, Clock, User, Trash2, ArrowUpDown, GraduationCap, BookOpen, KeyRound, ExternalLink, Save, CheckCircle2, Clipboard, ClipboardCheck, ChevronLeft, ChevronRight, Copy, Check, Link2, ListChecks } from "lucide-react";
@@ -20,7 +20,11 @@ export default function SubmissionViewer({ assignment, onGraded }) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState("review"); // "review" | "grade"
-  const [sortOrder, setSortOrder] = useState("newest");
+  // Alphabetical by last name is the default - a class list, so finding one
+  // particular person matters more than who happened to submit last. The
+  // toggle still offers newest/oldest for working through a batch in
+  // submission order instead.
+  const [sortOrder, setSortOrder] = useState("lastName");
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [lightboxUrl, setLightboxUrl] = useState(null);
@@ -75,11 +79,14 @@ export default function SubmissionViewer({ assignment, onGraded }) {
   // a specific duplicate still needs its real id.
   const visible = latestPerStudent(submissions);
 
-  const sortedSubmissions = [...visible].sort((a, b) => {
-    const aTime = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
-    const bTime = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
-    return sortOrder === "newest" ? bTime - aTime : aTime - bTime;
-  });
+  const sortedSubmissions =
+    sortOrder === "lastName"
+      ? [...visible].sort(byLastName)
+      : [...visible].sort((a, b) => {
+          const aTime = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
+          const bTime = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
+          return sortOrder === "newest" ? bTime - aTime : aTime - bTime;
+        });
 
   const openSubmission = (s, initialMode, index) => {
     setSelected(s);
@@ -239,10 +246,12 @@ export default function SubmissionViewer({ assignment, onGraded }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setSortOrder((o) => (o === "newest" ? "oldest" : "newest"))}
+              onClick={() =>
+                setSortOrder((o) => (o === "lastName" ? "newest" : o === "newest" ? "oldest" : "lastName"))
+              }
             >
               <ArrowUpDown className="w-3.5 h-3.5 mr-1" />
-              {sortOrder === "newest" ? "Newest First" : "Oldest First"}
+              {sortOrder === "lastName" ? "Last Name (A-Z)" : sortOrder === "newest" ? "Newest First" : "Oldest First"}
             </Button>
             <Button variant="outline" size="sm" onClick={exportCSV}>
               <FileDown className="w-4 h-4 mr-1" /> Export CSV

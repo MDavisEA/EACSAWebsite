@@ -18,6 +18,7 @@ import { FileDown, Trash2, ExternalLink, Loader2, Upload, CheckCircle2, XCircle,
 import AiHelpBadge from "./AiHelpBadge";
 import { exportProjectForReview } from "@/lib/exportProjectZip";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
+import { byLastName } from "@/lib/groupSubmissionsByStudent";
 import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 
 // Matches the plain `name,gist_url` per line format already used by the
@@ -265,6 +266,12 @@ export default function ProjectSubmissionViewer({ project }) {
     ? diffRosterAgainstSubmissions(roster, submissions)
     : { missing: [], unmatched: [] };
 
+  // Alphabetical by last name - a class list being worked through, so
+  // finding one particular person matters more than who happened to submit
+  // last. This is display-only: `submissions` itself (used for counts, the
+  // roster diff, export) stays in its original order.
+  const sortedSubmissions = [...submissions].sort(byLastName);
+
   return (
     <div className="pt-4 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -367,7 +374,7 @@ export default function ProjectSubmissionViewer({ project }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {submissions.map((s) => {
+            {sortedSubmissions.map((s) => {
               const recheck = recheckResults?.[s.id];
               return (
                 <TableRow key={s.id}>

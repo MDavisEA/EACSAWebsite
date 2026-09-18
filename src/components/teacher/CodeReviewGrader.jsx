@@ -18,7 +18,7 @@ import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 import GradesDialog from "./GradesDialog";
 import AiHelpBadge from "./AiHelpBadge";
 import PreviousVersionsPanel from "./PreviousVersionsPanel";
-import { groupByStudent } from "@/lib/groupSubmissionsByStudent";
+import { groupByStudent, nameParts } from "@/lib/groupSubmissionsByStudent";
 import {
   Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, User, KeyRound,
   FileCode, Terminal, Info, ChevronRight as Arrow, Bot, ExternalLink,
@@ -144,9 +144,15 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const groups = useMemo(
     () =>
       groupByStudent(submissions)
-        // Alphabetical: this is a class list being worked through, so finding
-        // a particular person matters more than who happened to submit last.
-        .sort((a, b) => (a.name || "").localeCompare(b.name || "")),
+        // By last name: this is a class list being worked through, so
+        // finding a particular person matters more than who happened to
+        // submit last - and a roster is conventionally alphabetized by
+        // surname, not given name.
+        .sort((a, b) => {
+          const pa = nameParts(a.name);
+          const pb = nameParts(b.name);
+          return pa.last.localeCompare(pb.last) || pa.first.localeCompare(pb.first);
+        }),
     [submissions]
   );
 
