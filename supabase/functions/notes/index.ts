@@ -35,11 +35,16 @@ Deno.serve(async (req) => {
       if (!(await teacherOwnsCourse(admin, teacher.id, body.data?.course_id))) {
         return json({ error: 'Pick one of your own courses for this note.' }, 403);
       }
-      const { course_id, title, content_html } = body.data || {};
+      const { course_id, title, content_html, is_published } = body.data || {};
       if (!title?.trim()) return json({ error: 'A title is required.' }, 400);
       const { data, error } = await admin
         .from('notes')
-        .insert({ course_id, title: title.trim(), content_html: content_html || '' })
+        .insert({
+          course_id,
+          title: title.trim(),
+          content_html: content_html || '',
+          is_published: !!is_published,
+        })
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);

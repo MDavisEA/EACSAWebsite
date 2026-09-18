@@ -434,8 +434,20 @@ const Submission = {
   // guess at correctness - this is the only place that decision gets made.
   // session_token proves ownership of an anonymous (not signed-in) row - see
   // startLoopPractice.
-  async submitLoopAnswer(submission_id, loop_problem_id, answer, session_token) {
-    return callFunction('submissions', { action: 'submitLoopAnswer', submission_id, loop_problem_id, answer, session_token });
+  // second_try_of is only passed on a multiple-choice retry - the
+  // choice_index of the first (wrong) guess, so the server knows this is the
+  // final, scored attempt at this problem instance rather than a fresh
+  // first guess. Omitted (undefined), the server treats a wrong answer as a
+  // free first try and returns { retry: true } instead of scoring it.
+  async submitLoopAnswer(submission_id, loop_problem_id, answer, session_token, second_try_of) {
+    return callFunction('submissions', {
+      action: 'submitLoopAnswer',
+      submission_id,
+      loop_problem_id,
+      answer,
+      session_token,
+      second_try_of,
+    });
   },
 };
 

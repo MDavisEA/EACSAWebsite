@@ -48,6 +48,13 @@ export default function LoopPracticeRunnerPage() {
   const [selectedChoice, setSelectedChoice] = useState(null);
   const [feedback, setFeedback] = useState(null); // { correct, correct_answer }
   const [submitting, setSubmitting] = useState(false);
+  // Multiple choice only: a wrong first guess costs nothing and doesn't
+  // reveal the answer - it just remembers that choice_index (sent back to
+  // the server as second_try_of so it knows this is the final, scored
+  // attempt) and what that wrong loop actually prints, then lets them pick
+  // again. Cleared whenever a fresh problem loads or the round ends.
+  const [firstWrongChoice, setFirstWrongChoice] = useState(null);
+  const [retryPickedOutput, setRetryPickedOutput] = useState(null);
 
   // A standalone set (no course_id) needs no sign-in - only a course-scoped
   // one does, checked once the assignment itself is known below.
@@ -96,6 +103,8 @@ export default function LoopPracticeRunnerPage() {
     setFeedback(null);
     setTraceAnswer("");
     setSelectedChoice(null);
+    setFirstWrongChoice(null);
+    setRetryPickedOutput(null);
     try {
       const p = await base44.entities.LoopAssignment.getProblemToAttempt(assignmentId, excludeId);
       setProblem(p);
@@ -112,10 +121,25 @@ export default function LoopPracticeRunnerPage() {
         submission.id,
         problem.id,
         answer,
-        submission.session_token
+        submission.session_token,
+        firstWrongChoice != null ? firstWrongChoice : undefined
       );
+      if (data.retry) {
+        // First wrong guess - not scored, not revealed. Remember it and let
+        // them pick again; a fresh selection is required (not the same
+        // click carried over) before Submit re-enables.
+        setFirstWrongChoice(answer);
+        setRetryPickedOutput(data.picked_output);
+        setSelectedChoice(null);
+        return;
+      }
       setSubmission(data.result);
-      setFeedback({ correct: data.correct, correct_answer: data.correct_answer, picked_output: data.picked_output });
+      setFeedback({
+        correct: data.correct,
+        correct_answer: data.correct_answer,
+        picked_output: data.picked_output,
+        partial: data.partial,
+      });
     } catch (e) {
       setError(e.message || "Couldn't grade that answer.");
     } finally {
@@ -261,9 +285,26 @@ export default function LoopPracticeRunnerPage() {
             </div>
             {!feedback && (
               <Button onClick={() => submitAnswer(selectedChoice)} disabled={submitting || selectedChoice === null}>
-                Submit
+                {firstWrongChoice != null ? "Submit final answer" : "Submit"}
               </Button>
             )}
+          </div>
+        )}
+
+        {firstWrongChoice != null && !feedback && (
+          <div className="rounded-xl p-4 flex items-start gap-3 border bg-amber-500/10 border-amber-500/30">
+            <XCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-amber-300">Not quite — pick again for partial credit.</p>
+              {retryPickedOutput != null && (
+                <div className="mt-1.5">
+                  <p className="text-xs text-slate-400">That loop actually prints:</p>
+                  <pre className="text-xs text-slate-300 font-mono bg-[#1e1e1e] border border-slate-700 rounded p-2 whitespace-pre-wrap mt-1">
+                    {retryPickedOutput}
+                  </pre>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -280,7 +321,11 @@ export default function LoopPracticeRunnerPage() {
             )}
             <div className="flex-1">
               <p className={feedback.correct ? "text-emerald-300" : "text-red-300"}>
-                {feedback.correct ? "Correct!" : "Not quite."}
+                {feedback.correct
+                  ? feedback.partial
+                    ? "Correct on the second try — partial credit."
+                    : "Correct!"
+                  : "Not quite."}
               </p>
               {!feedback.correct && problem.type === "trace" && (
                 <pre className="text-xs text-slate-300 font-mono mt-1 whitespace-pre-wrap">

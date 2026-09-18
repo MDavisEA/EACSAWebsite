@@ -672,6 +672,14 @@ Deno.serve(async (req) => {
       // before that field existed just won't have one, so this stays null
       // rather than erroring.
       let pickedOutput: unknown = null;
+      // Multiple choice only: this call is the SECOND pick at the same
+      // problem instance, following a first wrong guess - see the retry
+      // branch below. second_try_of is that first (wrong) choice_index, sent
+      // back by the client purely so a repeat-of-the-same-wrong-pick is
+      // still just "wrong," not treated as a fresh first attempt.
+      const isRetryAttempt = body.second_try_of !== undefined && body.second_try_of !== null;
+      let isPartialCredit = false;
+
       if (problem.type === 'trace') {
         // Trim trailing whitespace per line and trailing blank lines, but
         // otherwise exact - this still teaches output precision without
@@ -696,10 +704,25 @@ Deno.serve(async (req) => {
         // that doesn't match either the shuffled order or its own letter
         // labels. Returning the actual code sidesteps indexing entirely.
         correctAnswer = choices.find((c: Record<string, any>) => c.correct)?.code ?? null;
+
+        // A first wrong guess costs nothing and reveals nothing - not the
+        // correct choice, not even that this was "attempt 1 of 2." Nothing
+        // is written to the row at all; if they never come back to finish
+        // this instance (they navigate away, reload, whatever), there is
+        // nothing left over to clean up - the next problem they're served
+        // is just a fresh, independent attempt.
+        if (!correct && !isRetryAttempt) {
+          return json({ correct: false, retry: true, picked_output: pickedChoice?.output ?? null });
+        }
         if (!correct) pickedOutput = pickedChoice?.output ?? null;
+        isPartialCredit = isRetryAttempt && correct;
       }
 
-      const delta = correct ? 1 : -Number(assignment.wrong_penalty || 0);
+      const delta = correct
+        ? isPartialCredit
+          ? Number(assignment.partial_credit ?? 0.5)
+          : 1
+        : -Number(assignment.wrong_penalty || 0);
       const newScore = Math.max(0, Number(sub.loop_score || 0) + delta);
       const newLog = [
         ...(sub.loop_attempt_log || []),
@@ -708,6 +731,7 @@ Deno.serve(async (req) => {
           type: problem.type,
           given_answer: answer,
           correct,
+          partial: isPartialCredit,
           score_delta: delta,
           at: new Date().toISOString(),
         },
@@ -727,7 +751,13 @@ Deno.serve(async (req) => {
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
-      return json({ result: updated, correct, correct_answer: correctAnswer, picked_output: pickedOutput });
+      return json({
+        result: updated,
+        correct,
+        correct_answer: correctAnswer,
+        picked_output: pickedOutput,
+        partial: isPartialCredit,
+      });
     }
 
     if (action === 'submitProject') {

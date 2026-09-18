@@ -18,6 +18,7 @@ export default function LoopAssignmentForm({ initial, courses, onSave, onCancel 
   const [unitId, setUnitId] = useState(initial?.unit_id || "");
   const [targetScore, setTargetScore] = useState(initial?.target_score ?? 10);
   const [wrongPenalty, setWrongPenalty] = useState(initial?.wrong_penalty ?? 0.5);
+  const [partialCredit, setPartialCredit] = useState(initial?.partial_credit ?? 0.5);
   const [typeFilter, setTypeFilter] = useState(initial?.type_filter || "both");
   const [topicFilter, setTopicFilter] = useState((initial?.topic_filter || []).join(", "));
   const [difficultyFilter, setDifficultyFilter] = useState(initial?.difficulty_filter || []);
@@ -26,7 +27,8 @@ export default function LoopAssignmentForm({ initial, courses, onSave, onCancel 
     setDifficultyFilter((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
   };
 
-  const isValid = title.trim() && Number(targetScore) > 0 && Number(wrongPenalty) >= 0;
+  const isValid =
+    title.trim() && Number(targetScore) > 0 && Number(wrongPenalty) >= 0 && Number(partialCredit) >= 0;
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -36,6 +38,7 @@ export default function LoopAssignmentForm({ initial, courses, onSave, onCancel 
       unit_id: courseId ? unitId || null : null,
       target_score: Number(targetScore),
       wrong_penalty: Number(wrongPenalty),
+      partial_credit: Number(partialCredit),
       type_filter: typeFilter,
       topic_filter: topicFilter.trim()
         ? topicFilter.split(",").map((t) => t.trim()).filter(Boolean)
@@ -82,7 +85,7 @@ export default function LoopAssignmentForm({ initial, courses, onSave, onCancel 
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div className="space-y-2">
           <Label>Target score</Label>
           <Input
@@ -104,6 +107,19 @@ export default function LoopAssignmentForm({ initial, courses, onSave, onCancel 
             onChange={(e) => setWrongPenalty(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">Subtracted from the score (never below 0).</p>
+        </div>
+        <div className="space-y-2">
+          <Label>Partial credit (2nd try)</Label>
+          <Input
+            type="number"
+            min="0"
+            step="0.25"
+            value={partialCredit}
+            onChange={(e) => setPartialCredit(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Multiple choice only: awarded instead of full credit if they get it right on a second guess.
+          </p>
         </div>
       </div>
 

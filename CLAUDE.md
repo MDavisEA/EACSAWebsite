@@ -139,10 +139,18 @@ pattern under `src/components/teacher/`.
   types - trace-the-output and "which loop produces this output" multiple
   choice - authored by hand or bulk-imported from AI-generated JSON.
   `loop_assignments` assembles filtered slices of the bank into practice
-  sets with a `target_score` and a per-wrong-answer `wrong_penalty`; unlike
-  every other work table, ownership is a direct `teacher_id` column rather
-  than derived through `course_id`, because a practice set can be standalone
-  (not filed under any class) as well as course/unit-scoped. Grading happens
+  sets with a `target_score`, a per-wrong-answer `wrong_penalty`, and a
+  `partial_credit` rate. Multiple choice gets a free second try: a first
+  wrong guess (no `second_try_of` in the `submitLoopAnswer` request) scores
+  nothing and reveals nothing - not even that it was "try 1 of 2" - and lets
+  them pick again from all four options. Only the SECOND submission for that
+  instance (which carries `second_try_of`, the first guess's choice_index)
+  actually writes anything: `partial_credit` instead of full credit if
+  they're right the second time, the normal `wrong_penalty` once (not
+  doubled) if they're wrong both times. Unlike every other work table,
+  ownership is a direct `teacher_id` column rather than derived through
+  `course_id`, because a practice set can be standalone (not filed under any
+  class) as well as course/unit-scoped. Grading happens
   server-side in `submissions/index.ts`'s `submitLoopAnswer` - the client
   never sees a trace item's `expected_output` or which multiple-choice
   option is correct before answering. Teacher UI lives under its own
