@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2 } from "lucide-react";
 import { byLastName } from "@/lib/groupSubmissionsByStudent";
 
@@ -56,26 +57,39 @@ export default function LoopSubmissionViewer({ assignment }) {
       <p className="text-xs text-muted-foreground">
         {sorted.filter((r) => r.submitted).length} of {sorted.length} finished
       </p>
-      <div className="border rounded-lg divide-y">
-        {sorted.map((r) => (
-          <div key={r.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-            <span className="flex-1 min-w-0 truncate font-medium">{r.student_name}</span>
-            <Badge variant={r.submitted ? "default" : "secondary"} className="flex-shrink-0">
-              {r.submitted ? "Complete" : "In progress"}
-            </Badge>
-            <span className="text-xs text-muted-foreground flex-shrink-0 w-20 text-right">
-              {r.loop_score ?? 0} / {target}
-            </span>
-            <span className="text-xs text-muted-foreground flex-shrink-0 w-24 text-right">
-              <span className="text-emerald-600">{r.loop_correct_count ?? 0} right</span>
-              {" · "}
-              <span className="text-rose-500">{r.loop_wrong_count ?? 0} wrong</span>
-            </span>
-            <span className="text-xs text-muted-foreground flex-shrink-0 w-24 text-right">
-              {r.updated_at ? format(new Date(r.updated_at), "MMM d, h:mm a") : ""}
-            </span>
-          </div>
-        ))}
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Student</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Score</TableHead>
+              <TableHead className="text-right">Correct</TableHead>
+              <TableHead className="text-right">Wrong</TableHead>
+              <TableHead className="text-right">Last Activity</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sorted.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="font-medium">{r.student_name}</TableCell>
+                <TableCell>
+                  <Badge variant={r.submitted ? "default" : "secondary"}>
+                    {r.submitted ? "Complete" : "In progress"}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground whitespace-nowrap">
+                  {r.loop_score ?? 0} / {target}
+                </TableCell>
+                <TableCell className="text-right text-emerald-600">{r.loop_correct_count ?? 0}</TableCell>
+                <TableCell className="text-right text-rose-500">{r.loop_wrong_count ?? 0}</TableCell>
+                <TableCell className="text-right text-muted-foreground whitespace-nowrap">
+                  {r.updated_at ? format(new Date(r.updated_at), "MMM d, h:mm a") : ""}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
