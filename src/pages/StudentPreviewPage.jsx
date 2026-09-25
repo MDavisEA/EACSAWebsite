@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
+import NoteFolderList from "@/components/NoteFolderList";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { format, isPast } from "date-fns";
 import { Eye, ChevronRight, Loader2 } from "lucide-react";
@@ -107,18 +108,7 @@ export default function StudentPreviewPage() {
               <h2 className="text-sm font-semibold uppercase tracking-wide">Class Notes</h2>
               <Badge variant="outline" className="text-xs">{data.notes.length}</Badge>
             </div>
-            <div className="space-y-2">
-              {data.notes.map((note) => (
-                <button
-                  key={note.id}
-                  onClick={() => setOpenNote(note)}
-                  className="w-full text-left bg-white border rounded-xl p-4 hover:shadow-md hover:border-primary/30 transition-all flex items-center justify-between gap-4"
-                >
-                  <span className="font-medium">{note.title}</span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                </button>
-              ))}
-            </div>
+            <NoteFolderList notes={data.notes} units={data.units} onOpen={setOpenNote} />
           </section>
         )}
 

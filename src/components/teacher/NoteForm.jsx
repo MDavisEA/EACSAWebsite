@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ReactQuill from "react-quill";
 import { QUILL_MODULES, QUILL_FORMATS } from "@/lib/quillConfig";
 import "react-quill/dist/quill.snow.css";
@@ -22,9 +23,11 @@ function looksLikeJava(text) {
 
 // Scoped to a single, already-open course - unlike Assignment/Coding/Project
 // forms there is no course picker here, since a note only ever gets created
-// from inside that course's own Notes tab.
-export default function NoteForm({ initial, onSave, onCancel }) {
+// from inside that course's own Notes tab. `units` is that course's units -
+// the folders a note can be filed into.
+export default function NoteForm({ initial, units = [], onSave, onCancel }) {
   const [title, setTitle] = useState(initial?.title || "");
+  const [unitId, setUnitId] = useState(initial?.unit_id || null);
   const [contentHtml, setContentHtml] = useState(initial?.content_html || "");
   const [isPublished, setIsPublished] = useState(initial?.is_published || false);
   const quillRef = useRef(null);
@@ -55,7 +58,7 @@ export default function NoteForm({ initial, onSave, onCancel }) {
 
   const handleSubmit = () => {
     if (!isValid) return;
-    onSave({ title, content_html: contentHtml, is_published: isPublished });
+    onSave({ title, unit_id: unitId, content_html: contentHtml, is_published: isPublished });
   };
 
   return (
@@ -63,6 +66,22 @@ export default function NoteForm({ initial, onSave, onCancel }) {
       <div className="space-y-2">
         <Label>Title</Label>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Recursion" />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Unit</Label>
+        {/* Radix Select can't hold an empty-string value, hence "none". */}
+        <Select value={unitId || "none"} onValueChange={(v) => setUnitId(v === "none" ? null : v)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {units.map((u) => (
+              <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+            ))}
+            <SelectItem value="none">Other Notes (no unit)</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-2">
@@ -105,7 +124,7 @@ export default function NoteForm({ initial, onSave, onCancel }) {
           Cancel
         </Button>
         <Button onClick={handleSubmit} disabled={!isValid}>
-          {initial ? "Save Changes" : "Create Note"}
+          {initial?.id ? "Save Changes" : "Create Note"}
         </Button>
       </div>
     </div>

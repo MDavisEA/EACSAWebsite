@@ -2,6 +2,15 @@ import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest, teacherCourseIds, teacherOwnsCourse, teacherOwnsRow } from '../_shared/teacherAuth.ts';
 import { propagateToLinkedCourses } from '../_shared/courseLinks.ts';
 
+// A note's unit has to belong to that note's own course - otherwise a stray
+// unit id could file a note under a folder in some other teacher's class.
+// null/empty always passes (unfiled).
+async function unitInCourse(admin: any, unitId: string | null | undefined, courseId: string): Promise<boolean> {
+  if (!unitId) return true;
+  const { data } = await admin.from('units').select('course_id').eq('id', unitId).maybeSingle();
+  return data?.course_id === courseId;
+}
+
 Deno.serve(async (req) => {
   const preflight = handleOptions(req);
   if (preflight) return preflight;
@@ -35,12 +44,16 @@ Deno.serve(async (req) => {
       if (!(await teacherOwnsCourse(admin, teacher.id, body.data?.course_id))) {
         return json({ error: 'Pick one of your own courses for this note.' }, 403);
       }
-      const { course_id, title, content_html, is_published } = body.data || {};
+      const { course_id, unit_id, title, content_html, is_published } = body.data || {};
       if (!title?.trim()) return json({ error: 'A title is required.' }, 400);
+      if (!(await unitInCourse(admin, unit_id, course_id))) {
+        return json({ error: 'That unit is not in this course.' }, 400);
+      }
       const { data, error } = await admin
         .from('notes')
         .insert({
           course_id,
+          unit_id: unit_id || null,
           title: title.trim(),
           content_html: content_html || '',
           is_published: !!is_published,
@@ -56,8 +69,15 @@ Deno.serve(async (req) => {
       if (!(await teacherOwnsRow(admin, teacher.id, 'notes', body.id))) {
         return json({ error: 'Not found' }, 404);
       }
-      const { title, content_html, is_published } = body.data || {};
+      const { title, content_html, is_published, unit_id } = body.data || {};
       const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (unit_id !== undefined) {
+        const { data: existing } = await admin.from('notes').select('course_id').eq('id', body.id).single();
+        if (!(await unitInCourse(admin, unit_id, existing.course_id))) {
+          return json({ error: 'That unit is not in this course.' }, 400);
+        }
+        update.unit_id = unit_id || null;
+      }
       if (title !== undefined) {
         if (!title.trim()) return json({ error: 'A title is required.' }, 400);
         update.title = title.trim();

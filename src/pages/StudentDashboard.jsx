@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import SubmissionDetail from "@/components/SubmissionDetail";
+import NoteFolderList from "@/components/NoteFolderList";
 import { format, isPast } from "date-fns";
 import {
   BookOpen, LogIn, LogOut, ChevronRight, Loader2, RotateCcw, CheckCheck, ChevronDown, ChevronUp,
@@ -439,18 +440,13 @@ export default function StudentDashboard() {
               </span>
             </button>
             {!notesCollapsed && (
-              <div className="space-y-2">
-                {visibleNotes.map((note) => (
-                  <button
-                    key={note.id}
-                    onClick={() => setOpenNote(note)}
-                    className="w-full text-left bg-white border rounded-xl p-4 hover:shadow-md hover:border-primary/30 transition-all flex items-center justify-between gap-4"
-                  >
-                    <span className="font-medium">{note.title}</span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  </button>
-                ))}
-              </div>
+              <NoteFolderList
+                notes={visibleNotes}
+                units={units}
+                courses={courses}
+                showCourse={showCourse}
+                onOpen={setOpenNote}
+              />
             )}
           </section>
         )}

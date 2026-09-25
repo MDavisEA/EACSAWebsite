@@ -55,11 +55,6 @@ export async function propagateToLinkedCourses(
     }
 
     const { id, course_id, unit_id, created_at, updated_at, ...rest } = row;
-    // notes has no unit_id column at all (it is a flat per-course list, not
-    // grouped) - including the key even as null/undefined still fails the
-    // insert with an unrecognized-column error, since this is a plain object
-    // handed straight to postgrest, not a partial update against a known row.
-    const hasUnit = table !== 'notes';
     // Same convention as duplicating or copying-from-shared elsewhere in this
     // app (coding-problems' copyToMyCourse, TeacherDashboard's Duplicate): a
     // copy always starts inactive/unpublished, regardless of the source's own
@@ -70,9 +65,9 @@ export async function propagateToLinkedCourses(
       table === 'notes' ? { is_published: false } : 'is_active' in rest ? { is_active: false } : {};
     for (const link of links) {
       try {
-        const targetUnitId = hasUnit ? await findOrCreateUnit(admin, link.target_course_id, sourceUnitName) : undefined;
+        const targetUnitId = await findOrCreateUnit(admin, link.target_course_id, sourceUnitName);
         const insertRow: Record<string, any> = { ...rest, ...liveFlagOverride, course_id: link.target_course_id };
-        if (hasUnit) insertRow.unit_id = targetUnitId;
+        insertRow.unit_id = targetUnitId;
         const { error: copyErr } = await admin.from(table).insert(insertRow);
         if (copyErr) {
           // Not re-thrown - see the function doc comment - but still worth a

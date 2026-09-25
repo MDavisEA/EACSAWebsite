@@ -541,7 +541,7 @@ Deno.serve(async (req) => {
         admin.from('units').select('id, course_id, name, position').eq('course_id', courseId),
         admin
           .from('notes')
-          .select('id, course_id, title, content_html, updated_at')
+          .select('id, course_id, unit_id, title, content_html, updated_at')
           .eq('course_id', courseId)
           .eq('is_published', true),
         admin.from('courses').select('id, name').eq('id', courseId).maybeSingle(),

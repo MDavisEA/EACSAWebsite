@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
       // only for a course they are actually on - never previewed here, unlike
       // the teacher's own list which sees every note regardless of status.
       myCourseIds.length > 0
-        ? admin.from('notes').select('id, course_id, title, content_html, updated_at').eq('is_published', true).in('course_id', myCourseIds)
+        ? admin.from('notes').select('id, course_id, unit_id, title, content_html, updated_at').eq('is_published', true).in('course_id', myCourseIds)
         : Promise.resolve({ data: [], error: null }),
     ]);
 

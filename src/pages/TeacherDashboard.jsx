@@ -19,7 +19,7 @@ import LoopPracticePanel from "@/components/teacher/LoopPracticePanel";
 import CourseForm from "@/components/teacher/CourseForm";
 import CourseCard from "@/components/teacher/CourseCard";
 import NoteForm from "@/components/teacher/NoteForm";
-import NoteCard from "@/components/teacher/NoteCard";
+import NoteFolders from "@/components/teacher/NoteFolders";
 import TeachersPanel from "@/components/teacher/TeachersPanel";
 import GlobalCommentsPanel from "@/components/teacher/GlobalCommentsPanel";
 import MyStudentsDialog from "@/components/teacher/MyStudentsDialog";
@@ -880,32 +880,22 @@ export default function TeacherDashboard() {
               </TabsContent>
 
               <TabsContent value="notes">
-                <div className="space-y-4">
-                  <div className="flex justify-end">
-                    <Button size="sm" onClick={() => { setEditingNote(null); setShowNoteForm(true); }}>
-                      <Plus className="w-4 h-4 mr-1.5" /> New Note
-                    </Button>
-                  </div>
-                  {notes.filter((n) => n.course_id === openCourse.id).length === 0 ? (
-                    <div className="text-center text-muted-foreground bg-white border rounded-xl p-10">
-                      <p className="text-sm">No notes yet for this class.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {notes
-                        .filter((n) => n.course_id === openCourse.id)
-                        .map((note) => (
-                          <NoteCard
-                            key={note.id}
-                            note={note}
-                            onEdit={() => { setEditingNote(note); setShowNoteForm(true); }}
-                            onDelete={() => setDeletingNote(note)}
-                            onTogglePublished={() => handleToggleNotePublished(note)}
-                          />
-                        ))}
-                    </div>
-                  )}
-                </div>
+                <NoteFolders
+                  notes={notes.filter((n) => n.course_id === openCourse.id)}
+                  units={openCourse.units || []}
+                  onNewNote={(unitId) => { setEditingNote(unitId ? { unit_id: unitId } : null); setShowNoteForm(true); }}
+                  onNewUnit={async (name) => {
+                    await base44.entities.Course.createUnit(openCourse.id, name);
+                    await loadCourses();
+                  }}
+                  onEdit={(note) => { setEditingNote(note); setShowNoteForm(true); }}
+                  onDelete={(note) => setDeletingNote(note)}
+                  onTogglePublished={handleToggleNotePublished}
+                  onMove={async (note, unitId) => {
+                    await base44.entities.Note.update(note.id, { unit_id: unitId });
+                    loadNotes();
+                  }}
+                />
               </TabsContent>
 
               <TabsContent value="people">
@@ -1206,6 +1196,7 @@ export default function TeacherDashboard() {
           </DialogHeader>
           <NoteForm
             initial={editingNote}
+            units={courses.find((c) => c.id === openCourseId)?.units || []}
             onSave={handleSaveNote}
             onCancel={() => { setShowNoteForm(false); setEditingNote(null); }}
           />
