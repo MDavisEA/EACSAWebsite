@@ -1,0 +1,6 @@
+{
+  "name": "processing-tester",
+  "private": true,
+  "type": "commonjs",
+  "scripts": { "test": "node test/javaFixes.test.js" }
+}
