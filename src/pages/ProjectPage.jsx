@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
 import { googleDocEmbedUrl } from "@/lib/googleDoc";
 import SampleOutputs from "@/components/SampleOutputs";
+import SketchWorkspace from "@/components/SketchWorkspace";
 import { FolderGit2, AlertCircle, ChevronRight, LogIn, CheckCircle2, FileCode2, ExternalLink, ArrowLeft } from "lucide-react";
 
 export default function ProjectPage() {
@@ -20,6 +21,10 @@ export default function ProjectPage() {
   const [project, setProject] = useState(null);
   const [activeProjects, setActiveProjects] = useState([]);
   const [mySubmission, setMySubmission] = useState(null);
+  // A sketch needs its submission row (uploads attach to it) before the
+  // workspace can render, so unlike the gist form it has to know whether that
+  // lookup has finished - and whether it failed.
+  const [submissionState, setSubmissionState] = useState("idle"); // idle | loading | done | error
   const [gistUrl, setGistUrl] = useState("");
   // "I got AI help" disclosure - null means unanswered, which blocks submit.
   const [aiHelpUsed, setAiHelpUsed] = useState(null);
@@ -75,6 +80,7 @@ export default function ProjectPage() {
   // student just does not see their previous submission, so it stays quiet
   // rather than blocking the whole page behind an error.
   const loadMySubmission = async () => {
+    setSubmissionState("loading");
     try {
       // startProject both records that they have opened this (so the dashboard
       // can tell "working on it" from "never touched") and hands back the
@@ -87,8 +93,11 @@ export default function ProjectPage() {
         setAiHelpUsed(sub.ai_help_used);
         setAiHelpLink(sub.ai_help_link || "");
       }
+      setSubmissionState("done");
     } catch {
-      // ignored on purpose
+      // Non-fatal for the gist form (it still works without the previous
+      // submission); the sketch workspace reads submissionState and says so.
+      setSubmissionState("error");
     }
   };
 
@@ -170,6 +179,60 @@ export default function ProjectPage() {
           <p className="text-muted-foreground">{loadError}</p>
         </div>
       </div>
+    );
+  }
+
+  // A Processing course's project: the code-and-output workspace instead of the
+  // gist form below. Everything after turn-in (grading, feedback) is shared.
+  if (project.kind === "sketch") {
+    const centered = (children) => (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="w-full max-w-md text-center space-y-4">{children}</div>
+      </div>
+    );
+    if (!session) {
+      return centered(
+        <>
+          <h1 className="text-2xl font-bold tracking-tight">{project.title}</h1>
+          {domainRejected && (
+            <p className="text-sm text-destructive">
+              Please sign in with your school Google account (@{ALLOWED_STUDENT_DOMAIN}).
+            </p>
+          )}
+          <Button onClick={() => base44.auth.signInWithGoogle(window.location.href)} className="w-full" size="lg">
+            <LogIn className="w-4 h-4 mr-2" /> Sign in with Google
+          </Button>
+        </>
+      );
+    }
+    if (submissionState === "idle" || submissionState === "loading" || sessionLoading) {
+      return centered(<div className="w-8 h-8 border-4 border-slate-200 border-t-violet-600 rounded-full animate-spin mx-auto" />);
+    }
+    if (submissionState === "error" || !mySubmission) {
+      return centered(
+        <>
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
+          <h1 className="text-xl font-semibold">
+            {submissionState === "error" ? "Couldn't open this sketch" : "No longer accepting work"}
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            {submissionState === "error"
+              ? "Check your connection and try again."
+              : "This one has been turned off by your teacher."}
+          </p>
+          <Button variant="outline" onClick={() => navigate("/")}>Back to My Work</Button>
+        </>
+      );
+    }
+    return (
+      <SketchWorkspace
+        key={project.id}
+        project={project}
+        submission={mySubmission}
+        draftKey={`sketch-draft::${user?.id || "me"}::${project.id}`}
+        onSubmitted={setMySubmission}
+        onBack={() => navigate("/")}
+      />
     );
   }
 

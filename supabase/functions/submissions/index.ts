@@ -5,6 +5,8 @@ import { extractGistId, fetchGistJavaFiles, fetchGistUpdatedAt } from '../_share
 import { fetchOverridesByWorkId } from '../_shared/sectionDueDates.ts';
 import { validateAiHelp } from '../_shared/aiHelp.ts';
 import { sendGradeNotification, sendReplyNotification } from '../_shared/email.ts';
+import { validateSketchFiles } from '../_shared/sketchFiles.ts';
+import { deleteAssetsForSubmissions } from '../_shared/sketchAssetStorage.ts';
 
 // The title students see in the "new feedback" email - looked up only when
 // we're actually about to send one (see saveGrade), not on every save.
@@ -773,11 +775,12 @@ Deno.serve(async (req) => {
       // than rejected, so they can decide what to do with it.
       const { data: proj } = await admin
         .from('projects')
-        .select('is_active')
+        .select('is_active, kind')
         .eq('id', project_id)
         .maybeSingle();
       if (!proj) return json({ error: 'Project not found.' }, 404);
       if (!proj.is_active) return json({ error: 'This project is no longer accepting submissions.' }, 409);
+      if (proj.kind === 'sketch') return json({ error: 'This is a Processing sketch - turn it in from the sketch page, not with a Gist.' }, 400);
 
       const gistId = extractGistId(gist_url);
       if (!gistId) return json({ error: "That doesn't look like a gist URL. It should look like https://gist.github.com/yourname/abc123..." }, 400);
@@ -837,6 +840,72 @@ Deno.serve(async (req) => {
         return json({ error: error.message }, 500);
       }
       return json({ result: data });
+    }
+
+    // A Processing sketch turned in on the site: the student's tabs of code are
+    // stored in `files` (the same shape a snapshotted gist uses, so the grading
+    // views, line comments and exports all work on them unchanged), and their
+    // data files are in sketch_assets, uploaded separately as they add them.
+    // Same one-row-per-student-per-project model as submitProject, and a late
+    // submission is flagged for the teacher rather than rejected.
+    if (action === 'submitSketch') {
+      const { project_id } = body;
+      if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
+      if (!project_id) return json({ error: 'project_id is required' }, 400);
+      const aiHelp = validateAiHelp(body);
+      if ('error' in aiHelp) return json({ error: aiHelp.error }, 400);
+      const checked = validateSketchFiles(body.files);
+      if ('error' in checked) return json({ error: checked.error }, 400);
+
+      const { data: proj } = await admin
+        .from('projects')
+        .select('is_active, kind')
+        .eq('id', project_id)
+        .maybeSingle();
+      if (!proj) return json({ error: 'Project not found.' }, 404);
+      if (!proj.is_active) return json({ error: 'This project is no longer accepting submissions.' }, 409);
+      if (proj.kind !== 'sketch') return json({ error: 'This project is turned in as a Gist, not as a sketch.' }, 400);
+
+      const { data: existing, error: existingErr } = await admin
+        .from('submissions')
+        .select('id')
+        .eq('project_id', project_id)
+        .eq('student_user_id', student.id)
+        .maybeSingle();
+      if (existingErr) return json({ error: existingErr.message }, 500);
+
+      const row = {
+        project_id,
+        student_name: student.name,
+        student_user_id: student.id,
+        student_email: student.email,
+        files: checked.files,
+        ai_help_used: aiHelp.ai_help_used,
+        ai_help_link: aiHelp.ai_help_link,
+        submitted: true,
+        submitted_at: new Date().toISOString(),
+      };
+
+      const query = existing
+        ? admin.from('submissions').update(row).eq('id', existing.id)
+        : admin.from('submissions').insert({ ...row, access_code: generateAccessCode() });
+      const { data, error } = await query.select().single();
+      if (error) {
+        // Same race recovery as submitProject: the unique index (migration
+        // 0022) means a lost race just updates the row that won.
+        if ((error as Record<string, any>).code === '23505') {
+          const { data: raced, error: racedErr } = await admin
+            .from('submissions')
+            .update(row)
+            .eq('project_id', project_id)
+            .eq('student_user_id', student.id)
+            .select()
+            .single();
+          if (!racedErr) return json({ result: withheldIfUnreleased(raced) });
+        }
+        return json({ error: error.message }, 500);
+      }
+      return json({ result: withheldIfUnreleased(data) });
     }
 
     // ============ Public score lookup (access code = shared secret, same
@@ -1625,6 +1694,7 @@ Deno.serve(async (req) => {
 
     if (action === 'delete') {
       if (!(await ownsSubmissionId(body.submission_id))) return json({ error: 'Not found' }, 404);
+      await deleteAssetsForSubmissions(admin, [body.submission_id]);
       const { error } = await admin.from('submissions').delete().eq('id', body.submission_id);
       if (error) return json({ error: error.message }, 500);
       return json({ success: true });
@@ -1641,6 +1711,9 @@ Deno.serve(async (req) => {
       if (!(await teacherOwnsRow(admin, teacher.id, 'projects', project_id))) {
         return json({ error: 'Not found' }, 404);
       }
+      // A sketch has no gist to go stale.
+      const { data: proj } = await admin.from('projects').select('kind').eq('id', project_id).maybeSingle();
+      if (proj?.kind === 'sketch') return json({ results: [] });
 
       const { data: subs, error } = await admin
         .from('submissions')
@@ -1705,6 +1778,8 @@ Deno.serve(async (req) => {
       if (!(await teacherOwnsRow(admin, teacher.id, 'projects', project_id))) {
         return json({ error: 'Not found' }, 404);
       }
+      const { data: proj } = await admin.from('projects').select('kind').eq('id', project_id).maybeSingle();
+      if (proj?.kind === 'sketch') return json({ error: 'Sketches are turned in on the site, not imported from Gists.' }, 400);
       const results: { student_name: string; status: 'ok' | 'error'; error?: string }[] = [];
       for (const row of rows) {
         const studentName = (row.student_name || '').trim();

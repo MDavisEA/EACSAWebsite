@@ -1,6 +1,6 @@
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { BookOpen, Code2, FileCode, FolderGit2, ChevronRight } from "lucide-react";
+import { BookOpen, Code2, FileCode, FolderGit2, Palette, ChevronRight } from "lucide-react";
 
 // The four kinds of work, described by what the teacher gets rather than by
 // how the grader is implemented - "mini problem" means more to someone
@@ -41,7 +41,22 @@ const KINDS = [
   },
 ];
 
-export default function NewWorkDialog({ open, onOpenChange, onPick, courseName, unitName }) {
+// A Processing (AP CSP) class has exactly one kind of work: a sketch the
+// student pastes in, which you run and comment on. It is stored as a project
+// (kind "project" below), so rubric / release-gated feedback / replies all work.
+const PROCESSING_KINDS = [
+  {
+    kind: "project",
+    icon: Palette,
+    title: "Sketch",
+    blurb: "A Processing sketch students paste in with their images. You run it right on the page, comment on lines, and release feedback when ready.",
+    accent: "text-violet-600",
+    chip: "bg-violet-50",
+  },
+];
+
+export default function NewWorkDialog({ open, onOpenChange, onPick, courseName, unitName, language = "java" }) {
+  const kinds = language === "processing" ? PROCESSING_KINDS : KINDS;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -60,7 +75,7 @@ export default function NewWorkDialog({ open, onOpenChange, onPick, courseName, 
         </DialogHeader>
 
         <div className="space-y-2 pt-1">
-          {KINDS.map(({ kind, icon: Icon, title, blurb, accent, chip }) => (
+          {kinds.map(({ kind, icon: Icon, title, blurb, accent, chip }) => (
             <button
               key={kind}
               onClick={() => onPick(kind)}

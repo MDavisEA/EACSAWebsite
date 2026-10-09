@@ -45,6 +45,13 @@ export default function CourseUnitsView({
   const [editingUnitName, setEditingUnitName] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [reorderingUnits, setReorderingUnits] = useState(false);
+  // A Processing class only has sketches (stored as projects) - no FRQ / Mini
+  // Problem / Coding Assignment / Loop Practice filters to offer, and no shared
+  // library of Java problems to browse.
+  const isProcessing = course.language === "processing";
+  const typeTabs = isProcessing
+    ? [{ value: "all", label: "All" }, { value: "project", label: "Sketches" }]
+    : TYPE_TABS;
 
   const allInCourse = [
     ...assignments.filter((a) => a.course_id === course.id).map((x) => ({ kind: "frq", item: x })),
@@ -199,7 +206,7 @@ export default function CourseUnitsView({
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <Tabs value={typeFilter} onValueChange={setTypeFilter}>
           <TabsList>
-            {TYPE_TABS.map((t) => (
+            {typeTabs.map((t) => (
               <TabsTrigger key={t.value} value={t.value}>
                 {t.label}
               </TabsTrigger>
@@ -212,7 +219,7 @@ export default function CourseUnitsView({
               <ArrowUpDown className="w-4 h-4 mr-1.5" /> Reorder units
             </Button>
           )}
-          {onBrowseShared && (
+          {onBrowseShared && !isProcessing && (
             <Button variant="outline" size="sm" onClick={onBrowseShared}>
               <Library className="w-4 h-4 mr-1.5" /> Browse shared
             </Button>
@@ -222,7 +229,7 @@ export default function CourseUnitsView({
 
       {typeFilter !== "all" && groups.length === 0 && allInCourse.length > 0 && (
         <p className="text-sm text-muted-foreground text-center py-10 border rounded-xl bg-slate-50/40">
-          No {TYPE_TABS.find((t) => t.value === typeFilter)?.label.toLowerCase()} work in this class
+          No {typeTabs.find((t) => t.value === typeFilter)?.label.toLowerCase()} work in this class
           yet.
         </p>
       )}

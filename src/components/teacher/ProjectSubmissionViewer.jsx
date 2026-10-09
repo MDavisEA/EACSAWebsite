@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { FileDown, Trash2, ExternalLink, Loader2, Upload, CheckCircle2, XCircle, AlertTriangle, RefreshCw, UserX, ChevronDown, ChevronUp, Clock, Send, Bot } from "lucide-react";
 import AiHelpBadge from "./AiHelpBadge";
+import SketchTestingPanel, { FeedbackTestingToggle } from "./SketchTestingPanel";
 import { exportProjectForReview } from "@/lib/exportProjectZip";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
 import { byLastName } from "@/lib/groupSubmissionsByStudent";
@@ -60,6 +61,10 @@ export default function ProjectSubmissionViewer({ project }) {
   const csvFileInputRef = useRef(null);
 
   const [reviewTarget, setReviewTarget] = useState(null);
+  // Sketches (Processing courses) get the Feedback / Testing toggle a Coding
+  // Assignment has: read and comment, or run what they turned in.
+  const isSketch = project.kind === "sketch";
+  const [reviewTab, setReviewTab] = useState("feedback");
   const [reviewDraft, setReviewDraft] = useState({
     teacher_comments: "",
     score: "",
@@ -194,6 +199,7 @@ export default function ProjectSubmissionViewer({ project }) {
     });
     setLineComments([]);
     setReviewError("");
+    setReviewTab("feedback");
     // Open on their first file rather than nothing, so the code is visible
     // without a click - a Project is usually one main class plus helpers.
     setActiveFile((s.file_names || [])[0] ?? null);
@@ -288,16 +294,21 @@ export default function ProjectSubmissionViewer({ project }) {
           )}
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={handleRecheck} disabled={rechecking || submissions.length === 0}>
-            {rechecking ? (
-              <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Checking...</>
-            ) : (
-              <><RefreshCw className="w-4 h-4 mr-1.5" /> Re-check Gists</>
-            )}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowBulkImport(true)}>
-            <Upload className="w-4 h-4 mr-1.5" /> Bulk Import (CSV)
-          </Button>
+          {/* Both are about Gists, which a sketch does not have. */}
+          {!isSketch && (
+            <>
+              <Button variant="outline" size="sm" onClick={handleRecheck} disabled={rechecking || submissions.length === 0}>
+                {rechecking ? (
+                  <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Checking...</>
+                ) : (
+                  <><RefreshCw className="w-4 h-4 mr-1.5" /> Re-check Gists</>
+                )}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowBulkImport(true)}>
+                <Upload className="w-4 h-4 mr-1.5" /> Bulk Import (CSV)
+              </Button>
+            </>
+          )}
           <Button variant="outline" size="sm" onClick={() => setGradesOpen(true)}>
             Grades
           </Button>
@@ -484,11 +495,26 @@ export default function ProjectSubmissionViewer({ project }) {
             </DialogDescription>
           </DialogHeader>
 
+          {isSketch && (
+            <FeedbackTestingToggle tab={reviewTab} onTab={setReviewTab} className="w-fit" />
+          )}
+
+          {isSketch && reviewTab === "testing" && reviewTarget && (
+            reviewTarget.files === undefined ? (
+              <p className="text-sm text-muted-foreground p-6 text-center flex items-center justify-center gap-2 border rounded-lg">
+                <span className="w-4 h-4 border-2 border-slate-300 border-t-primary rounded-full animate-spin" />
+                Loading their sketch...
+              </p>
+            ) : (
+              <SketchTestingPanel submission={reviewTarget} projectTitle={project.title} height={520} />
+            )
+          )}
+
           {/* Their actual code, one file at a time, with comments pinned to
               lines - the same thing Coding Assignments have. Before this the
               only way to say anything about a Project was one block of prose,
               which is a poor fit for "line 34 of Board.java is the problem". */}
-          {(reviewTarget?.file_names || reviewTarget?.files || []).length > 0 && (
+          {!(isSketch && reviewTab === "testing") && (reviewTarget?.file_names || reviewTarget?.files || []).length > 0 && (
             <div className="border rounded-lg overflow-hidden">
               <div className="bg-slate-100 border-b px-2 py-1.5 flex items-center gap-1 flex-wrap">
                 {(reviewTarget.file_names ?? (reviewTarget.files || []).map((f) => f.filename)).map(

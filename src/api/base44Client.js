@@ -367,6 +367,22 @@ const Submission = {
     return data.result;
   },
 
+  // The Processing-course counterpart of submitGist: the student's tabs of code
+  // ([{ filename, content }, ...], main sketch first) are snapshotted into the
+  // same `files` column a gist's files go in, so grading looks identical. Their
+  // images / data files are uploaded separately through SketchAsset as they add
+  // them, not here.
+  async submitSketch(project_id, files, ai_help_used, ai_help_link) {
+    const data = await callFunction('submissions', {
+      action: 'submitSketch',
+      project_id,
+      files,
+      ai_help_used,
+      ai_help_link,
+    });
+    return data.result;
+  },
+
   async getMyProjectSubmission(project_id) {
     const data = await callFunction('submissions', { action: 'myProjectSubmission', project_id });
     return data.result;
@@ -660,6 +676,35 @@ const Project = {
   async fetchGoogleDocText(google_doc_url) {
     const data = await callFunction('projects', { action: 'fetchGoogleDocText', google_doc_url });
     return data.result;
+  },
+};
+
+// ============================================================================
+// entities.SketchAsset (the data/ folder of a Processing sketch: the images
+// etc. a student's code loads by name. Bytes live in a private Storage bucket;
+// every call goes through the sketch-assets Edge Function, which checks the
+// caller owns the submission - or, for list, owns the course it is in.)
+// ============================================================================
+
+const SketchAsset = {
+  // [{ id, name, size_bytes, content_type, url }] - url is a short-lived signed
+  // download link. Student (own sketch) or the teacher who owns the course.
+  async list(submission_id) {
+    const data = await callFunction('sketch-assets', { action: 'list', submission_id });
+    return data.results;
+  },
+
+  // Adds a file, or replaces the one with the same name (case-insensitive).
+  async upload(submission_id, file) {
+    const formData = new FormData();
+    formData.append('submission_id', submission_id);
+    formData.append('file', file);
+    const data = await callFunction('sketch-assets', formData);
+    return data.result;
+  },
+
+  async remove(submission_id, asset_id) {
+    await callFunction('sketch-assets', { action: 'remove', submission_id, asset_id });
   },
 };
 
@@ -981,7 +1026,7 @@ const functions = {
 };
 
 export const base44 = {
-  entities: { Assignment, Submission, CodingProblem, LoopProblem, LoopAssignment, Project, Note, Course, StudentWork, Teacher },
+  entities: { Assignment, Submission, CodingProblem, LoopProblem, LoopAssignment, Project, SketchAsset, Note, Course, StudentWork, Teacher },
   auth,
   integrations,
   functions,

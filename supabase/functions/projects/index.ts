@@ -11,6 +11,7 @@ import { extractGoogleDocId } from '../_shared/googleDoc.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { attachSectionDueDates, fetchOverridesByWorkId, replaceSectionDueDates, resolveDueDates } from '../_shared/sectionDueDates.ts';
 import { propagateToLinkedCourses } from '../_shared/courseLinks.ts';
+import { deleteAssetsForSubmissions, submissionIdsForProjects } from '../_shared/sketchAssetStorage.ts';
 
 // Students see the rubric (it's the point - they should know what they're
 // reviewed against) but never review_prompt, which is instructions aimed at
@@ -19,6 +20,9 @@ function sanitizeForStudent(project: Record<string, any>) {
   return {
     id: project.id,
     title: project.title,
+    // 'gist' (turned in as a Gist URL) or 'sketch' (a Processing sketch typed
+    // or pasted into the site) - tells the student page which UI to show.
+    kind: project.kind || 'gist',
     description_html: project.description_html,
     rubric_md: project.rubric_md,
     starter_files: project.starter_files || [],
@@ -31,6 +35,14 @@ function sanitizeForStudent(project: Record<string, any>) {
     // it would be unfair for the deadline to be invisible to them.
     due_date: project.due_date,
   };
+}
+
+// A project's kind follows its course's language and is never taken from the
+// request, so a sketch project can only live in a Processing course (and a gist
+// project only in a Java one).
+async function kindForCourse(admin: any, courseId: string): Promise<'gist' | 'sketch'> {
+  const { data } = await admin.from('courses').select('language').eq('id', courseId).maybeSingle();
+  return data?.language === 'processing' ? 'sketch' : 'gist';
 }
 
 Deno.serve(async (req) => {
@@ -118,7 +130,8 @@ Deno.serve(async (req) => {
       if (!(await teacherOwnsCourse(admin, teacher.id, body.data?.course_id))) {
         return json({ error: 'Pick one of your own courses for this project.' }, 403);
       }
-      const { section_due_dates, ...insertData } = body.data || {};
+      const { section_due_dates, kind: _kind, ...insertData } = body.data || {};
+      insertData.kind = await kindForCourse(admin, insertData.course_id);
       const { data, error } = await admin.from('projects').insert(insertData).select().single();
       if (error) return json({ error: error.message }, 500);
       const { error: sddErr } = await replaceSectionDueDates(admin, 'project_id', data.id, section_due_dates);
@@ -135,7 +148,13 @@ Deno.serve(async (req) => {
       if (body.data?.course_id && !(await teacherOwnsCourse(admin, teacher.id, body.data.course_id))) {
         return json({ error: 'Pick one of your own courses for this project.' }, 403);
       }
-      const { section_due_dates, ...updateData } = body.data || {};
+      const { section_due_dates, kind: _kind, ...updateData } = body.data || {};
+      if (updateData.course_id) {
+        const { data: existing } = await admin.from('projects').select('kind').eq('id', body.id).maybeSingle();
+        if ((await kindForCourse(admin, updateData.course_id)) !== (existing?.kind || 'gist')) {
+          return json({ error: "That course teaches the other language, so this work can't move there." }, 400);
+        }
+      }
       if (section_due_dates !== undefined) {
         const { error: sddErr } = await replaceSectionDueDates(admin, 'project_id', body.id, section_due_dates);
         if (sddErr) return json({ error: sddErr }, 500);
@@ -155,6 +174,7 @@ Deno.serve(async (req) => {
       if (!(await teacherOwnsRow(admin, teacher.id, 'projects', body.id))) {
         return json({ error: 'Not found' }, 404);
       }
+      await deleteAssetsForSubmissions(admin, await submissionIdsForProjects(admin, [body.id]));
       const { error } = await admin.from('projects').delete().eq('id', body.id);
       if (error) return json({ error: error.message }, 500);
       return json({ success: true });

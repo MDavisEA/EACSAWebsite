@@ -16,6 +16,11 @@ function CourseTile({ c, n, onOpen, archived }) {
           <div className="min-w-0">
             <h2 className="font-semibold text-lg truncate group-hover:text-primary transition-colors">
               {c.name}
+              {c.language === "processing" && (
+                <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide rounded-full bg-violet-50 text-violet-700 px-2 py-0.5">
+                  Processing
+                </span>
+              )}
             </h2>
             <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">

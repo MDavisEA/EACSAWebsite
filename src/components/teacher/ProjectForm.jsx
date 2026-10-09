@@ -98,6 +98,12 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
   const updateField = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
   const isValid = form.title.trim() && form.course_id;
+  // A Processing course's project is a sketch: starter code is .pde, there is no
+  // gist to import from, and the wording follows. The server decides the real
+  // kind from the course (see projects/index.ts) - this only shapes the form.
+  const isSketch =
+    courses.find((c) => c.id === form.course_id)?.language === "processing" || initial?.kind === "sketch";
+  const starterExt = isSketch ? ".pde" : ".java";
 
   const handleSubmit = () => {
     if (!isValid) return;
@@ -114,8 +120,8 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
   };
 
   const addFiles = async (fileList) => {
-    const javaFiles = Array.from(fileList).filter((f) => f.name.toLowerCase().endsWith(".java"));
-    const read = await Promise.all(javaFiles.map(async (f) => ({ filename: f.name, content: await f.text() })));
+    const codeFiles = Array.from(fileList).filter((f) => f.name.toLowerCase().endsWith(starterExt));
+    const read = await Promise.all(codeFiles.map(async (f) => ({ filename: f.name, content: await f.text() })));
     if (read.length > 0) {
       setForm((f) => ({ ...f, starter_files: mergeFiles(f.starter_files, read) }));
     }
@@ -155,11 +161,11 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Label>Project Title *</Label>
+        <Label>{isSketch ? "Sketch Title *" : "Project Title *"}</Label>
         <Input
           value={form.title}
           onChange={(e) => updateField("title", e.target.value)}
-          placeholder="e.g. Inventory Management System"
+          placeholder={isSketch ? "e.g. Create Task: Final Game" : "e.g. Inventory Management System"}
         />
       </div>
 
@@ -297,36 +303,40 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
         >
           <Upload className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Drag .java files here, or click to browse (folders aren't read - select the files inside)
+            Drag {starterExt} files here, or click to browse (folders aren't read - select the files inside)
           </p>
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".java"
+            accept={starterExt}
             className="hidden"
             onChange={handleFileInput}
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-xs text-muted-foreground">or</span>
-          <div className="flex-1 h-px bg-border" />
-        </div>
+        {!isSketch && (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground">or</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
 
-        <div className="flex gap-2">
-          <Input
-            placeholder="Paste a gist URL to pull starter files from"
-            value={gistUrl}
-            onChange={(e) => setGistUrl(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleFetchGist()}
-          />
-          <Button variant="outline" onClick={handleFetchGist} disabled={fetchingGist || !gistUrl.trim()}>
-            {fetchingGist ? <Loader2 className="w-4 h-4 animate-spin" /> : "Fetch"}
-          </Button>
-        </div>
-        {gistError && <p className="text-sm text-destructive">{gistError}</p>}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Paste a gist URL to pull starter files from"
+                value={gistUrl}
+                onChange={(e) => setGistUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleFetchGist()}
+              />
+              <Button variant="outline" onClick={handleFetchGist} disabled={fetchingGist || !gistUrl.trim()}>
+                {fetchingGist ? <Loader2 className="w-4 h-4 animate-spin" /> : "Fetch"}
+              </Button>
+            </div>
+            {gistError && <p className="text-sm text-destructive">{gistError}</p>}
+          </>
+        )}
 
         {form.starter_files.length > 0 && (
           <div className="space-y-2 pt-1">
@@ -361,8 +371,9 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
         )}
 
         <p className="text-xs text-muted-foreground">
-          Included in the export so your AI review pass knows what was given to students, rather
-          than reviewing your own boilerplate as if a student wrote it.
+          {isSketch
+            ? "Opens in each student's editor as their starting code, and is included in the export so your AI review pass knows what was given."
+            : "Included in the export so your AI review pass knows what was given to students, rather than reviewing your own boilerplate as if a student wrote it."}
         </p>
       </div>
 
@@ -385,7 +396,7 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
           Cancel
         </Button>
         <Button onClick={handleSubmit} disabled={!isValid}>
-          {initial ? "Save Changes" : "Create Project"}
+          {initial ? "Save Changes" : isSketch ? "Create Sketch" : "Create Project"}
         </Button>
       </div>
     </div>

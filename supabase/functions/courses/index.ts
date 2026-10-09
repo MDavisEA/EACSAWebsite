@@ -1,4 +1,5 @@
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
+import { deleteAssetsForSubmissions, submissionIdsForProjects } from '../_shared/sketchAssetStorage.ts';
 import {
   createAdminClient,
   getTeacherFromRequest,
@@ -140,6 +141,16 @@ Deno.serve(async (req) => {
       if (body.source_course_id === body.course_id) {
         return json({ error: "A course can't link to itself." }, 400);
       }
+      // Linking copies new work across, and a Processing sketch means nothing
+      // in a Java course (or the other way round).
+      const { data: pair } = await admin
+        .from('courses')
+        .select('id, language')
+        .in('id', [body.course_id, body.source_course_id]);
+      const langs = new Set((pair || []).map((c: Record<string, any>) => c.language));
+      if (langs.size > 1) {
+        return json({ error: "A Java course and a Processing course can't be linked - their work isn't compatible." }, 400);
+      }
       await admin.from('course_links').delete().eq('target_course_id', body.course_id);
       const { error } = await admin
         .from('course_links')
@@ -158,9 +169,14 @@ Deno.serve(async (req) => {
     if (action === 'create') {
       // teacher_id comes from the verified session, never from the request -
       // otherwise a teacher could create a course owned by someone else.
+      // The language is chosen once, here, and never changed afterwards: it
+      // decides what kind of work the course holds (Java: FRQ / Mini Problems /
+      // Coding Assignments / gist Projects; Processing: sketches), so flipping
+      // it on a course that already has work would orphan that work.
+      const language = body.data?.language === 'processing' ? 'processing' : 'java';
       const { data, error } = await admin
         .from('courses')
-        .insert({ ...body.data, teacher_id: teacher.id })
+        .insert({ ...body.data, language, teacher_id: teacher.id })
         .select()
         .single();
       if (error) return json({ error: error.message }, 500);
@@ -169,7 +185,7 @@ Deno.serve(async (req) => {
 
     if (action === 'update') {
       if (!(await owns(body.id))) return json({ error: 'Not found' }, 404);
-      const { teacher_id: _ignored, ...safe } = body.data || {};
+      const { teacher_id: _ignored, language: _lang, ...safe } = body.data || {};
       const { data, error } = await admin
         .from('courses')
         .update(safe)
@@ -182,6 +198,11 @@ Deno.serve(async (req) => {
 
     if (action === 'delete') {
       if (!(await owns(body.id))) return json({ error: 'Not found' }, 404);
+      const { data: courseProjects } = await admin.from('projects').select('id').eq('course_id', body.id);
+      await deleteAssetsForSubmissions(
+        admin,
+        await submissionIdsForProjects(admin, (courseProjects || []).map((p: Record<string, any>) => p.id))
+      );
       const { error } = await admin.from('courses').delete().eq('id', body.id);
       if (error) return json({ error: error.message }, 500);
       return json({ success: true });

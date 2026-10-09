@@ -42,6 +42,9 @@ export default function ProjectCard({ project, dragHandleProps, ungradedCount = 
                 <Badge variant={project.is_active ? "default" : "secondary"}>
                   {project.is_active ? "Active" : "Inactive"}
                 </Badge>
+                {project.kind === "sketch" && (
+                  <Badge variant="outline" className="text-violet-700 border-violet-300">Sketch</Badge>
+                )}
                 {project.grading_skipped ? (
                   <Badge variant="outline" className="text-slate-500">Not grading this</Badge>
                 ) : (

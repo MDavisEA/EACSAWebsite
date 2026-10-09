@@ -20,6 +20,11 @@ export default [
       // Edge Functions are Deno, not browser JS - different globals and
       // import style, so this browser-targeted config would misreport them.
       "supabase/functions/**",
+      // Third-party code we ship as-is (Processing.js, minified), and the
+      // standalone Processing Tester prototype, which is plain browser scripts
+      // rather than part of the app.
+      "src/vendor/**",
+      "tools/**",
       // Claude Code tool state, including throwaway git worktrees that
       // contain a full second copy of src/.
       ".claude/**",

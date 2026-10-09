@@ -100,6 +100,11 @@ directly from page components.
   policy that lets the browser talk to it directly; add another Edge
   Function action instead, following the existing pattern in
   `supabase/functions/*/index.ts`.
+- **Sketch files are private.** The `sketch-assets` Storage bucket is not
+  public; nothing is ever served by a permanent URL. Every list/upload/remove
+  goes through the `sketch-assets` function, which derives authorization from
+  the submission (owning student, or the teacher who owns the project's
+  course) and generates storage paths itself - never from the request.
 - **Hidden test cases**: a coding problem can test multiple methods
   (`coding_problems.methods`, an array - each entry has its own
   `harness_type`/`method_name`/`test_cases`). Any test case within a
@@ -203,6 +208,61 @@ pattern under `src/components/teacher/`.
   this); teacher UI is in `GradingQueue.jsx`, separate from the main
   `saveGrade`/`save()` flow on purpose - a reply isn't a grading action.
 
+- **Processing / AP CSP classes**: `courses.language` is `'java'` (everything above)
+  or `'processing'`, chosen once when the class is created (`CourseForm`) and
+  never editable (the courses function strips it on update). A Processing
+  class holds exactly one kind of work, a **sketch** - which is a Project with
+  `projects.kind = 'sketch'`, NOT a fifth work type. Reusing Projects is the
+  point: rubric, line comments, release-gated feedback (`feedback_released`),
+  reply threads, grade emails, section due dates, the "who has not turned in"
+  roster diff and linked courses all work unchanged. `kind` is derived
+  server-side from the course's language (`kindForCourse` in
+  `projects/index.ts`) and never trusted from the request; a project cannot
+  move to a course of the other language, and a Java course cannot be linked
+  to a Processing one.
+  - **Student side** (`SketchWorkspace.jsx`, rendered by `ProjectPage.jsx`
+    when `project.kind === 'sketch'`): students write and test in real
+    Processing on their own machine and PASTE the code in; code on the left,
+    the running sketch on the right. Tabs of code are snapshotted into
+    `submissions.files` (same shape as a gist snapshot) by the `submitSketch`
+    action (`submissions/index.ts`; validation in `_shared/sketchFiles.ts`).
+    Their data files (images, a `.vlw` font, text/csv) are uploaded one at a
+    time to the **`sketch-assets`** Edge Function, which stores them in the
+    private `sketch-assets` Storage bucket and indexes them in `sketch_assets`
+    (5 MB/file, 25 MB/sketch, no SVG/audio). Only the owning student can
+    upload/remove; the student or the teacher who owns the course can `list`
+    (short-lived signed URLs). Deleting a submission/project/course removes
+    the stored files first (`_shared/sketchAssetStorage.ts`) - the rows
+    cascade but Storage objects do not.
+  - **Teacher side**: grading uses the existing `GradingQueue` and
+    `ProjectSubmissionViewer`; for a sketch both gain the same **Feedback /
+    Testing** toggle a Coding Assignment has (`SketchTestingPanel.jsx`). Testing
+    runs the student's code with their uploaded files, shows which files the
+    code asks for that were never uploaded, and has **Download for Processing**
+    (a correctly named sketch folder zip to open in real Processing - the
+    fallback when the in-browser run looks wrong).
+  - **How the code runs** (`src/lib/processing/`, `SketchRunner.jsx`): Processing.js
+    (vendored at `src/vendor/processing.min.js`, MIT) translates the Java-syntax
+    sketch to JS inside an iframe with `sandbox="allow-scripts"` and **no
+    `allow-same-origin`**, so student code cannot touch the page's cookies or
+    Supabase session; the only channel is `postMessage` (protocol documented at
+    the top of `frameRunner.js`). Don't add `allow-same-origin`. Both
+    Processing.js and `frameRunner.js` are imported as raw text and loaded
+    lazily (own chunk, only fetched on first Run). Images reach the iframe as
+    `data:` URLs so the canvas is never tainted.
+  - **`javaFixes.js` is load-bearing**: Processing.js inherits JavaScript's
+    number semantics, so `1500/1000` is 1.5 and `int x; x *= 1.5` doesn't
+    truncate. The preprocessor rewrites int division / int compound assignment
+    to `int(...)` ONLY when it can prove both sides are int (otherwise it leaves
+    the expression alone), renames a method that shares a name with a variable
+    (legal Java, a crash in JS), and strips `import` lines. Run its unit tests
+    with `node src/lib/processing/javaFixes.test.js` after touching it.
+  - Known limits (by design, not bugs): Processing.js is a 2018 translator, so
+    libraries (Sound, Video), `loadTable`/JSON/XML and P3D are unsupported or
+    untested; `.vlw` fonts become the default font; `println(3.0)` prints `3`.
+    `tools/processing-tester/` is the standalone prototype this grew from
+    (open `index.html`); the site does not depend on it.
+
 ## Deliberate design decisions worth not undoing
 - **Projects are separate from the autograder on purpose.** Autograder = small
   problems with test cases. Projects = big work reviewed against a rubric by
@@ -222,6 +282,7 @@ pattern under `src/components/teacher/`.
   again, not a code problem. Node is pinned via `nvm` to v22 (the very
   newest Node versions have had issues with this project's Vite/esbuild
   versions).
+- A Processing change touches several functions: deploy `courses`, `projects`, `submissions` and `sketch-assets`, and apply `0036_processing_sketches.sql` (it also creates the private `sketch-assets` bucket).
 - Deploys are: any Supabase change (new/changed Edge Function, new SQL
   migration) needs `npx supabase functions deploy <name>` run manually;
   any frontend-only change just needs `git push` and Vercel deploys

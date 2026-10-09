@@ -41,8 +41,12 @@ export async function exportProjectForReview(project, submissions, options = {})
       `## Assignment\n${assignmentText}\n\n` +
       `## Layout\n` +
       (hasStarterCode ? `- \`starter/\` — the starter code given to every student\n` : "") +
-      `- \`submissions/\` — one folder per student, containing their .java files\n` +
-      `- \`_meta.json\` in each folder — gist URL, submission time, and whether the student disclosed ` +
+      `- \`submissions/\` — one folder per student, containing their ` +
+      (project.kind === "sketch"
+        ? `Processing .pde files (the sketch code only - uploaded images are not included)`
+        : `.java files`) +
+      `\n` +
+      `- \`_meta.json\` in each folder — gist URL (blank for a sketch), submission time, and whether the student disclosed ` +
       `using an AI chatbot (\`ai_help_used\`) plus a link to that conversation (\`ai_help_link\`) if so\n` +
       `- \`roster.csv\` — every student who submitted, for cross-reference\n`
   );

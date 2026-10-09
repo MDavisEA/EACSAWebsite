@@ -14,6 +14,7 @@ import AnnotatedCodeView from "./AnnotatedCodeView";
 import AnswerKeyPanel from "./AnswerKeyPanel";
 import HighlightedCode from "@/components/HighlightedCode";
 import InteractiveRunner from "@/components/InteractiveRunner";
+import SketchTestingPanel from "./SketchTestingPanel";
 import {
   Loader2, ChevronLeft, ChevronRight, CheckCircle2, EyeOff, FileCode, Terminal, Info,
   KeyRound, ExternalLink, Bot,
@@ -152,6 +153,10 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
   const submission = detail?.submission;
 
   const isCode = kind === "code" || kind === "review";
+  // A Processing sketch is a project whose course teaches Processing. It gets
+  // the same Feedback / Testing toggle a Coding Assignment has - read and
+  // comment, or run what they turned in.
+  const isSketch = kind === "project" && work?.kind === "sketch";
   const commentScope = work
     ? kind === "frq"
       ? { assignment_id: work.id }
@@ -354,7 +359,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                 )}
               </div>
 
-              {isCode && (
+              {(isCode || isSketch) && (
                 <div className="flex items-center gap-1 border rounded-lg p-1 bg-slate-50 ml-auto">
                   {[
                     { id: "feedback", label: "Feedback", Icon: FileCode },
@@ -375,7 +380,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                 </div>
               )}
 
-              <div className={`flex items-center gap-2 ${isCode ? "" : "ml-auto"}`}>
+              <div className={`flex items-center gap-2 ${isCode || isSketch ? "" : "ml-auto"}`}>
                 <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={skip} disabled={saving}>
                   <EyeOff className="w-3.5 h-3.5 mr-1.5" /> Won&rsquo;t grade
                 </Button>
@@ -396,6 +401,8 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
               <div className="py-16 flex justify-center">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
+            ) : isSketch && tab === "testing" ? (
+              <SketchTestingPanel submission={submission} projectTitle={work?.title} height={520} />
             ) : isCode && tab === "testing" ? (
               <div className="border rounded-lg overflow-hidden">
                 <div className="bg-slate-100 px-3 py-1.5 border-b flex items-center gap-2">
@@ -456,7 +463,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                       </>
                     ) : (
                       <p className="text-sm text-muted-foreground p-6 text-center">
-                        No files were captured from their gist.
+                        {isSketch ? "They turned this in without any code." : "No files were captured from their gist."}
                       </p>
                     )
                   ) : isCode ? (

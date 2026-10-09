@@ -1026,6 +1026,7 @@ export default function TeacherDashboard() {
         onOpenChange={setShowNewWork}
         onPick={startNewWork}
         courseName={courses.find((c) => c.id === openCourseId)?.name}
+        language={courses.find((c) => c.id === openCourseId)?.language}
         unitName={
           courses
             .find((c) => c.id === openCourseId)
@@ -1178,7 +1179,12 @@ export default function TeacherDashboard() {
       <Dialog open={showProjectForm} onOpenChange={setShowProjectForm}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingProject?.id ? "Edit Project" : "New Project"}</DialogTitle>
+            <DialogTitle>
+              {(() => {
+                const sketch = courses.find((c) => c.id === editingProject?.course_id)?.language === "processing";
+                return editingProject?.id ? (sketch ? "Edit Sketch" : "Edit Project") : sketch ? "New Sketch" : "New Project";
+              })()}
+            </DialogTitle>
           </DialogHeader>
           <ProjectForm
             initial={editingProject}
