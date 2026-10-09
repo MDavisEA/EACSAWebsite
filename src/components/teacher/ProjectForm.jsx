@@ -123,6 +123,7 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
             id: p.id,
             title: (p.title || "").trim(),
             description: p.description || "",
+            images: p.images || [],
             points: p.points === "" || p.points == null ? null : Number(p.points),
           }))
         : [],
@@ -275,7 +276,12 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
           supposed to do?" actually comes up. */}
       <SampleOutputsEditor value={form.sample_outputs} onChange={(v) => updateField("sample_outputs", v)} />
 
-      {isSketch && <ProgramsEditor value={form.parts} onChange={(v) => updateField("parts", v)} />}
+      {isSketch && <ProgramsEditor
+          value={form.parts}
+          // An image finishes uploading some time after the click, so the editor
+          // hands back an updater (applied to the latest list) as well as a value.
+          onChange={(v) => setForm((f) => ({ ...f, parts: typeof v === "function" ? v(f.parts) : v }))}
+        />}
 
       <div className="space-y-2">
         <Label>Rubric</Label>

@@ -64,9 +64,12 @@ export interface SketchPart {
   title: string;
   description: string;
   points: number | null;
+  /** Screenshots shown with the description (public image URLs). */
+  images: string[];
 }
 
 export const MAX_PARTS = 30;
+export const MAX_PART_IMAGES = 8;
 
 /**
  * Cleans the teacher's list of programs. Ids are kept when they are already
@@ -84,11 +87,16 @@ export function normalizeParts(raw: unknown): SketchPart[] {
     seen.add(id);
     const title = typeof p.title === 'string' ? p.title.trim().slice(0, 120) : '';
     const points = Number(p.points);
+    // Only plain https URLs: this is rendered as <img src> on the student page.
+    const images = (Array.isArray(p.images) ? p.images : [])
+      .filter((u: unknown) => typeof u === 'string' && /^https:\/\/[^\s"'<>]{1,2000}$/.test(u))
+      .slice(0, MAX_PART_IMAGES);
     out.push({
       id,
       title: title || `Program ${out.length + 1}`,
       description: typeof p.description === 'string' ? p.description.slice(0, 20000) : '',
       points: p.points !== null && p.points !== '' && Number.isFinite(points) && points >= 0 ? points : null,
+      images,
     });
   }
   return out;

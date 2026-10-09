@@ -102,6 +102,25 @@ function initialPrograms(draftKey, submission, project, programIds, multi) {
   return base;
 }
 
+// The screenshots a teacher attached to a program ("it should look like this").
+// Click one to open it full size in a new tab.
+function PartImages({ urls, compact = false }) {
+  if (!urls || urls.length === 0) return null;
+  return (
+    <div className={`flex flex-wrap gap-2 ${compact ? "mt-1" : "mt-2"}`}>
+      {urls.map((u) => (
+        <a key={u} href={u} target="_blank" rel="noopener noreferrer" title="Open full size">
+          <img
+            src={u}
+            alt="What this program should look like"
+            className={`rounded border bg-white object-contain ${compact ? "max-h-28 max-w-[200px]" : "max-h-72 max-w-full"}`}
+          />
+        </a>
+      ))}
+    </div>
+  );
+}
+
 export default function SketchWorkspace({ project, submission, draftKey, onSubmitted, onBack }) {
   const parts = useMemo(() => project.parts || [], [project.parts]);
   const multi = parts.length > 0;
@@ -386,6 +405,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                           <span className="ml-2 text-xs text-muted-foreground">{p.points} pt{p.points === 1 ? "" : "s"}</span>
                         )}
                         {p.description && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{p.description}</p>}
+                        <PartImages urls={p.images} />
                       </li>
                     ))}
                   </ol>
@@ -443,10 +463,13 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                   })}
                 </div>
               )}
-              {activeMeta?.description && (
-                <p className="px-3 py-1.5 text-xs text-muted-foreground border-b bg-slate-50/60 whitespace-pre-wrap">
-                  {activeMeta.description}
-                </p>
+              {(activeMeta?.description || (activeMeta?.images || []).length > 0) && (
+                <div className="px-3 py-1.5 border-b bg-slate-50/60 max-h-[30%] overflow-auto">
+                  {activeMeta.description && (
+                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">{activeMeta.description}</p>
+                  )}
+                  <PartImages urls={activeMeta.images} compact />
+                </div>
               )}
 
               <div className="flex items-end gap-0.5 px-2 pt-1.5 bg-slate-50 border-b overflow-x-auto">

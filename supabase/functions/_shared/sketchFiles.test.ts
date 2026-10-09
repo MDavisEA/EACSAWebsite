@@ -33,9 +33,14 @@ eq(validateSketchFiles([{ part: 'p1', filename: 'Sketch', content: 'a' }], undef
 eq(validateSketchFiles([{ part: 'p1', filename: 'Sketch', content: 'a' }], []), { files: [{ filename: 'Sketch.pde', content: 'a' }] }, 'empty parts list = single program');
 // ---- normalizeParts
 eq(normalizeParts('x'), [], 'not an array');
-eq(normalizeParts([{ id: 'keep_1', title: ' Ball ', description: 'd', points: '5' }]), [{ id: 'keep_1', title: 'Ball', description: 'd', points: 5 }], 'keeps a sound id, trims, numeric points');
+eq(normalizeParts([{ id: 'keep_1', title: ' Ball ', description: 'd', points: '5' }]), [{ id: 'keep_1', title: 'Ball', description: 'd', points: 5, images: [] }], 'keeps a sound id, trims, numeric points');
 const gen = normalizeParts([{ title: '' }, { id: 'bad id!', title: 'B', points: -2 }, { id: 'dup', title: 'C' }, { id: 'dup', title: 'D' }]);
 eq(gen.map((p) => p.title), ['Program 1', 'B', 'C', 'D'], 'blank title defaulted');
 eq(new Set(gen.map((p) => p.id)).size, 4, 'ids unique');
 eq(gen[1].points, null, 'negative points dropped');
 eq(normalizeParts(Array.from({ length: 40 }, (_, i) => ({ title: 't' + i }))).length, 30, 'capped at 30');
+
+eq(normalizeParts([{ title: 'a', images: ['https://x.supabase.co/storage/v1/object/public/uploads/a.png', 'http://insecure/x.png', 'javascript:alert(1)', 'https://ok.com/a b.png', 5, null] }])[0].images,
+  ['https://x.supabase.co/storage/v1/object/public/uploads/a.png'], 'only plain https image URLs survive');
+eq(normalizeParts([{ title: 'a', images: Array.from({ length: 12 }, (_, i) => 'https://x.co/' + i + '.png') }])[0].images.length, 8, 'at most 8 images per program');
+eq(normalizeParts([{ title: 'a' }])[0].images, [], 'images default to none');
