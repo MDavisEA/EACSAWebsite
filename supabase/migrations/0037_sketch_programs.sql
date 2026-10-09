@@ -1,0 +1,11 @@
+-- A sketch assignment can ask for more than one program: a problem set of mini
+-- programs instead of a single big one. `parts` is the teacher's list of them:
+--   [{ "id": "p_x7k2", "title": "Bouncing ball", "description": "...", "points": 5 }, ...]
+-- Empty (the default, and every existing project) means a single program, with
+-- exactly the behavior sketches had before this column existed.
+--
+-- Each part's id is stable: a student's files and the teacher's per-program
+-- scores (submissions.question_scores, keyed by part id, the same column an FRQ
+-- keeps its per-question scores in) point at it, so renaming a part must never
+-- change its id. Only meaningful for projects with kind = 'sketch'.
+alter table projects add column parts jsonb not null default '[]'::jsonb;

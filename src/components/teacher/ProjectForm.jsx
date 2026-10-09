@@ -14,6 +14,7 @@ import SampleOutputsEditor from "./SampleOutputsEditor";
 import MarkdownToolbar, { useMarkdownShortcuts } from "./MarkdownToolbar";
 import DueTimeQuickPicks from "./DueTimeQuickPicks";
 import SectionDueDatesEditor from "./SectionDueDatesEditor";
+import ProgramsEditor from "./ProgramsEditor";
 
 const DEFAULT_REVIEW_PROMPT = `Review each submission against the rubric above. Do not assign grades or numeric scores.
 
@@ -41,6 +42,7 @@ function defaultForm() {
     starter_files: [],
     google_doc_url: "",
     sample_outputs: [],
+    parts: [],
     course_id: null,
     unit_id: null,
     due_date: "",
@@ -116,6 +118,14 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
         .map((e) => ({ section_id: e.section_id, due_date: new Date(e.due_date).toISOString() })),
       course_id: form.course_id || null,
       unit_id: form.unit_id || null,
+      parts: isSketch
+        ? (form.parts || []).map((p) => ({
+            id: p.id,
+            title: (p.title || "").trim(),
+            description: p.description || "",
+            points: p.points === "" || p.points == null ? null : Number(p.points),
+          }))
+        : [],
     });
   };
 
@@ -264,6 +274,8 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
           the directions on the student page, which is where "what is this
           supposed to do?" actually comes up. */}
       <SampleOutputsEditor value={form.sample_outputs} onChange={(v) => updateField("sample_outputs", v)} />
+
+      {isSketch && <ProgramsEditor value={form.parts} onChange={(v) => updateField("parts", v)} />}
 
       <div className="space-y-2">
         <Label>Rubric</Label>

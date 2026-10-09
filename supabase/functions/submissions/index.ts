@@ -72,7 +72,11 @@ function withheldIfUnreleased(row: Record<string, any> | null) {
   // written review. Added when Projects gained line comments; without it the
   // one kind of project feedback that is written straight onto their code
   // would have been the only kind that leaked before release.
-  return { ...row, score: null, teacher_comments: null, line_comments: [] };
+  // question_scores holds a multi-program sketch's per-program scores (see
+  // saveGrade) - the score broken down, so it is withheld with the score. Added
+  // when sketches gained programs; without it the one place the number lives
+  // twice would have been the only one that leaked before release.
+  return { ...row, score: null, teacher_comments: null, line_comments: [], question_scores: {} };
 }
 
 // Verifies the caller actually owns this submission before allowing any
@@ -854,17 +858,20 @@ Deno.serve(async (req) => {
       if (!project_id) return json({ error: 'project_id is required' }, 400);
       const aiHelp = validateAiHelp(body);
       if ('error' in aiHelp) return json({ error: aiHelp.error }, 400);
-      const checked = validateSketchFiles(body.files);
-      if ('error' in checked) return json({ error: checked.error }, 400);
-
       const { data: proj } = await admin
         .from('projects')
-        .select('is_active, kind')
+        .select('is_active, kind, parts')
         .eq('id', project_id)
         .maybeSingle();
       if (!proj) return json({ error: 'Project not found.' }, 404);
       if (!proj.is_active) return json({ error: 'This project is no longer accepting submissions.' }, 409);
       if (proj.kind !== 'sketch') return json({ error: 'This project is turned in as a Gist, not as a sketch.' }, 400);
+
+      // An assignment can ask for several programs (a problem set); each tab
+      // then has to say which one it belongs to.
+      const partIds = (Array.isArray(proj.parts) ? proj.parts : []).map((p: Record<string, any>) => p.id);
+      const checked = validateSketchFiles(body.files, partIds);
+      if ('error' in checked) return json({ error: checked.error }, 400);
 
       const { data: existing, error: existingErr } = await admin
         .from('submissions')

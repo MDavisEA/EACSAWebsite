@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import SketchRunner from "@/components/SketchRunner";
 import { Button } from "@/components/ui/button";
 import { useSketchAssets } from "@/lib/processing/useSketchAssets";
 import { downloadSketchZip } from "@/lib/processing/exportSketch";
+import { baseName, groupFilesByPart } from "@/lib/processing/programs";
 import { AlertTriangle, Download, FileCode, Info, Loader2, Terminal } from "lucide-react";
 
 // The "Testing" half of a sketch's grading window: the student's code, running,
@@ -12,6 +13,8 @@ import { AlertTriangle, Download, FileCode, Info, Loader2, Terminal } from "luci
 //
 // `submission` needs { id, student_name, files }. Files are read from the
 // snapshot taken when they turned it in - editing nothing here changes it.
+// `parts` is the assignment's list of programs (empty = a single program); with
+// several, a picker chooses which one runs.
 
 export function FeedbackTestingToggle({ tab, onTab, className = "" }) {
   return (
@@ -34,14 +37,27 @@ export function FeedbackTestingToggle({ tab, onTab, className = "" }) {
   );
 }
 
-export default function SketchTestingPanel({ submission, projectTitle, height = 560 }) {
+export default function SketchTestingPanel({ submission, projectTitle, parts = [], height = 560 }) {
   const { status, assets, error } = useSketchAssets(submission?.id);
   const [report, setReport] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
 
-  const files = submission?.files;
-  const hasCode = (files || []).some((f) => (f.content || "").trim());
+  const groups = useMemo(
+    () => groupFilesByPart(submission?.files, parts).filter((g) => g.files.some((f) => (f.content || "").trim())),
+    [submission?.files, parts]
+  );
+  // Which program is running. A new student starts on their first program; a
+  // stale key (the program was removed) falls back the same way.
+  const [pick, setPick] = useState(null);
+  useEffect(() => setPick(null), [submission?.id]);
+  const group = groups.find((g) => g.key === pick) || groups[0];
+  const files = useMemo(
+    () => (group?.files || []).map((f) => ({ filename: baseName(f.filename), content: f.content })),
+    [group]
+  );
+  const hasCode = groups.length > 0;
+  const multi = parts.length > 0 || groups.length > 1;
   const missing = (report?.missing || []).filter(
     (m) => !assets.some((a) => a.name.toLowerCase() === m.name.toLowerCase())
   );
@@ -50,7 +66,15 @@ export default function SketchTestingPanel({ submission, projectTitle, height = 
     setExporting(true);
     setExportError("");
     try {
-      await downloadSketchZip({ studentName: submission.student_name, projectTitle, files, assets });
+      await downloadSketchZip({
+        studentName: submission.student_name,
+        projectTitle,
+        programs: groups.map((g) => ({
+          title: multi ? g.title : null,
+          files: g.files.map((f) => ({ filename: baseName(f.filename), content: f.content })),
+        })),
+        assets,
+      });
     } catch (e) {
       setExportError(e.message || "Couldn't build the download.");
     } finally {
@@ -83,6 +107,28 @@ export default function SketchTestingPanel({ submission, projectTitle, height = 
         </span>
       </div>
 
+      {multi && groups.length > 0 && (
+        <div className="px-3 py-1.5 border-b flex items-center gap-1 flex-wrap bg-white">
+          <span className="text-xs text-muted-foreground mr-1">Program:</span>
+          {groups.map((g, i) => (
+            <button
+              key={g.key}
+              onClick={() => setPick(g.key)}
+              className={`text-xs rounded-md px-2.5 py-1 border transition-colors ${
+                g.key === group?.key ? "bg-slate-900 text-white border-slate-900" : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {i + 1}. {g.title || "Code"}
+            </button>
+          ))}
+          {parts.length > groups.length && (
+            <span className="text-xs text-muted-foreground ml-2">
+              {parts.length - groups.length} not turned in
+            </span>
+          )}
+        </div>
+      )}
+
       {(error || exportError) && <p className="text-sm text-destructive px-3 py-2 border-b">{error || exportError}</p>}
 
       {missing.length > 0 && (
@@ -105,7 +151,7 @@ export default function SketchTestingPanel({ submission, projectTitle, height = 
         <div style={{ height }}>
           <SketchRunner
             // A new student (or a re-fetched set of files) is a clean start.
-            resetKey={submission.id}
+            resetKey={`${submission.id}:${group?.key}`}
             files={files}
             assets={assets}
             autoRun

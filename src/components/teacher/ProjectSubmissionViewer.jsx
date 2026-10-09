@@ -17,6 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { FileDown, Trash2, ExternalLink, Loader2, Upload, CheckCircle2, XCircle, AlertTriangle, RefreshCw, UserX, ChevronDown, ChevronUp, Clock, Send, Bot } from "lucide-react";
 import AiHelpBadge from "./AiHelpBadge";
 import SketchTestingPanel, { FeedbackTestingToggle } from "./SketchTestingPanel";
+import { baseName, groupFilesByPart, partsTotalPoints, sumPartScores } from "@/lib/processing/programs";
 import { exportProjectForReview } from "@/lib/exportProjectZip";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
 import { byLastName } from "@/lib/groupSubmissionsByStudent";
@@ -65,6 +66,10 @@ export default function ProjectSubmissionViewer({ project }) {
   // Assignment has: read and comment, or run what they turned in.
   const isSketch = project.kind === "sketch";
   const [reviewTab, setReviewTab] = useState("feedback");
+  // A problem set: several programs, each scored separately and summed.
+  const parts = isSketch ? project.parts || [] : [];
+  const hasParts = parts.length > 0;
+  const [reviewScores, setReviewScores] = useState({}); // programId -> typed score
   const [reviewDraft, setReviewDraft] = useState({
     teacher_comments: "",
     score: "",
@@ -198,6 +203,7 @@ export default function ProjectSubmissionViewer({ project }) {
       feedback_ack_required: !!s.feedback_ack_required,
     });
     setLineComments([]);
+    setReviewScores(Object.fromEntries(Object.entries(s.question_scores || {}).map(([k, v]) => [k, String(v)])));
     setReviewError("");
     setReviewTab("feedback");
     // Open on their first file rather than nothing, so the code is visible
@@ -209,6 +215,11 @@ export default function ProjectSubmissionViewer({ project }) {
       // Dropped if the teacher has already moved on to someone else.
       setReviewTarget((cur) => (cur && cur.id === full.id ? { ...cur, ...full } : cur));
       setLineComments((cur) => (cur.length === 0 ? full.line_comments || [] : cur));
+      setReviewScores((cur) =>
+        Object.keys(cur).length === 0
+          ? Object.fromEntries(Object.entries(full.question_scores || {}).map(([k, v]) => [k, String(v)]))
+          : cur
+      );
     } catch (e) {
       setReviewError(e.message || "Couldn't load this submission's files.");
     } finally {
@@ -236,9 +247,24 @@ export default function ProjectSubmissionViewer({ project }) {
   const handleSaveReview = async () => {
     setSavingReview(true);
     try {
+      let perProgram = {};
+      if (hasParts) {
+        const ids = new Set(parts.map((p) => p.id));
+        perProgram = Object.fromEntries(
+          Object.entries(reviewScores)
+            .filter(([k]) => ids.has(k))
+            .map(([k, v]) => [k, parseFloat(v)])
+            .filter(([, v]) => !isNaN(v))
+        );
+      }
       await base44.entities.Submission.update(reviewTarget.id, {
         teacher_comments: reviewDraft.teacher_comments,
-        score: reviewDraft.score === "" ? null : Number(reviewDraft.score),
+        // With programs the total is the sum of the per-program scores, which are
+        // filed under each program's id (the same column an FRQ uses).
+        ...(hasParts ? { question_scores: perProgram } : {}),
+        score: hasParts
+          ? (Object.keys(perProgram).length > 0 ? sumPartScores(perProgram) : null)
+          : reviewDraft.score === "" ? null : Number(reviewDraft.score),
         feedback_released: reviewDraft.feedback_released,
         feedback_ack_required: reviewDraft.feedback_ack_required,
         line_comments: lineComments,
@@ -463,7 +489,7 @@ export default function ProjectSubmissionViewer({ project }) {
         submissions={submissions}
         courseId={project.course_id}
         preloadedRoster={roster}
-        maxPoints={null}
+        maxPoints={partsTotalPoints(project.parts)}
         scoreOf={(s) => s.score ?? null}
       />
 
@@ -506,7 +532,7 @@ export default function ProjectSubmissionViewer({ project }) {
                 Loading their sketch...
               </p>
             ) : (
-              <SketchTestingPanel submission={reviewTarget} projectTitle={project.title} height={520} />
+              <SketchTestingPanel submission={reviewTarget} projectTitle={project.title} parts={parts} height={520} />
             )
           )}
 
@@ -516,26 +542,34 @@ export default function ProjectSubmissionViewer({ project }) {
               which is a poor fit for "line 34 of Board.java is the problem". */}
           {!(isSketch && reviewTab === "testing") && (reviewTarget?.file_names || reviewTarget?.files || []).length > 0 && (
             <div className="border rounded-lg overflow-hidden">
-              <div className="bg-slate-100 border-b px-2 py-1.5 flex items-center gap-1 flex-wrap">
-                {(reviewTarget.file_names ?? (reviewTarget.files || []).map((f) => f.filename)).map(
-                  (filename) => {
-                    const count = lineComments.filter((c) => (c.file ?? null) === filename).length;
-                    return (
-                      <button
-                        key={filename}
-                        onClick={() => setActiveFile(filename)}
-                        className={`text-xs font-mono rounded px-2 py-1 transition-colors ${
-                          activeFile === filename
-                            ? "bg-white shadow-sm font-semibold"
-                            : "text-slate-500 hover:text-slate-800"
-                        }`}
-                      >
-                        {filename}
-                        {count > 0 && <span className="ml-1.5 text-amber-600">{count}</span>}
-                      </button>
-                    );
-                  }
-                )}
+              <div className="bg-slate-100 border-b px-2 py-1.5 flex items-center gap-x-3 gap-y-1 flex-wrap">
+                {groupFilesByPart(
+                  (reviewTarget.file_names ?? (reviewTarget.files || []).map((f) => f.filename)).map((filename) => ({ filename })),
+                  parts
+                ).map((g) => (
+                  <div key={g.key} className="flex items-center gap-1 flex-wrap">
+                    {hasParts && g.title && (
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mr-0.5">{g.title}</span>
+                    )}
+                    {g.files.map(({ filename }) => {
+                      const count = lineComments.filter((c) => (c.file ?? null) === filename).length;
+                      return (
+                        <button
+                          key={filename}
+                          onClick={() => setActiveFile(filename)}
+                          className={`text-xs font-mono rounded px-2 py-1 transition-colors ${
+                            activeFile === filename
+                              ? "bg-white shadow-sm font-semibold"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          {hasParts ? baseName(filename) : filename}
+                          {count > 0 && <span className="ml-1.5 text-amber-600">{count}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
                 <span className="text-xs text-muted-foreground ml-auto pr-1">
                   Click any line to comment on it
                 </span>
@@ -598,15 +632,38 @@ export default function ProjectSubmissionViewer({ project }) {
               </div>
             )}
 
-            <div className="space-y-2 max-w-[160px]">
-              <Label>Score (optional)</Label>
-              <Input
-                type="number"
-                value={reviewDraft.score}
-                onChange={(e) => setReviewDraft((d) => ({ ...d, score: e.target.value }))}
-                placeholder="—"
-              />
-            </div>
+            {hasParts ? (
+              <div className="space-y-2 max-w-md">
+                <Label>Score each program</Label>
+                {parts.map((p, i) => (
+                  <div key={p.id} className="flex items-center gap-2">
+                    <span className="text-sm flex-1 truncate" title={p.title}>{i + 1}. {p.title}</span>
+                    <Input
+                      type="number"
+                      value={reviewScores[p.id] ?? ""}
+                      onChange={(e) => setReviewScores((q) => ({ ...q, [p.id]: e.target.value }))}
+                      className="w-20 text-center h-8"
+                    />
+                    {typeof p.points === "number" && <span className="text-xs text-muted-foreground w-10">/ {p.points}</span>}
+                  </div>
+                ))}
+                <p className="text-sm">
+                  Total <span className="font-semibold">{sumPartScores(reviewScores) ?? "—"}</span>
+                  {partsTotalPoints(parts) != null && <span className="text-muted-foreground"> / {partsTotalPoints(parts)}</span>}
+                  <span className="text-xs text-muted-foreground"> &middot; added up from the programs</span>
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-w-[160px]">
+                <Label>Score (optional)</Label>
+                <Input
+                  type="number"
+                  value={reviewDraft.score}
+                  onChange={(e) => setReviewDraft((d) => ({ ...d, score: e.target.value }))}
+                  placeholder="—"
+                />
+              </div>
+            )}
 
             <div className="flex items-center gap-3 border-t pt-4">
               <Switch

@@ -6,6 +6,7 @@ import { googleDocEmbedUrl } from "@/lib/googleDoc";
 import {
   ACCEPT_ATTR, MAX_ASSET_BYTES, MAX_ASSETS_TOTAL_BYTES, assetFromBlob, formatBytes, loadAssets,
 } from "@/lib/processing/assets";
+import { baseName, partIdOf } from "@/lib/processing/programs";
 import SketchRunner from "@/components/SketchRunner";
 import SampleOutputs from "@/components/SampleOutputs";
 import ResizableDivider from "@/components/exam/ResizableDivider";
@@ -23,8 +24,14 @@ import {
 // teacher can run and grade it without opening each student's files - so the
 // editor is deliberately a plain text area, with a local draft so a refresh
 // never loses a paste.
+//
+// An assignment can ask for several programs (a problem set): then there is a
+// strip of them above the code, each with its own tabs, and Run runs whichever
+// is open. Uploaded files are shared by the whole assignment. With no programs
+// listed it is one sketch and the strip never appears.
 
 const MAIN_TAB_DEFAULT = "Sketch";
+const SINGLE = "main"; // the one program of an assignment that lists none
 
 function safeTabName(raw) {
   let s = String(raw || "").replace(/\.pde$/i, "").replace(/[^A-Za-z0-9_]/g, "_");
@@ -32,37 +39,77 @@ function safeTabName(raw) {
   return s.slice(0, 60) || MAIN_TAB_DEFAULT;
 }
 
-// Names go through the same cleanup the server applies on turn-in, so a tab
-// called "my-game" is "my_game" here too and a re-open doesn't look edited.
-const toTabs = (files) => (files || []).map((f) => ({ name: safeTabName(f.filename), code: f.content }));
-const toFiles = (tabs) => tabs.map((t) => ({ filename: `${t.name}.pde`, content: t.code }));
+const hasCode = (tabs) => (tabs || []).some((t) => t.code.trim());
+const blankProgram = () => [{ name: MAIN_TAB_DEFAULT, code: "" }];
+
+// Stored files -> { [programId]: [{ name, code }] }. Names go through the same
+// cleanup the server applies on turn-in, so a tab called "my-game" is "my_game"
+// here too and re-opening doesn't look like an edit. A program the teacher has
+// since removed has nowhere to live on this page and is dropped.
+function programsFromFiles(files, programIds, multi) {
+  const out = Object.fromEntries(programIds.map((id) => [id, []]));
+  for (const f of files || []) {
+    const id = multi ? partIdOf(f) : SINGLE;
+    if (!out[id]) continue;
+    out[id].push({ name: safeTabName(multi ? baseName(f.filename) : f.filename), code: f.content });
+  }
+  return out;
+}
+
+// What gets turned in: every tab of every program that has any code. Used for
+// BOTH the submit payload and the "changed since you turned it in" comparison,
+// so the two can never disagree about what counts.
+function toSubmission(programs, programIds, multi) {
+  const out = [];
+  for (const id of programIds) {
+    const tabs = programs[id] || [];
+    if (!hasCode(tabs)) continue;
+    for (const t of tabs) out.push({ ...(multi ? { part: id } : {}), filename: `${t.name}.pde`, content: t.code });
+  }
+  return out;
+}
 
 function readDraft(key) {
   try {
     const raw = JSON.parse(localStorage.getItem(key) || "null");
-    if (raw?.tabs?.length && raw.tabs.every((t) => typeof t.name === "string" && typeof t.code === "string")) return raw;
+    const ok = (tabs) => Array.isArray(tabs) && tabs.every((t) => typeof t?.name === "string" && typeof t?.code === "string");
+    if (raw?.programs && typeof raw.programs === "object" && Object.values(raw.programs).every(ok)) return raw;
+    // Drafts saved before assignments could have several programs.
+    if (ok(raw?.tabs) && raw.tabs.length) return { programs: { [SINGLE]: raw.tabs }, savedAt: raw.savedAt };
   } catch {
     // storage unavailable or corrupt: just start from the submission
   }
   return null;
 }
 
-function initialTabs(draftKey, submission, project) {
+function initialPrograms(draftKey, submission, project, programIds, multi) {
+  const base = Object.fromEntries(programIds.map((id) => [id, blankProgram()]));
+  const fill = (source) => {
+    for (const id of programIds) if (source[id]?.length) base[id] = source[id];
+    return base;
+  };
   const draft = readDraft(draftKey);
   // A draft wins over the turned-in copy - it holds edits made since - unless
   // the turn-in is NEWER (they turned it in from another computer since this
   // draft was last touched), in which case the draft is the stale one.
   const turnedInAt = submission?.submitted_at ? new Date(submission.submitted_at).getTime() : 0;
-  if (draft && !(turnedInAt && turnedInAt > (draft.savedAt || 0))) return draft.tabs;
-  if ((submission?.files || []).length) return toTabs(submission.files);
-  const starter = (project.starter_files || []).filter((f) => /\.pde$/i.test(f.filename));
-  if (starter.length) return toTabs(starter);
-  return [{ name: MAIN_TAB_DEFAULT, code: "" }];
+  if (draft && !(turnedInAt && turnedInAt > (draft.savedAt || 0))) return fill(draft.programs);
+  if ((submission?.files || []).length) return fill(programsFromFiles(submission.files, programIds, multi));
+  if (!multi) {
+    const starter = (project.starter_files || []).filter((f) => /\.pde$/i.test(f.filename));
+    if (starter.length) return fill({ [SINGLE]: starter.map((f) => ({ name: safeTabName(f.filename), code: f.content })) });
+  }
+  return base;
 }
 
 export default function SketchWorkspace({ project, submission, draftKey, onSubmitted, onBack }) {
-  const [tabs, setTabs] = useState(() => initialTabs(draftKey, submission, project));
-  const [active, setActive] = useState(0);
+  const parts = useMemo(() => project.parts || [], [project.parts]);
+  const multi = parts.length > 0;
+  const programIds = useMemo(() => (multi ? parts.map((p) => p.id) : [SINGLE]), [multi, parts]);
+
+  const [programs, setPrograms] = useState(() => initialPrograms(draftKey, submission, project, programIds, multi));
+  const [activePart, setActivePart] = useState(programIds[0]);
+  const [activeTabs, setActiveTabs] = useState({}); // programId -> open tab index
   const [view, setView] = useState("code"); // code | assignment
   const [split, setSplit] = useState(46);
 
@@ -83,22 +130,31 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   const runnerRef = useRef(null);
   const pickerRef = useRef(null);
 
+  const tabs = programs[activePart] || blankProgram();
+  const active = Math.min(activeTabs[activePart] || 0, tabs.length - 1);
+  const current = tabs[active];
+  const setActive = (i) => setActiveTabs((a) => ({ ...a, [activePart]: i }));
+  const activeMeta = multi ? parts.find((p) => p.id === activePart) : null;
+
   // ---- draft: every edit is kept locally, so a refresh or a closed tab never loses a paste ----
   useEffect(() => {
     try {
-      localStorage.setItem(draftKey, JSON.stringify({ tabs, savedAt: Date.now() }));
+      localStorage.setItem(draftKey, JSON.stringify({ programs, savedAt: Date.now() }));
     } catch {
       // private window / storage full - the page still works, it just can't remember
     }
-  }, [tabs, draftKey]);
+  }, [programs, draftKey]);
 
-  const files = useMemo(() => toFiles(tabs), [tabs]);
-  const hasCode = tabs.some((t) => t.code.trim());
+  // What the runner is handed: just the open program's tabs.
+  const runFiles = useMemo(() => tabs.map((t) => ({ filename: `${t.name}.pde`, content: t.code })), [tabs]);
+  const anyCode = programIds.some((id) => hasCode(programs[id]));
+  const filledCount = programIds.filter((id) => hasCode(programs[id])).length;
   const submitted = !!submission?.submitted;
   const changedSinceSubmit = useMemo(() => {
     if (!submitted) return false;
-    return JSON.stringify(toTabs(submission.files || [])) !== JSON.stringify(tabs);
-  }, [submitted, submission?.files, tabs]);
+    const stored = toSubmission(programsFromFiles(submission.files, programIds, multi), programIds, multi);
+    return JSON.stringify(stored) !== JSON.stringify(toSubmission(programs, programIds, multi));
+  }, [submitted, submission?.files, programs, programIds, multi]);
 
   // ---- existing uploaded files ----
   useEffect(() => {
@@ -160,7 +216,8 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
     }
   };
 
-  // ---- editing ----
+  // ---- editing (always the open program) ----
+  const setTabs = (fn) => setPrograms((prev) => ({ ...prev, [activePart]: fn(prev[activePart] || blankProgram()) }));
   const setCode = (code) => setTabs((prev) => prev.map((t, i) => (i === active ? { ...t, code } : t)));
 
   const addTab = () => {
@@ -174,7 +231,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
 
   const deleteTab = (i) => {
     setTabs((prev) => prev.filter((_, j) => j !== i));
-    setActive((a) => Math.max(0, Math.min(a, tabs.length - 2)));
+    setActive(Math.max(0, Math.min(active, tabs.length - 2)));
   };
 
   const finishRename = (i, raw) => {
@@ -212,12 +269,18 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   const missingNow = (report?.missing || []).filter(
     (m) => !assets.some((a) => a.name.toLowerCase() === m.name.toLowerCase())
   );
+  const emptyPrograms = multi ? parts.filter((p) => !hasCode(programs[p.id])) : [];
 
   const handleSubmit = async () => {
     setSubmitting(true);
     setSubmitError("");
     try {
-      const sub = await base44.entities.Submission.submitSketch(project.id, files, aiHelpUsed, aiHelpLink.trim() || null);
+      const sub = await base44.entities.Submission.submitSketch(
+        project.id,
+        toSubmission(programs, programIds, multi),
+        aiHelpUsed,
+        aiHelpLink.trim() || null
+      );
       onSubmitted(sub);
       setSubmitOpen(false);
     } catch (e) {
@@ -230,7 +293,6 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   const due = project.due_date ? new Date(project.due_date) : null;
   const pastDue = due && due < new Date();
   const hasFeedback = !!submission?.feedback_released && (submission.score != null || (submission.teacher_comments || "").trim());
-  const current = tabs[Math.min(active, tabs.length - 1)];
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
@@ -268,7 +330,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
           ) : (
             <span className="text-xs text-muted-foreground">Not turned in yet</span>
           )}
-          <Button onClick={() => { setSubmitError(""); setSubmitOpen(true); }} disabled={!hasCode}>
+          <Button onClick={() => { setSubmitError(""); setSubmitOpen(true); }} disabled={!anyCode}>
             <Send className="w-4 h-4 mr-1.5" />
             {submitted ? "Turn in again" : "Turn in"}
           </Button>
@@ -290,6 +352,11 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                 {label}
               </button>
             ))}
+            {multi && (
+              <span className="ml-3 text-xs text-muted-foreground pb-1.5">
+                {filledCount} of {parts.length} programs started
+              </span>
+            )}
             <span className="ml-auto text-[11px] text-muted-foreground pb-1.5">Run: Ctrl/Cmd + Enter</span>
           </div>
 
@@ -300,6 +367,29 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                   className="prose prose-sm max-w-none quill-render"
                   dangerouslySetInnerHTML={{ __html: openLinksInNewTab(project.description_html) }}
                 />
+              )}
+              {multi && (
+                <div className="space-y-2">
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Programs to turn in ({parts.length})
+                  </h2>
+                  <ol className="space-y-2">
+                    {parts.map((p, i) => (
+                      <li key={p.id} className="border rounded-lg p-3">
+                        <button
+                          onClick={() => { setActivePart(p.id); setView("code"); }}
+                          className="font-medium text-sm hover:text-primary text-left"
+                        >
+                          {i + 1}. {p.title}
+                        </button>
+                        {typeof p.points === "number" && (
+                          <span className="ml-2 text-xs text-muted-foreground">{p.points} pt{p.points === 1 ? "" : "s"}</span>
+                        )}
+                        {p.description && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{p.description}</p>}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
               )}
               {project.google_doc_url && (
                 <div>
@@ -324,12 +414,41 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                   <div className="text-sm markdown-render"><ReactMarkdown>{project.rubric_md}</ReactMarkdown></div>
                 </div>
               )}
-              {!project.description_html && !project.google_doc_url && !project.rubric_md && (
+              {!project.description_html && !project.google_doc_url && !project.rubric_md && !multi && (
                 <p className="text-sm text-muted-foreground">Your teacher didn't add directions for this one.</p>
               )}
             </div>
           ) : (
             <>
+              {/* ---- the programs of a problem set ---- */}
+              {multi && (
+                <div className="flex items-center gap-1 px-2 py-1.5 border-b bg-slate-50 overflow-x-auto">
+                  {parts.map((p, i) => {
+                    const filled = hasCode(programs[p.id]);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => setActivePart(p.id)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 text-sm rounded-md whitespace-nowrap border transition-colors ${
+                          p.id === activePart
+                            ? "bg-white border-primary/50 font-medium shadow-sm"
+                            : "border-transparent text-muted-foreground hover:bg-white hover:text-foreground"
+                        }`}
+                        title={filled ? "Has code" : "Nothing here yet"}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${filled ? "bg-emerald-500" : "bg-slate-300"}`} />
+                        {i + 1}. {p.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {activeMeta?.description && (
+                <p className="px-3 py-1.5 text-xs text-muted-foreground border-b bg-slate-50/60 whitespace-pre-wrap">
+                  {activeMeta.description}
+                </p>
+              )}
+
               <div className="flex items-end gap-0.5 px-2 pt-1.5 bg-slate-50 border-b overflow-x-auto">
                 {tabs.map((t, i) => (
                   <div
@@ -339,7 +458,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                     className={`group flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-t-md border border-b-0 cursor-pointer whitespace-nowrap ${
                       i === active ? "bg-white font-medium" : "bg-slate-100 text-muted-foreground hover:text-foreground"
                     }`}
-                    title={i === 0 ? "Your main sketch tab. Double-click to rename." : "Double-click to rename"}
+                    title={i === 0 ? "This program's main tab. Double-click to rename." : "Double-click to rename"}
                   >
                     {renaming === i ? (
                       <input
@@ -373,7 +492,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                 spellCheck={false}
                 autoCapitalize="off"
                 autoComplete="off"
-                placeholder="Paste your Processing code here, then press Run."
+                placeholder={multi ? `Paste program ${parts.findIndex((p) => p.id === activePart) + 1} here, then press Run.` : "Paste your Processing code here, then press Run."}
                 className="flex-1 min-h-[120px] w-full resize-none outline-none p-3 font-mono text-[13px] leading-6 whitespace-pre overflow-auto"
               />
 
@@ -388,6 +507,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                   <span className="font-semibold uppercase tracking-wide text-muted-foreground">Files</span>
                   <span className="text-muted-foreground">
                     Images or anything else your code loads, like <code>loadImage("ship.png")</code>
+                    {multi && " - shared by every program"}
                   </span>
                   <Button size="sm" variant="outline" className="ml-auto h-7" onClick={() => pickerRef.current?.click()}>
                     <Upload className="w-3.5 h-3.5 mr-1.5" /> Add files
@@ -463,9 +583,10 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
           <SketchRunner
             ref={runnerRef}
             className="h-full"
-            files={files}
+            files={runFiles}
             assets={assets}
-            resetKey={project.id}
+            // Switching program stops the one that was running.
+            resetKey={`${project.id}:${activePart}`}
             onReport={setReport}
           />
         </div>
@@ -474,12 +595,22 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
       <Dialog open={submitOpen} onOpenChange={(o) => !submitting && setSubmitOpen(o)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{submitted ? "Turn in again?" : "Turn in your sketch"}</DialogTitle>
+            <DialogTitle>{submitted ? "Turn in again?" : "Turn in your work"}</DialogTitle>
             <DialogDescription>
-              {tabs.length} tab{tabs.length === 1 ? "" : "s"} of code and {assets.length} file{assets.length === 1 ? "" : "s"}.
+              {multi
+                ? `${filledCount} of ${parts.length} programs`
+                : `${tabs.length} tab${tabs.length === 1 ? "" : "s"} of code`}{" "}
+              and {assets.length} file{assets.length === 1 ? "" : "s"}.
               {submitted && " This replaces what you turned in before."}
             </DialogDescription>
           </DialogHeader>
+
+          {emptyPrograms.length > 0 && (
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              Nothing written yet for: {emptyPrograms.map((p) => p.title).join(", ")}. You can turn in now and add
+              {emptyPrograms.length === 1 ? " it" : " them"} later by turning in again.
+            </p>
+          )}
 
           {missingNow.length > 0 && (
             <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -507,7 +638,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setSubmitOpen(false)} disabled={submitting}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={submitting || !aiHelpAnswered || !hasCode}>
+            <Button onClick={handleSubmit} disabled={submitting || !aiHelpAnswered || !anyCode}>
               {submitting ? "Turning in..." : submitted ? "Turn in again" : "Turn in"}
             </Button>
           </div>

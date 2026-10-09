@@ -15,6 +15,7 @@ import AnswerKeyPanel from "./AnswerKeyPanel";
 import HighlightedCode from "@/components/HighlightedCode";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import SketchTestingPanel from "./SketchTestingPanel";
+import { baseName, groupFilesByPart, partsTotalPoints, sumPartScores } from "@/lib/processing/programs";
 import {
   Loader2, ChevronLeft, ChevronRight, CheckCircle2, EyeOff, FileCode, Terminal, Info,
   KeyRound, ExternalLink, Bot,
@@ -157,6 +158,10 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
   // the same Feedback / Testing toggle a Coding Assignment has - read and
   // comment, or run what they turned in.
   const isSketch = kind === "project" && work?.kind === "sketch";
+  // A problem set: the assignment lists several programs, each scored (and
+  // commented on) separately, with the total added up for you like an FRQ.
+  const parts = isSketch ? work?.parts || [] : [];
+  const hasParts = parts.length > 0;
   const commentScope = work
     ? kind === "frq"
       ? { assignment_id: work.id }
@@ -172,6 +177,8 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
       ? work?.manual_points ?? work?.points_possible ?? null
       : kind === "code"
       ? work?.points_possible ?? null
+      : kind === "project"
+      ? partsTotalPoints(work?.parts)
       : null;
 
   // Only a Project has files, so only there does a comment need to record
@@ -258,6 +265,18 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
       } else if (kind === "code") {
         // Autograded: never write `score` - the mark is autograde_score and a
         // null here would make it look hand-graded and ungraded at once.
+      } else if (hasParts) {
+        // Per-program scores, filed under each program's id in the same column
+        // an FRQ keeps its per-question scores in; the total is their sum.
+        const ids = new Set(parts.map((p) => p.id));
+        const parsed = Object.fromEntries(
+          Object.entries(questionScores)
+            .filter(([k]) => ids.has(k))
+            .map(([k, v]) => [k, parseFloat(v)])
+            .filter(([, v]) => !isNaN(v))
+        );
+        patch.question_scores = parsed;
+        patch.score = Object.keys(parsed).length > 0 ? sumPartScores(parsed) : null;
       } else {
         const parsed = score.trim() === "" ? null : Number(score);
         patch.score = Number.isFinite(parsed) ? parsed : null;
@@ -402,7 +421,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
             ) : isSketch && tab === "testing" ? (
-              <SketchTestingPanel submission={submission} projectTitle={work?.title} height={520} />
+              <SketchTestingPanel submission={submission} projectTitle={work?.title} parts={parts} height={520} />
             ) : isCode && tab === "testing" ? (
               <div className="border rounded-lg overflow-hidden">
                 <div className="bg-slate-100 px-3 py-1.5 border-b flex items-center gap-2">
@@ -431,24 +450,33 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                   {kind === "project" ? (
                     (submission.files || []).length > 0 ? (
                       <>
-                        <div className="bg-slate-100 border-b px-2 py-1.5 flex items-center gap-1 flex-wrap">
-                          {(submission.files || []).map((f) => {
-                            const count = lineComments.filter((c) => (c.file ?? null) === f.filename).length;
-                            return (
-                              <button
-                                key={f.filename}
-                                onClick={() => setActiveFile(f.filename)}
-                                className={`text-xs font-mono rounded px-2 py-1 transition-colors ${
-                                  activeFile === f.filename
-                                    ? "bg-white shadow-sm font-semibold"
-                                    : "text-slate-500 hover:text-slate-800"
-                                }`}
-                              >
-                                {f.filename}
-                                {count > 0 && <span className="ml-1.5 text-amber-600">{count}</span>}
-                              </button>
-                            );
-                          })}
+                        <div className="bg-slate-100 border-b px-2 py-1.5 flex items-center gap-x-3 gap-y-1 flex-wrap">
+                          {groupFilesByPart(submission.files, parts).map((g) => (
+                            <div key={g.key} className="flex items-center gap-1 flex-wrap">
+                              {hasParts && g.title && (
+                                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mr-0.5">
+                                  {g.title}
+                                </span>
+                              )}
+                              {g.files.map((f) => {
+                                const count = lineComments.filter((c) => (c.file ?? null) === f.filename).length;
+                                return (
+                                  <button
+                                    key={f.filename}
+                                    onClick={() => setActiveFile(f.filename)}
+                                    className={`text-xs font-mono rounded px-2 py-1 transition-colors ${
+                                      activeFile === f.filename
+                                        ? "bg-white shadow-sm font-semibold"
+                                        : "text-slate-500 hover:text-slate-800"
+                                    }`}
+                                  >
+                                    {hasParts ? baseName(f.filename) : f.filename}
+                                    {count > 0 && <span className="ml-1.5 text-amber-600">{count}</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
                         </div>
                         <AnnotatedCodeView
                           key={`${submission.id}::${activeFile}`}
@@ -615,6 +643,27 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                         Scored by the tests. Your feedback below is what a human adds.
                       </span>
                     </p>
+                  ) : hasParts ? (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-slate-500">Score each program</Label>
+                      {parts.map((p, i) => (
+                        <div key={p.id} className="flex items-center gap-2">
+                          <span className="text-sm flex-1 truncate" title={p.title}>{i + 1}. {p.title}</span>
+                          <Input
+                            type="number"
+                            value={questionScores[p.id] ?? ""}
+                            onChange={(e) => setQuestionScores((q) => ({ ...q, [p.id]: e.target.value }))}
+                            className="w-20 text-center h-8"
+                          />
+                          {typeof p.points === "number" && <span className="text-xs text-muted-foreground w-10">/ {p.points}</span>}
+                        </div>
+                      ))}
+                      <p className="text-sm pt-1">
+                        Total <span className="font-semibold">{sumPartScores(questionScores) ?? "—"}</span>
+                        {maxPoints != null && <span className="text-muted-foreground"> / {maxPoints}</span>}
+                        <span className="text-xs text-muted-foreground block">Added up from the programs.</span>
+                      </p>
+                    </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       <Label className="text-xs text-slate-500 whitespace-nowrap">

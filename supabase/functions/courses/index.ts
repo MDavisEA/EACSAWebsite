@@ -675,7 +675,7 @@ Deno.serve(async (req) => {
         admin.from('roster_students').select('*').eq('course_id', course_id).order('student_name', { ascending: true }),
         admin.from('assignments').select('id, title, due_date, course_id, unit_id, sort_order, questions').eq('course_id', course_id).eq('is_active', true),
         admin.from('coding_problems').select('id, title, due_date, course_id, unit_id, sort_order, points_possible').eq('course_id', course_id).eq('is_active', true),
-        admin.from('projects').select('id, title, due_date, course_id, unit_id, sort_order').eq('course_id', course_id).eq('is_active', true),
+        admin.from('projects').select('id, title, due_date, course_id, unit_id, sort_order, parts').eq('course_id', course_id).eq('is_active', true),
         admin.from('loop_assignments').select('id, title, due_date, course_id, unit_id, sort_order, target_score').eq('course_id', course_id).eq('is_active', true),
         admin.from('units').select('id, course_id, name, position').eq('course_id', course_id),
       ]);

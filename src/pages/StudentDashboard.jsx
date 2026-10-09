@@ -581,6 +581,12 @@ export default function StudentDashboard() {
                       }
                     : undefined
                 }
+                // A multi-program sketch labels each program's code and score.
+                project={
+                  detail.item.kind === "project"
+                    ? { title: detail.item.title, parts: detail.item.parts || [] }
+                    : undefined
+                }
                 onReply={postReply}
               />
 

@@ -42,6 +42,10 @@ export interface WorkItem {
   // 'reviewed' and this goes false, same as if they had just clicked it
   // unprompted.
   needs_ack: boolean;
+  // A sketch assignment's list of programs ([{ id, title, points }]), so a
+  // feedback view can label each program's code and score. Absent for
+  // everything else.
+  parts?: { id: string; title: string; points: number | null }[];
 }
 
 // Project feedback is release-gated (see submissions/index.ts); FRQ and code
@@ -170,7 +174,14 @@ export function buildWorkItems(
       due_date: pr.due_date ?? null,
       status,
       score,
-      points_possible: null,
+      // Only when every program says how many points it is worth - a partial
+      // total would read as a lower maximum than the real one.
+      points_possible: (() => {
+        const parts: Record<string, any>[] = Array.isArray(pr.parts) ? pr.parts : [];
+        return parts.length > 0 && parts.every((p) => typeof p.points === 'number')
+          ? parts.reduce((sum, p) => sum + p.points, 0)
+          : null;
+      })(),
       submitted_at: sub?.submitted_at ?? null,
       is_late: !!(pr.due_date && sub?.submitted_at && new Date(sub.submitted_at) > new Date(pr.due_date)),
       submission_id: sub?.id ?? null,
@@ -179,6 +190,11 @@ export function buildWorkItems(
       sort_order: pr.sort_order ?? null,
       ...feedbackFlags(sub, true),
       needs_ack: status === 'graded' && !!sub?.feedback_ack_required,
+      parts: (Array.isArray(pr.parts) ? pr.parts : []).map((p: Record<string, any>) => ({
+        id: p.id,
+        title: p.title,
+        points: typeof p.points === 'number' ? p.points : null,
+      })),
     });
   }
 

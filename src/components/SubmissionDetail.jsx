@@ -1,3 +1,4 @@
+import { baseName, groupFilesByPart } from "@/lib/processing/programs";
 import React, { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -317,19 +318,38 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
               </a>
             )}
             <div className="mt-3 space-y-3">
-              {(result.files || []).map((f) => {
-                const notes = (visibleLineComments || []).filter((c) => (c.file ?? null) === f.filename);
+              {groupFilesByPart(result.files, project?.parts || []).map((g) => {
+                const partScore = g.part && projectFeedbackVisible ? result.question_scores?.[g.part.id] : null;
                 return (
-                  <div key={f.filename}>
-                    <p className="text-xs font-mono font-semibold text-slate-500 mb-1">
-                      {f.filename}
-                      {notes.length > 0 && (
-                        <span className="ml-2 font-sans font-normal text-amber-600">
-                          {notes.length} comment{notes.length === 1 ? "" : "s"}
-                        </span>
-                      )}
-                    </p>
-                    <CodeWithNotes code={f.content} file={f.filename} lineComments={visibleLineComments} />
+                  <div key={g.key} className="space-y-3">
+                    {/* A problem set: which program this is, and what it earned. */}
+                    {g.title && (
+                      <div className="flex items-baseline gap-2 border-b pb-1 pt-1">
+                        <h3 className="font-semibold text-sm">{g.title}</h3>
+                        {partScore != null && (
+                          <span className="text-xs text-emerald-700">
+                            {partScore}
+                            {typeof g.part?.points === "number" ? ` / ${g.part.points}` : ""}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {g.files.map((f) => {
+                      const notes = (visibleLineComments || []).filter((c) => (c.file ?? null) === f.filename);
+                      return (
+                        <div key={f.filename}>
+                          <p className="text-xs font-mono font-semibold text-slate-500 mb-1">
+                            {g.part ? baseName(f.filename) : f.filename}
+                            {notes.length > 0 && (
+                              <span className="ml-2 font-sans font-normal text-amber-600">
+                                {notes.length} comment{notes.length === 1 ? "" : "s"}
+                              </span>
+                            )}
+                          </p>
+                          <CodeWithNotes code={f.content} file={f.filename} lineComments={visibleLineComments} />
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}

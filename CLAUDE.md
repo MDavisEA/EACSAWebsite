@@ -241,6 +241,21 @@ pattern under `src/components/teacher/`.
     code asks for that were never uploaded, and has **Download for Processing**
     (a correctly named sketch folder zip to open in real Processing - the
     fallback when the in-browser run looks wrong).
+  - **Problem sets (several programs per assignment)**: `projects.parts` is an
+    optional list `[{ id, title, description, points }]` (migration 0037;
+    empty = one program, the original behavior). Each part's `id` is stable for
+    life - a student's code and the teacher's per-program scores are filed under
+    it, so renaming/reordering is always safe. A student's tabs for a part are
+    stored in the SAME `submissions.files` list as `{ part, filename:
+    "<partId>/Tab.pde", content }` - the path prefix keeps two programs' `Sketch`
+    tabs from colliding, so line comments (keyed by filename), the grading tabs
+    and the review export all work unchanged; `lib/processing/programs.js` is the
+    only place that knows the convention. Per-program scores go in
+    `submissions.question_scores` keyed by part id (the column an FRQ keeps its
+    per-question scores in) with `score` = their sum, exactly like an FRQ.
+    **`question_scores` is withheld until release** (`withheldIfUnreleased`) - it
+    is the score broken down, so it must be gated with the score. Files are
+    shared by the whole assignment (not per program).
   - **How the code runs** (`src/lib/processing/`, `SketchRunner.jsx`): Processing.js
     (vendored at `src/vendor/processing.min.js`, MIT) translates the Java-syntax
     sketch to JS inside an iframe with `sandbox="allow-scripts"` and **no
