@@ -41,7 +41,7 @@ const KIND_LABEL = { frq: "FRQ", code: "Mini Problem", review: "Coding Assignmen
 // the things that are about a whole assignment rather than one submission -
 // class-wide autograder insights, CSV export, the project export zip. This is
 // for getting through the pile.
-export default function GradingQueue({ open, onOpenChange, onChanged, initialSubmissionId }) {
+export default function GradingQueue({ open, onOpenChange, onChanged, initialSubmissionId, courseIds }) {
   const [queue, setQueue] = useState(null);
   const [index, setIndex] = useState(0);
   const [loadError, setLoadError] = useState("");
@@ -91,9 +91,9 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
     base44.entities.Submission.listNeedsGrading()
       // Only what is actually waiting - anything marked "won't grade" is a
       // decision already made and does not belong in a queue.
-      .then((rows) => setQueue((rows || []).filter((r) => !r.grading_skipped)))
+      .then((rows) => setQueue((rows || []).filter((r) => !r.grading_skipped && (!courseIds || courseIds.has(r.course_id)))))
       .catch((e) => setLoadError(e.message || "Couldn't load the queue."));
-  }, [open, initialSubmissionId]);
+  }, [open, initialSubmissionId, courseIds]);
 
   const current = queue?.[index] ?? null;
 

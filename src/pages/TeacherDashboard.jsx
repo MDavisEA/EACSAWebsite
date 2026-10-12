@@ -49,6 +49,8 @@ export default function TeacherDashboard() {
   const [needsReplyCount, setNeedsReplyCount] = useState(0);
   const [showStudents, setShowStudents] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  // Course ids the queue is limited to (undefined = every class); set when the button is clicked so it stays stable between renders.
+  const [queueCourseIds, setQueueCourseIds] = useState(undefined);
   // Set when the queue is opened on one specific submission - from a
   // student's roster detail - rather than the general "everything waiting on
   // me" pile. Cleared whenever the queue is opened the normal way, so
@@ -638,6 +640,17 @@ export default function TeacherDashboard() {
     sumCounts(gradingCounts.byProject) +
     sumCounts(gradingCounts.byCodingProblem);
 
+  const languageOfCourse = (id) => (courses.find((c) => c.id === id)?.language === "processing" ? "processing" : "java");
+  const ungradedByLanguage = { java: 0, processing: 0 };
+  const tally = (map, list) => {
+    for (const w of list) ungradedByLanguage[languageOfCourse(w.course_id)] += (map || {})[w.id] || 0;
+  };
+  tally(gradingCounts.byAssignment, assignments);
+  tally(gradingCounts.byProject, projects);
+  tally(gradingCounts.byCodingProblem, codingProblems);
+  // Only split the button when this teacher actually has both kinds of class.
+  const splitGrading = courses.some((c) => c.language === "processing") && courses.some((c) => c.language !== "processing");
+
   const itemCounts = {};
   for (const c of courses) {
     itemCounts[c.id] =
@@ -680,16 +693,24 @@ export default function TeacherDashboard() {
             className="flex items-center gap-3 hover:opacity-70 transition-opacity"
           >
             <BookOpen className="w-5 h-5 text-primary" />
-            <h1 className="font-semibold text-lg">AP CSA</h1>
+            <h1 className="font-semibold text-lg">EA AP CS</h1>
           </button>
           <div className="flex items-center gap-2">
-            {ungradedTotal > 0 && (
-              <Button size="sm" onClick={() => { setGradeSubmissionId(null); setShowQueue(true); }}>
-                Start grading
-                <span className="ml-1.5 rounded-full bg-white/25 px-1.5 text-[10px] font-semibold">
-                  {ungradedTotal}
-                </span>
-              </Button>
+            {(splitGrading
+              ? [["java", "AP CSA ", ungradedByLanguage.java], ["processing", "AP CSP ", ungradedByLanguage.processing]]
+              : [[null, "", ungradedTotal]]
+            ).map(
+              ([lang, label, n]) =>
+                n > 0 && (
+                  <Button
+                    key={lang || "all"}
+                    size="sm"
+                    onClick={() => { setGradeSubmissionId(null); setQueueCourseIds(lang ? new Set(courses.filter((c) => languageOfCourse(c.id) === lang).map((c) => c.id)) : undefined); setShowQueue(true); }}
+                  >
+                    Start grading{label && ` ${label.trim()}`}
+                    <span className="ml-1.5 rounded-full bg-white/25 px-1.5 text-[10px] font-semibold">{n}</span>
+                  </Button>
+                )
             )}
             <Button
               variant="outline"
@@ -971,6 +992,7 @@ export default function TeacherDashboard() {
         onOpenChange={(v) => { setShowQueue(v); if (!v) setGradeSubmissionId(null); }}
         onChanged={refreshGradingState}
         initialSubmissionId={gradeSubmissionId}
+        courseIds={queueCourseIds}
       />
 
       <MyStudentsDialog open={showStudents} onOpenChange={setShowStudents} />
