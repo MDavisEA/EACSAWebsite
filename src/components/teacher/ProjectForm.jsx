@@ -129,6 +129,7 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
             title: (p.title || "").trim(),
             description: p.description || "",
             images: p.images || [],
+            starter: p.starter || "",
             points: p.points === "" || p.points == null ? null : Number(p.points),
           }))
         : [],
@@ -349,93 +350,100 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label>Starter Code (optional, shown to students)</Label>
-
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-          onDragLeave={() => setDragActive(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-            dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
-          }`}
-        >
-          <Upload className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            Drag {starterExt} files here, or click to browse (folders aren't read - select the files inside)
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept={starterExt}
-            className="hidden"
-            onChange={handleFileInput}
-          />
-        </div>
-
-        {!isSketch && (
-          <>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs text-muted-foreground">or</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-
-            <div className="flex gap-2">
-              <Input
-                placeholder="Paste a gist URL to pull starter files from"
-                value={gistUrl}
-                onChange={(e) => setGistUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleFetchGist()}
-              />
-              <Button variant="outline" onClick={handleFetchGist} disabled={fetchingGist || !gistUrl.trim()}>
-                {fetchingGist ? <Loader2 className="w-4 h-4 animate-spin" /> : "Fetch"}
-              </Button>
-            </div>
-            {gistError && <p className="text-sm text-destructive">{gistError}</p>}
-          </>
-        )}
-
-        {form.starter_files.length > 0 && (
-          <div className="space-y-2 pt-1">
-            {form.starter_files.map((f) => (
-              <div key={f.filename} className="border rounded-lg bg-slate-50/50">
-                <div className="flex items-center gap-2 px-3 py-2">
-                  <FileCode2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <button
-                    type="button"
-                    onClick={() => setPreviewing((p) => (p === f.filename ? null : f.filename))}
-                    className="flex-1 text-left text-sm font-mono hover:underline flex items-center gap-1"
-                  >
-                    {f.filename}
-                    {previewing === f.filename ? (
-                      <ChevronUp className="w-3.5 h-3.5" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                  <button type="button" onClick={() => removeFile(f.filename)} className="flex-shrink-0">
-                    <X className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-                  </button>
-                </div>
-                {previewing === f.filename && (
-                  <pre className="text-xs font-mono bg-white border-t p-3 overflow-x-auto max-h-64 overflow-y-auto whitespace-pre">
-                    {f.content}
-                  </pre>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <p className="text-xs text-muted-foreground">
-          {isSketch
-            ? "Opens in each student's editor as their starting code, and is included in the export so your AI review pass knows what was given."
-            : "Included in the export so your AI review pass knows what was given to students, rather than reviewing your own boilerplate as if a student wrote it."}
+      {isSketch && (form.parts || []).length > 0 ? (
+        <p className="text-xs text-muted-foreground border rounded-lg p-3 bg-slate-50/50">
+          <strong>Starter code</strong> is set per program, in each program&rsquo;s box above - so one problem
+          can start from a skeleton while the next starts blank.
         </p>
-      </div>
+      ) : (
+        <div className="space-y-2">
+          <Label>Starter Code (optional, shown to students)</Label>
+
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+              dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+            }`}
+          >
+            <Upload className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              Drag {starterExt} files here, or click to browse (folders aren't read - select the files inside)
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={starterExt}
+              className="hidden"
+              onChange={handleFileInput}
+            />
+          </div>
+
+          {!isSketch && (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground">or</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Paste a gist URL to pull starter files from"
+                  value={gistUrl}
+                  onChange={(e) => setGistUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleFetchGist()}
+                />
+                <Button variant="outline" onClick={handleFetchGist} disabled={fetchingGist || !gistUrl.trim()}>
+                  {fetchingGist ? <Loader2 className="w-4 h-4 animate-spin" /> : "Fetch"}
+                </Button>
+              </div>
+              {gistError && <p className="text-sm text-destructive">{gistError}</p>}
+            </>
+          )}
+
+          {form.starter_files.length > 0 && (
+            <div className="space-y-2 pt-1">
+              {form.starter_files.map((f) => (
+                <div key={f.filename} className="border rounded-lg bg-slate-50/50">
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <FileCode2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <button
+                      type="button"
+                      onClick={() => setPreviewing((p) => (p === f.filename ? null : f.filename))}
+                      className="flex-1 text-left text-sm font-mono hover:underline flex items-center gap-1"
+                    >
+                      {f.filename}
+                      {previewing === f.filename ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                    <button type="button" onClick={() => removeFile(f.filename)} className="flex-shrink-0">
+                      <X className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                    </button>
+                  </div>
+                  {previewing === f.filename && (
+                    <pre className="text-xs font-mono bg-white border-t p-3 overflow-x-auto max-h-64 overflow-y-auto whitespace-pre">
+                      {f.content}
+                    </pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            {isSketch
+              ? "Opens in each student's editor as their starting code, and is included in the export so your AI review pass knows what was given."
+              : "Included in the export so your AI review pass knows what was given to students, rather than reviewing your own boilerplate as if a student wrote it."}
+          </p>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>Review Instructions (for Claude/Cowork, not shown to students)</Label>

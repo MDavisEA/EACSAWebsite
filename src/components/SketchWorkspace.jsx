@@ -82,10 +82,22 @@ function readDraft(key) {
   return null;
 }
 
+// A program's starter code, as the one tab it opens with (null = start blank).
+const starterTabs = (part) => (part?.starter?.trim() ? [{ name: MAIN_TAB_DEFAULT, code: part.starter }] : null);
+
 function initialPrograms(draftKey, submission, project, programIds, multi) {
   const base = Object.fromEntries(programIds.map((id) => [id, blankProgram()]));
   const fill = (source) => {
-    for (const id of programIds) if (source[id]?.length) base[id] = source[id];
+    for (const id of programIds) {
+      if (source[id]?.length) base[id] = source[id];
+      // Starter code only for a program nothing has been saved for yet: a draft
+      // or a turn-in already has the student's own version, which wins - even if
+      // they cleared it on purpose.
+      else if (multi) {
+        const starter = starterTabs((project.parts || []).find((p) => p.id === id));
+        if (starter) base[id] = starter;
+      }
+    }
     return base;
   };
   const draft = readDraft(draftKey);
@@ -99,7 +111,8 @@ function initialPrograms(draftKey, submission, project, programIds, multi) {
     const starter = (project.starter_files || []).filter((f) => /\.pde$/i.test(f.filename));
     if (starter.length) return fill({ [SINGLE]: starter.map((f) => ({ name: safeTabName(f.filename), code: f.content })) });
   }
-  return base;
+  // Nothing saved anywhere yet: each program opens on its own starter code (or blank).
+  return fill({});
 }
 
 // The screenshots a teacher attached to a program ("it should look like this").
@@ -179,6 +192,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [renaming, setRenaming] = useState(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const runnerRef = useRef(null);
   const pickerRef = useRef(null);
@@ -549,6 +563,23 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                 <button onClick={addTab} className="px-2 py-1.5 text-muted-foreground hover:text-foreground" title="Add a tab">
                   <Plus className="w-4 h-4" />
                 </button>
+                {activeMeta?.starter?.trim() && (
+                  <button
+                    onClick={() => {
+                      // Two clicks: this replaces everything they have written for the program.
+                      if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 4000); return; }
+                      setPrograms((prev) => ({ ...prev, [activePart]: starterTabs(activeMeta) }));
+                      setActive(0);
+                      setConfirmReset(false);
+                    }}
+                    className={`ml-auto self-center mr-1 text-xs px-2 py-1 rounded ${
+                      confirmReset ? "bg-amber-100 text-amber-900" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    title="Put this program back to the starter code your teacher gave"
+                  >
+                    {confirmReset ? "Click again to replace your code" : "Reset to starter code"}
+                  </button>
+                )}
               </div>
 
               <textarea

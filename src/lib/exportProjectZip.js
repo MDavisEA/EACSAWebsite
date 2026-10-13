@@ -26,7 +26,10 @@ export async function exportProjectForReview(project, submissions, options = {})
     [shortDescription, options.googleDocText].filter(Boolean).join("\n\n---\n\n") || "(no description)";
   const rubric = project.rubric_md || "(no rubric set)";
   const reviewPrompt = project.review_prompt || "Review each submission against the rubric.";
-  const hasStarterCode = (project.starter_files || []).length > 0;
+  // Starter code given to every student: the assignment-wide files, plus - for a
+  // problem set - whatever starter a particular program opened with.
+  const partStarters = (project.parts || []).filter((p) => (p.starter || "").trim());
+  const hasStarterCode = (project.starter_files || []).length > 0 || partStarters.length > 0;
 
   zip.file(
     "CLAUDE.md",
@@ -54,7 +57,8 @@ export async function exportProjectForReview(project, submissions, options = {})
   zip.file("assignment.md", assignmentText);
   if (hasStarterCode) {
     const starterFolder = zip.folder("starter");
-    project.starter_files.forEach((f) => starterFolder.file(f.filename, f.content));
+    (project.starter_files || []).forEach((f) => starterFolder.file(f.filename, f.content));
+    partStarters.forEach((p) => starterFolder.file(`${safeName(p.title)}.pde`, p.starter));
   }
 
   const rosterRows = ["name,submitted_at,gist_url,file_count,ai_help_used,ai_help_link"];

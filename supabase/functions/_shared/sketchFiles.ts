@@ -66,6 +66,8 @@ export interface SketchPart {
   points: number | null;
   /** Screenshots shown with the description (public image URLs). */
   images: string[];
+  /** Starter code this program opens with ('' = a blank editor). */
+  starter: string;
 }
 
 export const MAX_PARTS = 30;
@@ -115,6 +117,7 @@ export function normalizeParts(raw: unknown): SketchPart[] {
       description: typeof p.description === 'string' ? p.description.slice(0, 20000) : '',
       points: p.points !== null && p.points !== '' && Number.isFinite(points) && points >= 0 ? points : null,
       images,
+      starter: typeof p.starter === 'string' ? p.starter.slice(0, MAX_TAB_CHARS) : '',
     });
   }
   return out;

@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import BriefEditor from "./BriefEditor";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 
@@ -16,6 +17,7 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 const newId = () => `p_${Math.random().toString(36).slice(2, 8)}`;
 export default function ProgramsEditor({ value, onChange }) {
   const parts = value || [];
+  const [starterOpen, setStarterOpen] = useState({}); // programId -> box shown
   const update = (i, patch) => onChange(parts.map((p, j) => (j === i ? { ...p, ...patch } : p)));
   const move = (i, delta) => {
     const j = i + delta;
@@ -83,6 +85,31 @@ export default function ProgramsEditor({ value, onChange }) {
                 }
                 placeholder={"Instructions for this program - steps, requirements, tips. Shown to students right beside the sample output, above their code.\n\nMarkdown works (- bullets, **bold**). Paste a screenshot here to add the sample output."}
               />
+              {/* Starter code is per program: give one problem a skeleton and leave
+                  the next one blank. Empty means a blank editor. */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setStarterOpen((o) => ({ ...o, [p.id]: !(o[p.id] ?? !!p.starter) }))}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {(starterOpen[p.id] ?? !!p.starter) ? "▾" : "▸"} Starter code{" "}
+                  {p.starter ? (
+                    <span className="text-emerald-700">&middot; added</span>
+                  ) : (
+                    <span>(optional &mdash; leave empty and this program starts blank)</span>
+                  )}
+                </button>
+                {(starterOpen[p.id] ?? !!p.starter) && (
+                  <Textarea
+                    value={p.starter || ""}
+                    onChange={(e) => update(i, { starter: e.target.value })}
+                    spellCheck={false}
+                    placeholder="Paste the code students should start this program with"
+                    className="mt-1.5 font-mono text-xs min-h-[130px] whitespace-pre"
+                  />
+                )}
+              </div>
             </div>
           ))}
           <p className="text-xs text-muted-foreground">

@@ -261,7 +261,12 @@ pattern under `src/components/teacher/`.
     Code view shows them side by side (`ProgramBrief`), and `BriefEditor` is the
     one teacher-side editor for both. Grading a sketch opens on its **Output**
     (not its code) with the score/comment column beside it; **Code** is the other
-    tab, and the open program is shared between the two.
+    tab, and the open program is shared between the two. **Starter code is
+    per program** (`parts[].starter`, empty = blank editor): a program opens on
+    its starter only when nothing is saved for it yet (a draft or turn-in wins,
+    even if cleared on purpose), and the student can "Reset to starter code". The
+    old assignment-wide `starter_files` still drives a single-program sketch, and
+    is ignored (and hidden in the form) once programs are listed.
   - **How the code runs** (`src/lib/processing/`, `SketchRunner.jsx`): Processing.js
     (vendored at `src/vendor/processing.min.js`, MIT) translates the Java-syntax
     sketch to JS inside an iframe with `sandbox="allow-scripts"` and **no

@@ -33,7 +33,7 @@ eq(validateSketchFiles([{ part: 'p1', filename: 'Sketch', content: 'a' }], undef
 eq(validateSketchFiles([{ part: 'p1', filename: 'Sketch', content: 'a' }], []), { files: [{ filename: 'Sketch.pde', content: 'a' }] }, 'empty parts list = single program');
 // ---- normalizeParts
 eq(normalizeParts('x'), [], 'not an array');
-eq(normalizeParts([{ id: 'keep_1', title: ' Ball ', description: 'd', points: '5' }]), [{ id: 'keep_1', title: 'Ball', description: 'd', points: 5, images: [] }], 'keeps a sound id, trims, numeric points');
+eq(normalizeParts([{ id: 'keep_1', title: ' Ball ', description: 'd', points: '5' }]), [{ id: 'keep_1', title: 'Ball', description: 'd', points: 5, images: [], starter: '' }], 'keeps a sound id, trims, numeric points');
 const gen = normalizeParts([{ title: '' }, { id: 'bad id!', title: 'B', points: -2 }, { id: 'dup', title: 'C' }, { id: 'dup', title: 'D' }]);
 eq(gen.map((p) => p.title), ['Program 1', 'B', 'C', 'D'], 'blank title defaulted');
 eq(new Set(gen.map((p) => p.id)).size, 4, 'ids unique');
@@ -49,3 +49,8 @@ eq(normalizeParts([{ title: 'a' }])[0].images, [], 'images default to none');
 eq(normalizeBrief(undefined), { description: '', images: [] }, 'brief: nothing -> empty');
 eq(normalizeBrief({ description: 'Draw a box', images: ['https://x.co/a.png', 'http://x.co/b.png'] }), { description: 'Draw a box', images: ['https://x.co/a.png'] }, 'brief: keeps text, only https images');
 eq(normalizeBrief('nope'), { description: '', images: [] }, 'brief: not an object');
+
+// ---- per-program starter code
+eq(normalizeParts([{ title: 'a', starter: 'void setup(){}' }, { title: 'b' }]).map((p) => p.starter), ['void setup(){}', ''], 'starter kept on one program, blank on the other');
+eq(normalizeParts([{ title: 'a', starter: 42 }])[0].starter, '', 'a non-string starter is dropped');
+eq(normalizeParts([{ title: 'a', starter: 'x'.repeat(400000) }])[0].starter.length, 300000, 'starter capped at one tab\'s worth');
