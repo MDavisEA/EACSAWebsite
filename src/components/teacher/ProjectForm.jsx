@@ -89,6 +89,7 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
       : { ...defaultForm(), course_id: initial?.course_id ?? null, unit_id: initial?.unit_id ?? null }
   );
   const [dragActive, setDragActive] = useState(false);
+  const [docCheck, setDocCheck] = useState(null); // { ok, message } | "checking" | null
   const [gistUrl, setGistUrl] = useState("");
   const [fetchingGist, setFetchingGist] = useState(false);
   const [gistError, setGistError] = useState("");
@@ -161,6 +162,21 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
       setGistError(e.message || "Couldn't fetch that gist.");
     } finally {
       setFetchingGist(false);
+    }
+  };
+
+  // Whether the doc can be read by someone who is not you. Uses the same
+  // server-side fetch as the review export, which has no login either - so if
+  // this works, a student opening the embed will see the doc, and if it fails,
+  // they will see Google's error page instead of your directions.
+  const handleCheckDoc = async () => {
+    if (!form.google_doc_url?.trim()) return;
+    setDocCheck("checking");
+    try {
+      const { text } = await base44.entities.Project.fetchGoogleDocText(form.google_doc_url.trim());
+      setDocCheck({ ok: true, message: `Students can open it (${text.length.toLocaleString()} characters of text).` });
+    } catch (e) {
+      setDocCheck({ ok: false, message: e.message || "Couldn't read that document." });
     }
   };
 
@@ -260,11 +276,19 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
 
       <div className="space-y-2">
         <Label>Google Doc (optional)</Label>
-        <Input
-          value={form.google_doc_url || ""}
-          onChange={(e) => updateField("google_doc_url", e.target.value)}
-          placeholder="https://docs.google.com/document/d/..."
-        />
+        <div className="flex gap-2">
+          <Input
+            value={form.google_doc_url || ""}
+            onChange={(e) => { updateField("google_doc_url", e.target.value); setDocCheck(null); }}
+            placeholder="https://docs.google.com/document/d/..."
+          />
+          <Button type="button" variant="outline" onClick={handleCheckDoc} disabled={!form.google_doc_url?.trim() || docCheck === "checking"}>
+            {docCheck === "checking" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Check link"}
+          </Button>
+        </div>
+        {docCheck && docCheck !== "checking" && (
+          <p className={`text-xs ${docCheck.ok ? "text-emerald-700" : "text-destructive"}`}>{docCheck.message}</p>
+        )}
         <p className="text-xs text-muted-foreground">
           For directions easier to write in Docs than the box above. Embedded on the student page and
           pulled into the review export - share it as "Anyone with the link - Viewer" first.

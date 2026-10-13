@@ -420,6 +420,10 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                     </a>
                   </div>
                   <iframe src={googleDocEmbedUrl(project.google_doc_url)} title="Assignment directions" className="w-full rounded-lg border" style={{ height: 480 }} />
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    If this shows an error, use <strong>Open in new tab</strong> above, and let your teacher know - the
+                    document may not be shared with you yet.
+                  </p>
                 </div>
               )}
               {(project.sample_outputs || []).length > 0 && (
