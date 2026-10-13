@@ -266,7 +266,12 @@ pattern under `src/components/teacher/`.
     its starter only when nothing is saved for it yet (a draft or turn-in wins,
     even if cleared on purpose), and the student can "Reset to starter code". The
     old assignment-wide `starter_files` still drives a single-program sketch, and
-    is ignored (and hidden in the form) once programs are listed.
+    is ignored (and hidden in the form) once programs are listed. The teacher's
+    **Preview as student** button on a sketch opens the real `SketchWorkspace`
+    full screen with `preview` set (no draft, no uploads to the server, Turn in
+    off), fed by the same sanitized `previewAsStudent` payload a student gets -
+    so it cannot drift from the student page; Java/other work keeps the older
+    summary dialog.
   - **How the code runs** (`src/lib/processing/`, `SketchRunner.jsx`): Processing.js
     (vendored at `src/vendor/processing.min.js`, MIT) translates the Java-syntax
     sketch to JS inside an iframe with `sandbox="allow-scripts"` and **no

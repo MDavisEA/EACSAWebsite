@@ -10,6 +10,7 @@ import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import ReactMarkdown from "react-markdown";
 import { googleDocEmbedUrl } from "@/lib/googleDoc";
 import SampleOutputs from "@/components/SampleOutputs";
+import SketchWorkspace from "@/components/SketchWorkspace";
 import CodeFontSizeControl from "@/components/CodeFontSizeControl";
 import { useCodeFontSize } from "@/lib/useCodeFontSize";
 
@@ -56,6 +57,33 @@ export default function StudentPreviewDialog({ open, onOpenChange, kind, itemId,
     })();
     return () => { cancelled = true; };
   }, [open, itemId, kind]);
+
+  // A Processing sketch is shown as the page a student actually gets - the same
+  // component, full screen - rather than a summary of its fields. `preview` turns
+  // off saving and turning in; everything else is the real thing, fed by the same
+  // sanitized payload (so anything the server hides from students is absent here).
+  const showSketchPage = open && kind === "project" && data?.kind === "sketch";
+  useEffect(() => {
+    if (!showSketchPage) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") onOpenChange(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showSketchPage, onOpenChange]);
+  if (showSketchPage) {
+    return (
+      <div className="fixed inset-0 z-[60] bg-white">
+        <SketchWorkspace
+          key={data.id}
+          preview
+          project={data}
+          submission={{ id: null, submitted: false, files: [] }}
+          draftKey={null}
+          onSubmitted={() => {}}
+          onBack={() => onOpenChange(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

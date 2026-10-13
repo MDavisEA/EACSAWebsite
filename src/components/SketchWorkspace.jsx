@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, FileImage, Loader2, MessageSquare, Plus, Send, Upload, X,
+  ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, Eye, FileImage, Loader2, MessageSquare, Plus, Send, Upload, X,
 } from "lucide-react";
 
 // A Processing sketch assignment, from the student's side: code on the left,
@@ -70,6 +70,7 @@ function toSubmission(programs, programIds, multi) {
 }
 
 function readDraft(key) {
+  if (!key) return null;
   try {
     const raw = JSON.parse(localStorage.getItem(key) || "null");
     const ok = (tabs) => Array.isArray(tabs) && tabs.every((t) => typeof t?.name === "string" && typeof t?.code === "string");
@@ -167,7 +168,10 @@ function ProgramBrief({ meta, open, onToggle }) {
   );
 }
 
-export default function SketchWorkspace({ project, submission, draftKey, onSubmitted, onBack }) {
+// `preview` is the teacher's "see exactly what students see": the same page, but
+// nothing is saved or turned in - no draft in localStorage, files stay in the
+// browser (they can still try images to see the sketch run), and Turn in is off.
+export default function SketchWorkspace({ project, submission, draftKey, onSubmitted, onBack, preview = false }) {
   const parts = useMemo(() => project.parts || [], [project.parts]);
   const multi = parts.length > 0;
   const programIds = useMemo(() => (multi ? parts.map((p) => p.id) : [SINGLE]), [multi, parts]);
@@ -207,12 +211,13 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
 
   // ---- draft: every edit is kept locally, so a refresh or a closed tab never loses a paste ----
   useEffect(() => {
+    if (preview) return;
     try {
       localStorage.setItem(draftKey, JSON.stringify({ programs, savedAt: Date.now() }));
     } catch {
       // private window / storage full - the page still works, it just can't remember
     }
-  }, [programs, draftKey]);
+  }, [programs, draftKey, preview]);
 
   // What the runner is handed: just the open program's tabs.
   const runFiles = useMemo(() => tabs.map((t) => ({ filename: `${t.name}.pde`, content: t.code })), [tabs]);
@@ -246,7 +251,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   const totalAssetBytes = assets.reduce((sum, a) => sum + a.size, 0);
 
   const addAssetFiles = async (fileList) => {
-    if (!submission?.id) return;
+    if (!submission?.id && !preview) return;
     setAssetError("");
     for (const file of Array.from(fileList)) {
       const lower = file.name.toLowerCase();
@@ -257,6 +262,14 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
       }
       if (totalAssetBytes - (replacing?.size || 0) + file.size > MAX_ASSETS_TOTAL_BYTES) {
         setAssetError(`Adding ${file.name} would go over ${formatBytes(MAX_ASSETS_TOTAL_BYTES)} of files in total.`);
+        continue;
+      }
+      if (preview) {
+        // Kept in this browser tab only, so the teacher can try a sketch with an image.
+        const asset = await assetFromBlob(file.name, file, { id: `local-${file.name}` });
+        setAssets((prev) =>
+          [...prev.filter((a) => a.name.toLowerCase() !== lower), asset].sort((a, b) => a.name.localeCompare(b.name))
+        );
         continue;
       }
       setUploading((u) => [...u, file.name]);
@@ -277,6 +290,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
 
   const removeAsset = async (asset) => {
     setAssetError("");
+    if (preview) { setAssets((prev) => prev.filter((a) => a.id !== asset.id)); return; }
     try {
       await base44.entities.SketchAsset.remove(submission.id, asset.id);
       setAssets((prev) => prev.filter((a) => a.id !== asset.id));
@@ -365,12 +379,20 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
+      {preview && (
+        <div className="bg-amber-100 text-amber-900 text-xs px-4 py-1.5 flex items-center gap-2">
+          <Eye className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>
+            <strong>Preview.</strong> This is exactly what a student sees. Nothing you do here is saved or turned in.
+          </span>
+        </div>
+      )}
       <header className="flex items-center gap-3 px-4 py-2 bg-white border-b flex-wrap">
         <button
           onClick={onBack}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft className="w-4 h-4" /> My Work
+          <ArrowLeft className="w-4 h-4" /> {preview ? "Close preview" : "My Work"}
         </button>
         <div className="min-w-0">
           <h1 className="font-semibold leading-tight truncate">{project.title}</h1>
@@ -397,9 +419,13 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
               </span>
             )
           ) : (
-            <span className="text-xs text-muted-foreground">Not turned in yet</span>
+            <span className="text-xs text-muted-foreground">{preview ? "Preview - nothing is saved" : "Not turned in yet"}</span>
           )}
-          <Button onClick={() => { setSubmitError(""); setSubmitOpen(true); }} disabled={!anyCode}>
+          <Button
+            onClick={() => { setSubmitError(""); setSubmitOpen(true); }}
+            disabled={!anyCode || preview}
+            title={preview ? "Turning in is switched off in the preview" : undefined}
+          >
             <Send className="w-4 h-4 mr-1.5" />
             {submitted ? "Turn in again" : "Turn in"}
           </Button>
