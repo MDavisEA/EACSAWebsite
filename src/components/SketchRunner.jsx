@@ -218,9 +218,12 @@ const SketchRunner = forwardRef(function SketchRunner(
         </label>
       </div>
 
-      <div ref={stageRef} className="relative flex-1 min-h-[140px] overflow-auto bg-slate-100 p-3">
+      {/* A flex container with margin:auto children centres the sketch both ways, and
+          - unlike justify-center - falls back to the top-left (still scrollable)
+          when a sketch is bigger than the pane. */}
+      <div ref={stageRef} className="relative flex-1 min-h-[140px] overflow-auto bg-slate-100 p-3 flex">
         {!run && (
-          <p className="text-sm text-muted-foreground text-center py-12">
+          <p className="m-auto text-sm text-muted-foreground text-center">
             {hasCode ? (
               <>Press <span className="font-semibold">Run</span> to see the sketch here.</>
             ) : (
@@ -230,7 +233,7 @@ const SketchRunner = forwardRef(function SketchRunner(
         )}
         {run && (
           <div
-            className="relative bg-white shadow-md"
+            className="relative bg-white shadow-md m-auto flex-shrink-0"
             style={size ? { width: Math.round(size.w * scale), height: Math.round(size.h * scale) } : { width: 1, height: 1, opacity: 0 }}
           >
             <iframe

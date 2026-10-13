@@ -123,8 +123,8 @@ export default function ProgramsEditor({ value, onChange }) {
                   const imgs = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith("image/"));
                   if (imgs.length > 0) { e.preventDefault(); addImages(i, imgs); }
                 }}
-                placeholder="What this program should do (optional, shown to students above their code). You can paste a screenshot right here."
-                className="text-sm min-h-[56px]"
+                placeholder={"Instructions for this program - steps, requirements, tips. Shown to students right beside the sample output, above their code.\n\nMarkdown works (- bullets, **bold**). Paste a screenshot here to add the sample output."}
+                className="text-sm min-h-[88px]"
               />
               {((p.images || []).length > 0 || uploading[p.id] > 0) && (
                 <div className="flex flex-wrap gap-2">

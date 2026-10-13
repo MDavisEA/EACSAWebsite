@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  ArrowLeft, CheckCircle2, ExternalLink, FileImage, Loader2, MessageSquare, Plus, Send, Upload, X,
+  ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, FileImage, Loader2, MessageSquare, Plus, Send, Upload, X,
 } from "lucide-react";
 
 // A Processing sketch assignment, from the student's side: code on the left,
@@ -121,6 +121,39 @@ function PartImages({ urls, compact = false }) {
   );
 }
 
+// A program's instructions, right beside its sample output (the teacher's
+// screenshots), so a student can read what to build while looking at what it
+// should look like - without flipping to the Assignment tab and back. The text
+// takes light Markdown (bullets, bold). Collapsible, because on a small screen
+// the code matters more than the reminder once you know the task.
+function ProgramBrief({ meta, open, onToggle }) {
+  return (
+    <div className="border-b bg-slate-50/60">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-1.5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+      >
+        {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        {open ? "Instructions" : "Show instructions"}
+      </button>
+      {open && (
+        <div className="px-3 pb-2 flex gap-3 items-start max-h-[38vh] overflow-auto">
+          {meta.description && (
+            <div className="flex-1 min-w-0 text-sm markdown-render">
+              <ReactMarkdown>{meta.description}</ReactMarkdown>
+            </div>
+          )}
+          {(meta.images || []).length > 0 && (
+            <div className={meta.description ? "flex-none max-w-[48%]" : "flex-1"}>
+              <PartImages urls={meta.images} compact />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SketchWorkspace({ project, submission, draftKey, onSubmitted, onBack }) {
   const parts = useMemo(() => project.parts || [], [project.parts]);
   const multi = parts.length > 0;
@@ -131,6 +164,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   const [activeTabs, setActiveTabs] = useState({}); // programId -> open tab index
   const [view, setView] = useState("code"); // code | assignment
   const [split, setSplit] = useState(46);
+  const [briefOpen, setBriefOpen] = useState(true);
 
   const [assets, setAssets] = useState([]);
   const [assetsLoading, setAssetsLoading] = useState(!!submission?.id);
@@ -404,7 +438,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                         {typeof p.points === "number" && (
                           <span className="ml-2 text-xs text-muted-foreground">{p.points} pt{p.points === 1 ? "" : "s"}</span>
                         )}
-                        {p.description && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{p.description}</p>}
+                        {p.description && <div className="text-sm text-muted-foreground mt-1 markdown-render"><ReactMarkdown>{p.description}</ReactMarkdown></div>}
                         <PartImages urls={p.images} />
                       </li>
                     ))}
@@ -468,12 +502,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                 </div>
               )}
               {(activeMeta?.description || (activeMeta?.images || []).length > 0) && (
-                <div className="px-3 py-1.5 border-b bg-slate-50/60 max-h-[30%] overflow-auto">
-                  {activeMeta.description && (
-                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">{activeMeta.description}</p>
-                  )}
-                  <PartImages urls={activeMeta.images} compact />
-                </div>
+                <ProgramBrief meta={activeMeta} open={briefOpen} onToggle={() => setBriefOpen((o) => !o)} />
               )}
 
               <div className="flex items-end gap-0.5 px-2 pt-1.5 bg-slate-50 border-b overflow-x-auto">
