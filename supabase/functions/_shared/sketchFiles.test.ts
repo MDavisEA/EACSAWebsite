@@ -1,6 +1,6 @@
 // Run:  node --experimental-strip-types supabase/functions/_shared/sketchFiles.test.ts
 // (Not imported by any Edge Function, so it is never bundled or deployed.)
-import { cleanAssetName, contentTypeForAsset, normalizeParts, validateSketchFiles } from './sketchFiles.ts';
+import { cleanAssetName, contentTypeForAsset, normalizeBrief, normalizeParts, validateSketchFiles } from './sketchFiles.ts';
 const eq = (a: unknown, b: unknown, m: string) => { if (JSON.stringify(a) !== JSON.stringify(b)) { console.log('FAIL', m, JSON.stringify(a), '!=', JSON.stringify(b)); process.exitCode = 1; } else console.log('ok  ', m); };
 eq(cleanAssetName('Casino Table.jpg'), 'Casino Table.jpg', 'spaces ok');
 eq(cleanAssetName('C:\\fakepath\\turtle.PNG'), 'turtle.PNG', 'strips path');
@@ -44,3 +44,8 @@ eq(normalizeParts([{ title: 'a', images: ['https://x.supabase.co/storage/v1/obje
   ['https://x.supabase.co/storage/v1/object/public/uploads/a.png'], 'only plain https image URLs survive');
 eq(normalizeParts([{ title: 'a', images: Array.from({ length: 12 }, (_, i) => 'https://x.co/' + i + '.png') }])[0].images.length, 8, 'at most 8 images per program');
 eq(normalizeParts([{ title: 'a' }])[0].images, [], 'images default to none');
+
+// ---- single-program brief
+eq(normalizeBrief(undefined), { description: '', images: [] }, 'brief: nothing -> empty');
+eq(normalizeBrief({ description: 'Draw a box', images: ['https://x.co/a.png', 'http://x.co/b.png'] }), { description: 'Draw a box', images: ['https://x.co/a.png'] }, 'brief: keeps text, only https images');
+eq(normalizeBrief('nope'), { description: '', images: [] }, 'brief: not an object');

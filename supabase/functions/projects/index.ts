@@ -12,7 +12,7 @@ import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { attachSectionDueDates, fetchOverridesByWorkId, replaceSectionDueDates, resolveDueDates } from '../_shared/sectionDueDates.ts';
 import { propagateToLinkedCourses } from '../_shared/courseLinks.ts';
 import { deleteAssetsForSubmissions, submissionIdsForProjects } from '../_shared/sketchAssetStorage.ts';
-import { normalizeParts } from '../_shared/sketchFiles.ts';
+import { normalizeBrief, normalizeParts } from '../_shared/sketchFiles.ts';
 
 // Students see the rubric (it's the point - they should know what they're
 // reviewed against) but never review_prompt, which is instructions aimed at
@@ -26,6 +26,9 @@ function sanitizeForStudent(project: Record<string, any>) {
     kind: project.kind || 'gist',
     // The programs a sketch assignment asks for (empty = a single program).
     parts: project.parts || [],
+    // Instructions + screenshots when it is a single program (a multi-program
+    // assignment keeps them on each part).
+    brief: project.brief || {},
     description_html: project.description_html,
     rubric_md: project.rubric_md,
     starter_files: project.starter_files || [],
@@ -137,6 +140,7 @@ Deno.serve(async (req) => {
       insertData.kind = await kindForCourse(admin, insertData.course_id);
       // Programs only mean something for a sketch.
       insertData.parts = insertData.kind === 'sketch' ? normalizeParts(insertData.parts) : [];
+      insertData.brief = insertData.kind === 'sketch' ? normalizeBrief(insertData.brief) : {};
       const { data, error } = await admin.from('projects').insert(insertData).select().single();
       if (error) return json({ error: error.message }, 500);
       const { error: sddErr } = await replaceSectionDueDates(admin, 'project_id', data.id, section_due_dates);
@@ -160,9 +164,11 @@ Deno.serve(async (req) => {
           return json({ error: "That course teaches the other language, so this work can't move there." }, 400);
         }
       }
-      if (updateData.parts !== undefined) {
+      if (updateData.parts !== undefined || updateData.brief !== undefined) {
         const { data: existing } = await admin.from('projects').select('kind').eq('id', body.id).maybeSingle();
-        updateData.parts = existing?.kind === 'sketch' ? normalizeParts(updateData.parts) : [];
+        const isSketch = existing?.kind === 'sketch';
+        if (updateData.parts !== undefined) updateData.parts = isSketch ? normalizeParts(updateData.parts) : [];
+        if (updateData.brief !== undefined) updateData.brief = isSketch ? normalizeBrief(updateData.brief) : {};
       }
       if (section_due_dates !== undefined) {
         const { error: sddErr } = await replaceSectionDueDates(admin, 'project_id', body.id, section_due_dates);

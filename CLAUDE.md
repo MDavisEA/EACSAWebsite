@@ -255,7 +255,13 @@ pattern under `src/components/teacher/`.
     per-question scores in) with `score` = their sum, exactly like an FRQ.
     **`question_scores` is withheld until release** (`withheldIfUnreleased`) - it
     is the score broken down, so it must be gated with the score. Files are
-    shared by the whole assignment (not per program).
+    shared by the whole assignment (not per program). Instructions + sample-output
+    screenshots live on each part (`description`, `images`), or - for a
+    single-program assignment - in `projects.brief` (migration 0038); the student's
+    Code view shows them side by side (`ProgramBrief`), and `BriefEditor` is the
+    one teacher-side editor for both. Grading a sketch opens on its **Output**
+    (not its code) with the score/comment column beside it; **Code** is the other
+    tab, and the open program is shared between the two.
   - **How the code runs** (`src/lib/processing/`, `SketchRunner.jsx`): Processing.js
     (vendored at `src/vendor/processing.min.js`, MIT) translates the Java-syntax
     sketch to JS inside an iframe with `sandbox="allow-scripts"` and **no

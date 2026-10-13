@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import SketchRunner from "@/components/SketchRunner";
 import { Button } from "@/components/ui/button";
 import { useSketchAssets } from "@/lib/processing/useSketchAssets";
 import { downloadSketchZip } from "@/lib/processing/exportSketch";
 import { baseName, groupFilesByPart } from "@/lib/processing/programs";
-import { AlertTriangle, Download, FileCode, Info, Loader2, Terminal } from "lucide-react";
+import { AlertTriangle, Download, FileCode, Info, Loader2, Play, Terminal } from "lucide-react";
 
 // The "Testing" half of a sketch's grading window: the student's code, running,
 // with the files they uploaded. Same Feedback / Testing toggle as a Coding
@@ -16,13 +16,23 @@ import { AlertTriangle, Download, FileCode, Info, Loader2, Terminal } from "luci
 // `parts` is the assignment's list of programs (empty = a single program); with
 // several, a picker chooses which one runs.
 
-export function FeedbackTestingToggle({ tab, onTab, className = "" }) {
-  return (
-    <div className={`flex items-center gap-1 border rounded-lg p-1 bg-slate-50 ${className}`}>
-      {[
+// For a sketch the two halves are "Output" (the running program - what you
+// open to by default, since that is what you are marking) and "Code" (their
+// source, with line comments). Same two tab ids as a Coding Assignment's
+// Feedback / Testing, so everything keyed on those keeps working.
+export function FeedbackTestingToggle({ tab, onTab, className = "", sketch = false }) {
+  const items = sketch
+    ? [
+        { id: "testing", label: "Output", Icon: Play },
+        { id: "feedback", label: "Code", Icon: FileCode },
+      ]
+    : [
         { id: "feedback", label: "Feedback", Icon: FileCode },
         { id: "testing", label: "Testing", Icon: Terminal },
-      ].map(({ id, label, Icon }) => (
+      ];
+  return (
+    <div className={`flex items-center gap-1 border rounded-lg p-1 bg-slate-50 ${className}`}>
+      {items.map(({ id, label, Icon }) => (
         <button
           key={id}
           onClick={() => onTab(id)}
@@ -37,7 +47,7 @@ export function FeedbackTestingToggle({ tab, onTab, className = "" }) {
   );
 }
 
-export default function SketchTestingPanel({ submission, projectTitle, parts = [], height = 560 }) {
+export default function SketchTestingPanel({ submission, projectTitle, parts = [], height = 560, selectedKey, onSelect }) {
   const { status, assets, error } = useSketchAssets(submission?.id);
   const [report, setReport] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -49,8 +59,15 @@ export default function SketchTestingPanel({ submission, projectTitle, parts = [
   );
   // Which program is running. A new student starts on their first program; a
   // stale key (the program was removed) falls back the same way.
-  const [pick, setPick] = useState(null);
-  useEffect(() => setPick(null), [submission?.id]);
+  // Controlled when the parent passes selectedKey/onSelect (so the Output and Code
+  // views of a grading window stay on the same program); otherwise it keeps its
+  // own choice and starts over for each new student.
+  const [innerPick, setInnerPick] = useState(null);
+  const lastId = useRef(submission?.id);
+  if (lastId.current !== submission?.id) { lastId.current = submission?.id; if (innerPick !== null) setInnerPick(null); }
+  const controlled = selectedKey !== undefined;
+  const pick = controlled ? selectedKey : innerPick;
+  const setPick = controlled ? onSelect : setInnerPick;
   const group = groups.find((g) => g.key === pick) || groups[0];
   const files = useMemo(
     () => (group?.files || []).map((f) => ({ filename: baseName(f.filename), content: f.content })),
@@ -161,7 +178,7 @@ export default function SketchTestingPanel({ submission, projectTitle, parts = [
         </div>
       )}
       <div className="bg-slate-50 border-t px-3 py-1.5 text-xs text-muted-foreground">
-        A scratch run — nothing here changes what they turned in. Their saved code is what you see on the Feedback tab.
+        A scratch run — nothing here changes what they turned in. Their saved code is on the Code tab.
       </div>
     </div>
   );

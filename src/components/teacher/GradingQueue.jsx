@@ -15,9 +15,9 @@ import AnswerKeyPanel from "./AnswerKeyPanel";
 import HighlightedCode from "@/components/HighlightedCode";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import SketchTestingPanel from "./SketchTestingPanel";
-import { baseName, groupFilesByPart, partsTotalPoints, sumPartScores } from "@/lib/processing/programs";
+import { baseName, groupFilesByPart, partIdOf, partsTotalPoints, sumPartScores } from "@/lib/processing/programs";
 import {
-  Loader2, ChevronLeft, ChevronRight, CheckCircle2, EyeOff, FileCode, Terminal, Info,
+  Loader2, ChevronLeft, ChevronRight, CheckCircle2, EyeOff, FileCode, Terminal, Info, Play,
   KeyRound, ExternalLink, Bot,
 } from "lucide-react";
 import AiHelpBadge from "./AiHelpBadge";
@@ -57,6 +57,10 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
   const [ackRequired, setAckRequired] = useState(false);
   const [activeFile, setActiveFile] = useState(null);
   const [tab, setTab] = useState("feedback");
+  // Which program of a problem set is open. Shared by the Output and Code views,
+  // so picking program 3 while watching it run and then clicking over to Code
+  // lands on program 3's code, not wherever the code view last was.
+  const [partKey, setPartKey] = useState(null);
   // Kept across items on purpose: the pattern is looking at the key for the
   // first few of a pile and then not needing it, so collapsing it once should
   // stay collapsed for the rest of the run rather than reopening every student.
@@ -138,7 +142,10 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
         setRelease(!!s.feedback_released);
         setAckRequired(!!s.feedback_ack_required);
         setActiveFile((s.files || [])[0]?.filename ?? null);
-        setTab("feedback");
+        setPartKey(null);
+        // What you are marking in a sketch is what it DOES, so that is what opens;
+        // the code is one click away. Everything else opens on its feedback view.
+        setTab(d.kind === "project" && d.work?.kind === "sketch" ? "testing" : "feedback");
       })
       .catch((e) => { if (!cancelled) setError(e.message || "Couldn't load that submission."); })
       .finally(() => { if (!cancelled) setLoadingDetail(false); });
@@ -162,6 +169,15 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
   // commented on) separately, with the total added up for you like an FRQ.
   const parts = isSketch ? work?.parts || [] : [];
   const hasParts = parts.length > 0;
+  const selectPart = (key) => {
+    setPartKey(key);
+    const g = groupFilesByPart(submission?.files, parts).find((x) => x.key === key);
+    if (g && !g.files.some((f) => f.filename === activeFile)) setActiveFile(g.files[0].filename);
+  };
+  const selectFile = (f) => {
+    setActiveFile(f.filename);
+    setPartKey(partIdOf(f) ?? "__none__");
+  };
   const commentScope = work
     ? kind === "frq"
       ? { assignment_id: work.id }
@@ -380,10 +396,16 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
 
               {(isCode || isSketch) && (
                 <div className="flex items-center gap-1 border rounded-lg p-1 bg-slate-50 ml-auto">
-                  {[
-                    { id: "feedback", label: "Feedback", Icon: FileCode },
-                    { id: "testing", label: "Testing", Icon: Terminal },
-                  ].map(({ id, label, Icon }) => (
+                  {(isSketch
+                    ? [
+                        { id: "testing", label: "Output", Icon: Play },
+                        { id: "feedback", label: "Code", Icon: FileCode },
+                      ]
+                    : [
+                        { id: "feedback", label: "Feedback", Icon: FileCode },
+                        { id: "testing", label: "Testing", Icon: Terminal },
+                      ]
+                  ).map(({ id, label, Icon }) => (
                     <button
                       key={id}
                       onClick={() => setTab(id)}
@@ -420,8 +442,6 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
               <div className="py-16 flex justify-center">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
-            ) : isSketch && tab === "testing" ? (
-              <SketchTestingPanel submission={submission} projectTitle={work?.title} parts={parts} height={520} />
             ) : isCode && tab === "testing" ? (
               <div className="border rounded-lg overflow-hidden">
                 <div className="bg-slate-100 px-3 py-1.5 border-b flex items-center gap-2">
@@ -445,9 +465,20 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 items-start">
-                <div className="border rounded-lg overflow-hidden">
+                <div className={isSketch && tab === "testing" ? "min-w-0" : "border rounded-lg overflow-hidden"}>
                   {/* What they turned in - code, files, or written answers. */}
-                  {kind === "project" ? (
+                  {isSketch && tab === "testing" ? (
+                    // The score and comment column stays on the right, so you can mark
+                    // what you are watching without leaving it.
+                    <SketchTestingPanel
+                      submission={submission}
+                      projectTitle={work?.title}
+                      parts={parts}
+                      height={540}
+                      selectedKey={partKey}
+                      onSelect={selectPart}
+                    />
+                  ) : kind === "project" ? (
                     (submission.files || []).length > 0 ? (
                       <>
                         <div className="bg-slate-100 border-b px-2 py-1.5 flex items-center gap-x-3 gap-y-1 flex-wrap">
@@ -463,7 +494,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                                 return (
                                   <button
                                     key={f.filename}
-                                    onClick={() => setActiveFile(f.filename)}
+                                    onClick={() => selectFile(f)}
                                     className={`text-xs font-mono rounded px-2 py-1 transition-colors ${
                                       activeFile === f.filename
                                         ? "bg-white shadow-sm font-semibold"

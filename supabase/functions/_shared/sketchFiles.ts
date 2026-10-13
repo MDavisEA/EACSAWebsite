@@ -71,6 +71,27 @@ export interface SketchPart {
 export const MAX_PARTS = 30;
 export const MAX_PART_IMAGES = 8;
 
+/** Only plain https URLs: these are rendered as <img src> on the student page. */
+function cleanImageUrls(raw: unknown): string[] {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((u: unknown) => typeof u === 'string' && /^https:\/\/[^\s"'<>]{1,2000}$/.test(u))
+    .slice(0, MAX_PART_IMAGES);
+}
+
+export interface SketchBrief {
+  description: string;
+  images: string[];
+}
+
+/** Instructions + screenshots for a single-program sketch (see migration 0038). */
+export function normalizeBrief(raw: unknown): SketchBrief {
+  const b = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    description: typeof b.description === 'string' ? b.description.slice(0, 20000) : '',
+    images: cleanImageUrls(b.images),
+  };
+}
+
 /**
  * Cleans the teacher's list of programs. Ids are kept when they are already
  * sound (a renamed part must keep its id - student files and scores point at
@@ -87,10 +108,7 @@ export function normalizeParts(raw: unknown): SketchPart[] {
     seen.add(id);
     const title = typeof p.title === 'string' ? p.title.trim().slice(0, 120) : '';
     const points = Number(p.points);
-    // Only plain https URLs: this is rendered as <img src> on the student page.
-    const images = (Array.isArray(p.images) ? p.images : [])
-      .filter((u: unknown) => typeof u === 'string' && /^https:\/\/[^\s"'<>]{1,2000}$/.test(u))
-      .slice(0, MAX_PART_IMAGES);
+    const images = cleanImageUrls(p.images);
     out.push({
       id,
       title: title || `Program ${out.length + 1}`,

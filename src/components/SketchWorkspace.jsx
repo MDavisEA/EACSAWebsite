@@ -187,7 +187,9 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   const active = Math.min(activeTabs[activePart] || 0, tabs.length - 1);
   const current = tabs[active];
   const setActive = (i) => setActiveTabs((a) => ({ ...a, [activePart]: i }));
-  const activeMeta = multi ? parts.find((p) => p.id === activePart) : null;
+  // The instructions + screenshots to show beside the code: the open program's,
+  // or - for a single-program assignment - the assignment's own.
+  const activeMeta = multi ? parts.find((p) => p.id === activePart) : project.brief || null;
 
   // ---- draft: every edit is kept locally, so a refresh or a closed tab never loses a paste ----
   useEffect(() => {
@@ -420,6 +422,14 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                   className="prose prose-sm max-w-none quill-render"
                   dangerouslySetInnerHTML={{ __html: openLinksInNewTab(project.description_html) }}
                 />
+              )}
+              {!multi && (project.brief?.description || (project.brief?.images || []).length > 0) && (
+                <div className="space-y-2">
+                  {project.brief.description && (
+                    <div className="text-sm markdown-render"><ReactMarkdown>{project.brief.description}</ReactMarkdown></div>
+                  )}
+                  <PartImages urls={project.brief.images} />
+                </div>
               )}
               {multi && (
                 <div className="space-y-2">

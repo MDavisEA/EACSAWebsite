@@ -17,7 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { FileDown, Trash2, ExternalLink, Loader2, Upload, CheckCircle2, XCircle, AlertTriangle, RefreshCw, UserX, ChevronDown, ChevronUp, Clock, Send, Bot } from "lucide-react";
 import AiHelpBadge from "./AiHelpBadge";
 import SketchTestingPanel, { FeedbackTestingToggle } from "./SketchTestingPanel";
-import { baseName, groupFilesByPart, partsTotalPoints, sumPartScores } from "@/lib/processing/programs";
+import { baseName, groupFilesByPart, partIdOf, partsTotalPoints, sumPartScores } from "@/lib/processing/programs";
 import { exportProjectForReview } from "@/lib/exportProjectZip";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
 import { byLastName } from "@/lib/groupSubmissionsByStudent";
@@ -66,6 +66,9 @@ export default function ProjectSubmissionViewer({ project }) {
   // Assignment has: read and comment, or run what they turned in.
   const isSketch = project.kind === "sketch";
   const [reviewTab, setReviewTab] = useState("feedback");
+  // The program open in the Output view, shared with the Code view so clicking
+  // over lands on the same program.
+  const [partKey, setPartKey] = useState(null);
   // A problem set: several programs, each scored separately and summed.
   const parts = isSketch ? project.parts || [] : [];
   const hasParts = parts.length > 0;
@@ -205,7 +208,9 @@ export default function ProjectSubmissionViewer({ project }) {
     setLineComments([]);
     setReviewScores(Object.fromEntries(Object.entries(s.question_scores || {}).map(([k, v]) => [k, String(v)])));
     setReviewError("");
-    setReviewTab("feedback");
+    // What you are marking in a sketch is what it does, so that is what opens.
+    setReviewTab(isSketch ? "testing" : "feedback");
+    setPartKey(null);
     // Open on their first file rather than nothing, so the code is visible
     // without a click - a Project is usually one main class plus helpers.
     setActiveFile((s.file_names || [])[0] ?? null);
@@ -522,7 +527,7 @@ export default function ProjectSubmissionViewer({ project }) {
           </DialogHeader>
 
           {isSketch && (
-            <FeedbackTestingToggle tab={reviewTab} onTab={setReviewTab} className="w-fit" />
+            <FeedbackTestingToggle tab={reviewTab} onTab={setReviewTab} className="w-fit" sketch />
           )}
 
           {isSketch && reviewTab === "testing" && reviewTarget && (
@@ -532,7 +537,18 @@ export default function ProjectSubmissionViewer({ project }) {
                 Loading their sketch...
               </p>
             ) : (
-              <SketchTestingPanel submission={reviewTarget} projectTitle={project.title} parts={parts} height={520} />
+              <SketchTestingPanel
+                submission={reviewTarget}
+                projectTitle={project.title}
+                parts={parts}
+                height={520}
+                selectedKey={partKey}
+                onSelect={(key) => {
+                  setPartKey(key);
+                  const g = groupFilesByPart(reviewTarget.files, parts).find((x) => x.key === key);
+                  if (g && !g.files.some((f) => f.filename === activeFile)) setActiveFile(g.files[0].filename);
+                }}
+              />
             )
           )}
 
@@ -556,7 +572,7 @@ export default function ProjectSubmissionViewer({ project }) {
                       return (
                         <button
                           key={filename}
-                          onClick={() => setActiveFile(filename)}
+                          onClick={() => { setActiveFile(filename); setPartKey(partIdOf({ filename }) ?? "__none__"); }}
                           className={`text-xs font-mono rounded px-2 py-1 transition-colors ${
                             activeFile === filename
                               ? "bg-white shadow-sm font-semibold"

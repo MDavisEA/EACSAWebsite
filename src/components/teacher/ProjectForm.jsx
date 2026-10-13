@@ -15,6 +15,7 @@ import MarkdownToolbar, { useMarkdownShortcuts } from "./MarkdownToolbar";
 import DueTimeQuickPicks from "./DueTimeQuickPicks";
 import SectionDueDatesEditor from "./SectionDueDatesEditor";
 import ProgramsEditor from "./ProgramsEditor";
+import BriefEditor from "./BriefEditor";
 
 const DEFAULT_REVIEW_PROMPT = `Review each submission against the rubric above. Do not assign grades or numeric scores.
 
@@ -43,6 +44,7 @@ function defaultForm() {
     google_doc_url: "",
     sample_outputs: [],
     parts: [],
+    brief: { description: "", images: [] },
     course_id: null,
     unit_id: null,
     due_date: "",
@@ -119,6 +121,8 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
         .map((e) => ({ section_id: e.section_id, due_date: new Date(e.due_date).toISOString() })),
       course_id: form.course_id || null,
       unit_id: form.unit_id || null,
+      // Single-program instructions; with programs listed they live on each program.
+      brief: isSketch ? { description: form.brief?.description || "", images: form.brief?.images || [] } : {},
       parts: isSketch
         ? (form.parts || []).map((p) => ({
             id: p.id,
@@ -306,6 +310,20 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
           // hands back an updater (applied to the latest list) as well as a value.
           onChange={(v) => setForm((f) => ({ ...f, parts: typeof v === "function" ? v(f.parts) : v }))}
         />}
+
+      {isSketch && (form.parts || []).length === 0 && (
+        <div className="space-y-2">
+          <Label>Instructions &amp; sample output</Label>
+          <BriefEditor
+            value={form.brief}
+            onChange={(fn) => setForm((f) => ({ ...f, brief: fn(f.brief || { description: "", images: [] }) }))}
+            placeholder={"What students should build - steps, requirements, tips. Shown to them right beside the sample output, above their code.\n\nMarkdown works (- bullets, **bold**). Paste a screenshot here to add the sample output."}
+          />
+          <p className="text-xs text-muted-foreground">
+            Optional. Students see this next to their code, so they don't have to flip to the Assignment tab.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>Rubric</Label>
