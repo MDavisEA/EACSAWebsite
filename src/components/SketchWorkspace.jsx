@@ -7,6 +7,14 @@ import {
   ACCEPT_ATTR, MAX_ASSET_BYTES, MAX_ASSETS_TOTAL_BYTES, assetFromBlob, formatBytes, loadAssets,
 } from "@/lib/processing/assets";
 import { baseName, partIdOf } from "@/lib/processing/programs";
+import CodeMirror from "@uiw/react-codemirror";
+import { java } from "@codemirror/lang-java";
+import { keymap } from "@codemirror/view";
+import { Prec } from "@codemirror/state";
+import { indentWithTab } from "@codemirror/commands";
+import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
+import CodeFontSizeControl from "@/components/CodeFontSizeControl";
+import { useCodeFontSize } from "@/lib/useCodeFontSize";
 import SketchRunner from "@/components/SketchRunner";
 import SampleOutputs from "@/components/SampleOutputs";
 import ResizableDivider from "@/components/exam/ResizableDivider";
@@ -200,6 +208,23 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
 
   const runnerRef = useRef(null);
   const pickerRef = useRef(null);
+  // Same size preference (and control) the Java editor uses - one setting for all of their code.
+  const { fontSize, increase, decrease, reset: resetFont, canIncrease, canDecrease } = useCodeFontSize();
+  // Built once. A new extensions array makes @uiw/react-codemirror tear the editor down
+  // and drop the cursor mid-edit (see CodePracticePage), so Run reaches in through a ref.
+  const runHandler = useRef(() => {});
+  const editorExtensions = useMemo(
+    () => [
+      // Processing's syntax is Java's, so the Java mode colours it correctly.
+      java(),
+      ...a11yDarkEditorTheme,
+      // Tab indents (rather than moving focus off the editor); Ctrl/Cmd+Enter runs
+      // instead of inserting a blank line.
+      keymap.of([indentWithTab]),
+      Prec.highest(keymap.of([{ key: "Mod-Enter", run: () => { runHandler.current(); return true; } }])),
+    ],
+    []
+  );
 
   const tabs = programs[activePart] || blankProgram();
   const active = Math.min(activeTabs[activePart] || 0, tabs.length - 1);
@@ -324,23 +349,18 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
     setTabs((prev) => prev.map((t, j) => (j === i ? { ...t, name } : t)));
   };
 
-  const onEditorKeyDown = (e) => {
-    if (e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-      e.preventDefault();
-      const el = e.target;
-      const { selectionStart: s, selectionEnd: en } = el;
-      setCode(`${el.value.slice(0, s)}  ${el.value.slice(en)}`);
-      requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = s + 2; });
-    }
-  };
-
   const doRun = useCallback(() => {
     setReport(null);
     runnerRef.current?.run();
   }, []);
 
+  runHandler.current = doRun;
+
   useEffect(() => {
     const onKey = (e) => {
+      // The editor handles its own Ctrl/Cmd+Enter (and marks it handled), so this is
+      // only for when focus is somewhere else on the page.
+      if (e.defaultPrevented) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); doRun(); }
     };
     window.addEventListener("keydown", onKey);
@@ -589,6 +609,15 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                 <button onClick={addTab} className="px-2 py-1.5 text-muted-foreground hover:text-foreground" title="Add a tab">
                   <Plus className="w-4 h-4" />
                 </button>
+                <div className="ml-auto self-center mr-1 flex items-center gap-2">
+                  <CodeFontSizeControl
+                    fontSize={fontSize}
+                    onIncrease={increase}
+                    onDecrease={decrease}
+                    onReset={resetFont}
+                    canIncrease={canIncrease}
+                    canDecrease={canDecrease}
+                  />
                 {activeMeta?.starter?.trim() && (
                   <button
                     onClick={() => {
@@ -598,7 +627,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                       setActive(0);
                       setConfirmReset(false);
                     }}
-                    className={`ml-auto self-center mr-1 text-xs px-2 py-1 rounded ${
+                    className={`text-xs px-2 py-1 rounded ${
                       confirmReset ? "bg-amber-100 text-amber-900" : "text-muted-foreground hover:text-foreground"
                     }`}
                     title="Put this program back to the starter code your teacher gave"
@@ -606,18 +635,24 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                     {confirmReset ? "Click again to replace your code" : "Reset to starter code"}
                   </button>
                 )}
+                </div>
               </div>
 
-              <textarea
-                value={current?.code || ""}
-                onChange={(e) => setCode(e.target.value)}
-                onKeyDown={onEditorKeyDown}
-                spellCheck={false}
-                autoCapitalize="off"
-                autoComplete="off"
-                placeholder={multi ? `Paste program ${parts.findIndex((p) => p.id === activePart) + 1} here, then press Run.` : "Paste your Processing code here, then press Run."}
-                className="flex-1 min-h-[120px] w-full resize-none outline-none p-3 font-mono text-[13px] leading-6 whitespace-pre overflow-auto"
-              />
+              {/* The font size rides in as a CSS variable the theme reads - changing a
+                  variable only restyles, where a new extension would rebuild the editor. */}
+              <div className="flex-1 min-h-[120px] overflow-hidden" style={{ "--code-editor-font-size": `${fontSize}px` }}>
+                <CodeMirror
+                  key={`${activePart}:${active}`}
+                  value={current?.code || ""}
+                  onChange={setCode}
+                  theme="none"
+                  extensions={editorExtensions}
+                  height="100%"
+                  style={{ height: "100%" }}
+                  basicSetup={{ tabSize: 2 }}
+                  placeholder={multi ? `Paste program ${parts.findIndex((p) => p.id === activePart) + 1} here, then press Run.` : "Paste your Processing code here, then press Run."}
+                />
+              </div>
 
               {/* ---- files (the sketch's data/ folder) ---- */}
               <div

@@ -223,7 +223,11 @@ pattern under `src/components/teacher/`.
   - **Student side** (`SketchWorkspace.jsx`, rendered by `ProjectPage.jsx`
     when `project.kind === 'sketch'`): students write and test in real
     Processing on their own machine and PASTE the code in; code on the left,
-    the running sketch on the right. Tabs of code are snapshotted into
+    the running sketch on the right. The editor is the same CodeMirror + Java
+    mode + accessible colour theme (and font-size control) as the Java editor -
+    Processing's syntax is Java's - with Ctrl/Cmd+Enter bound to Run inside it
+    (keep the extensions array stable: a new one rebuilds the editor and drops
+    the cursor). Tabs of code are snapshotted into
     `submissions.files` (same shape as a gist snapshot) by the `submitSketch`
     action (`submissions/index.ts`; validation in `_shared/sketchFiles.ts`).
     Their data files (images, a `.vlw` font, text/csv) are uploaded one at a
