@@ -7,6 +7,7 @@ import {
   ACCEPT_ATTR, MAX_ASSET_BYTES, MAX_ASSETS_TOTAL_BYTES, assetFromBlob, formatBytes, loadAssets,
 } from "@/lib/processing/assets";
 import { baseName, partIdOf } from "@/lib/processing/programs";
+import { findMissingSemicolons } from "@/lib/processing/syntaxCheck";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { keymap } from "@codemirror/view";
@@ -373,6 +374,21 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
     (m) => !assets.some((a) => a.name.toLowerCase() === m.name.toLowerCase())
   );
   const emptyPrograms = multi ? parts.filter((p) => !hasCode(programs[p.id])) : [];
+  // Code Processing itself would refuse to run. Only worked out while the dialog is
+  // open (it tokenizes everything), and only a warning: they can still turn it in.
+  const syntaxProblems = useMemo(() => {
+    if (!submitOpen) return [];
+    const out = [];
+    for (const id of programIds) {
+      const list = programs[id] || [];
+      if (!hasCode(list)) continue;
+      const title = multi ? parts.find((p) => p.id === id)?.title : null;
+      for (const t of list) {
+        for (const m of findMissingSemicolons(t.code)) out.push({ where: [title, `${t.name}.pde`].filter(Boolean).join(" / "), ...m });
+      }
+    }
+    return out;
+  }, [submitOpen, programs, programIds, multi, parts]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -768,6 +784,22 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
               Nothing written yet for: {emptyPrograms.map((p) => p.title).join(", ")}. You can turn in now and add
               {emptyPrograms.length === 1 ? " it" : " them"} later by turning in again.
             </p>
+          )}
+
+          {syntaxProblems.length > 0 && (
+            <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+              <p>
+                Heads up: Processing won&rsquo;t run this as written. {syntaxProblems.length === 1 ? "A statement is" : `${syntaxProblems.length} statements are`} missing a
+                semicolon:
+              </p>
+              <ul className="font-mono text-xs space-y-0.5">
+                {syntaxProblems.slice(0, 4).map((m, i) => (
+                  <li key={i}>{m.where}, line {m.line}: {m.text.slice(0, 50)}</li>
+                ))}
+                {syntaxProblems.length > 4 && <li>...and {syntaxProblems.length - 4} more</li>}
+              </ul>
+              <p className="text-xs">You can fix it and turn in again, or turn it in as it is.</p>
+            </div>
           )}
 
           {missingNow.length > 0 && (

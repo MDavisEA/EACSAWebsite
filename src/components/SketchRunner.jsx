@@ -1,6 +1,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { preprocess } from "@/lib/processing/javaFixes";
+import { findMissingSemicolons } from "@/lib/processing/syntaxCheck";
 import { assetsToRunnerFiles } from "@/lib/processing/assets";
 import { Play, Square, Loader2 } from "lucide-react";
 
@@ -89,6 +90,22 @@ const SketchRunner = forwardRef(function SketchRunner(
     if (!source.trim()) {
       setStatus("idle");
       log("warn", "There is no code to run.");
+      return;
+    }
+    // Real Processing (Java) refuses to run code with a statement missing its
+    // semicolon, but Processing.js, being JavaScript underneath, quietly accepts
+    // it. Stop here instead, where Processing would, and say which line.
+    const missing = [];
+    for (const f of tabs || []) for (const m of findMissingSemicolons(f.content)) missing.push({ file: f.filename, ...m });
+    if (missing.length > 0) {
+      const several = (tabs || []).length > 1;
+      log("error", missing.length === 1
+        ? "Processing would stop here - a statement is missing its semicolon."
+        : `Processing would stop here - ${missing.length} statements are missing their semicolons.`);
+      missing.slice(0, 5).forEach((m) =>
+        log("error", `${several ? `${m.file}, ` : ""}line ${m.line} needs a semicolon (;) at the end:\n    ${m.text}`)
+      );
+      if (missing.length > 5) log("error", `...and ${missing.length - 5} more.`);
       return;
     }
     try {
