@@ -138,3 +138,52 @@ export function findMissingSemicolons(source) {
 
   return problems;
 }
+
+const OPENERS = { "(": ")", "[": "]", "{": "}" };
+const CLOSERS = { ")": "(", "]": "[", "}": "{" };
+
+/**
+ * Brackets that do not pair up: a `{` that is never closed, a `}` with nothing to
+ * close, or `(` closed by `}`. Processing.js is happy to run a sketch with a
+ * missing brace (it carries on as if the file ended there), where Processing
+ * itself stops with "Found one too many { characters without a } to match it".
+ *
+ * Unlike the semicolon rule this one cannot be wrong about valid code: balanced
+ * brackets are a hard requirement of Java, and the tokenizer already skips
+ * brackets inside strings, characters and comments.
+ *
+ * @returns {{ line: number, text: string, message: string }[]}
+ */
+export function findBracketProblems(source) {
+  const { toks } = tokenize(source || "");
+  const lines = String(source || "").split("\n");
+  const problems = [];
+  const stack = [];
+  let line = 1;
+  const report = (at, message) => problems.push({ line: at, text: (lines[at - 1] || "").trim(), message });
+
+  for (const tk of toks) {
+    line += (tk.pre.match(/\n/g) || []).length;
+    if (tk.t !== "op") continue;
+    if (OPENERS[tk.s]) {
+      stack.push({ s: tk.s, line });
+    } else if (CLOSERS[tk.s]) {
+      const want = CLOSERS[tk.s];
+      const top = stack[stack.length - 1];
+      if (top && top.s === want) {
+        stack.pop();
+      } else if (stack.some((o) => o.s === want)) {
+        // Something opened since the matching bracket was never closed: report each, then pair up.
+        while (stack[stack.length - 1].s !== want) {
+          const lost = stack.pop();
+          report(lost.line, `this ${lost.s} is never closed - every ${lost.s} needs a matching ${OPENERS[lost.s]}`);
+        }
+        stack.pop();
+      } else {
+        report(line, `this ${tk.s} has no matching ${want} before it`);
+      }
+    }
+  }
+  for (const lost of stack) report(lost.line, `this ${lost.s} is never closed - every ${lost.s} needs a matching ${OPENERS[lost.s]}`);
+  return problems.sort((a, b) => a.line - b.line);
+}

@@ -169,6 +169,49 @@ function classify(base) {
   return '?';
 }
 
+// ---------------------------------------------------------------- shadowing Processing's own functions
+// Processing functions students commonly also use as variable names. Java keeps variables and
+// methods in separate name spaces, so `int size = 150;` and `size(400, 400);` live happily side
+// by side in real Processing. In JavaScript they are one name space, so the variable hides the
+// function and the call dies with "size is not a function".
+const BUILTIN_FUNCS = new Set([
+  'size', 'text', 'textSize', 'textAlign', 'line', 'point', 'rect', 'ellipse', 'arc', 'triangle', 'quad',
+  'fill', 'stroke', 'noFill', 'noStroke', 'strokeWeight', 'background', 'random', 'noise', 'map',
+  'constrain', 'dist', 'min', 'max', 'abs', 'sq', 'sqrt', 'pow', 'round', 'floor', 'ceil', 'cos', 'sin',
+  'tan', 'atan2', 'radians', 'degrees', 'lerp', 'norm', 'mag', 'second', 'minute', 'hour', 'day', 'month',
+  'year', 'millis', 'image', 'shape', 'scale', 'rotate', 'translate', 'loop', 'noLoop', 'redraw',
+  'frameRate', 'print', 'println', 'str', 'join', 'split', 'trim', 'append', 'reverse', 'sort', 'splice',
+  'subset', 'concat', 'expand', 'tint', 'noTint', 'cursor', 'exit', 'save', 'get', 'set', 'copy', 'filter',
+  'blend', 'mask', 'curve', 'bezier', 'vertex', 'push', 'pop', 'red', 'green', 'blue', 'alpha', 'hue',
+  'brightness', 'saturation', 'lerpColor', 'smooth', 'noSmooth', 'pixelDensity', 'textFont', 'loadImage',
+]);
+
+/**
+ * A variable named like a Processing function that the code also CALLS gets a new name
+ * (`size` -> `size__v`), everywhere it is used as a variable. Calls - an unqualified or
+ * qualified name followed by `(` - are left alone, so `size(400, 400)` still means Processing's
+ * size() and `list.size()` still means the method.
+ *
+ * Done only when it is needed (the code both declares the variable and calls the function), and
+ * never when the program also defines its own method of that name.
+ */
+function renameBuiltinShadows(toks, closeOf, notes) {
+  const { vars, funcs } = collectDeclarations(toks, closeOf);
+  const clash = [];
+  for (const name of vars.keys()) {
+    if (!BUILTIN_FUNCS.has(name) || funcs.has(name) || PROTECTED_NAMES.has(name)) continue;
+    const calledPlainly = toks.some((tk, i) => tk.t === 'id' && tk.s === name && isOp(toks[i + 1], '(') && !isOp(toks[i - 1], '.'));
+    if (calledPlainly) clash.push(name);
+  }
+  if (!clash.length) return;
+  const set = new Set(clash);
+  toks.forEach((tk, i) => {
+    if (tk.t === 'id' && set.has(tk.s) && !isOp(toks[i + 1], '(')) tk.s += '__v';
+  });
+  notes.push('A variable shares its name with a Processing function (' + clash.join(', ')
+    + ') - legal in Java, not in JavaScript - so the variable was renamed behind the scenes.');
+}
+
 // ---------------------------------------------------------------- name collisions
 function renameCollisions(toks, closeOf, notes) {
   const { vars, funcs, funcDeclIdx } = collectDeclarations(toks, closeOf);
@@ -492,6 +535,7 @@ function preprocess(source) {
   const { out: noImports } = stripImports(source, notes);
   const { toks, trailing } = tokenize(noImports);
   const { closeOf, openOf } = matchBrackets(toks);
+  renameBuiltinShadows(toks, closeOf, notes);
   renameCollisions(toks, closeOf, notes);
   fixIntegerMath(toks, closeOf, openOf, notes);
   const code = toks.map((tk) => tk.pre + tk.s).join('') + trailing;

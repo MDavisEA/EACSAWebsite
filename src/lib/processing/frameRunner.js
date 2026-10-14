@@ -9,6 +9,7 @@
 //   parent -> frame  { pj: 1, type: 'run', code, files, frame: { w, h } }
 //   frame -> parent  { pj: 1, type: 'ready' | 'started' | 'exit' }
 //                    { pj: 1, type: 'log', level: 'info'|'warn'|'error'|'out', text }
+//                    { pj: 1, type: 'error', name, message, stack, generated }   (a runtime error)
 //                    { pj: 1, type: 'size', w, h }
 //                    { pj: 1, type: 'files', used: [name], missing: [{ name, fn }] }
 //   files: { [name]: { kind: 'image'|'text'|'other', dataUrl?, text? } }
@@ -41,12 +42,22 @@
 
   var seenErrors = {};
   var inst = null;
+  // Processing.js's JavaScript for the sketch, kept so an error can be traced back to a
+  // line of the student's own code (the parent does that - see errorLocation.js).
+  var generatedCode = '';
   function stopLoop() { try { if (inst) inst.noLoop(); } catch (e) { /* ignore */ } }
   window.addEventListener('error', function (ev) {
     var m = (ev && ev.message) || 'Unknown error';
     if (seenErrors[m]) return;
     seenErrors[m] = 1;
-    log('error', 'Runtime error: ' + m);
+    var err = ev && ev.error;
+    send({
+      type: 'error',
+      name: String((err && err.name) || 'Error'),
+      message: m,
+      stack: String((err && err.stack) || '').slice(0, 8000),
+      generated: generatedCode,
+    });
     stopLoop();
   });
 
@@ -105,7 +116,7 @@
 
     Promise.all(pending).then(function (loaded) {
       var sk;
-      try { sk = Processing.compile(msg.code); }
+      try { sk = Processing.compile(msg.code); generatedCode = sk.sourceCode; }
       catch (e) {
         log('error', 'Could not translate this sketch: ' + (e && e.message ? e.message : e)
           + '. This usually means a syntax Processing.js does not support - the sketch may still run in real Processing.');
@@ -123,10 +134,20 @@
         displayDensity: function () { return 1; },
         fullScreen: function () { ctx.p.size(frame.w, frame.h); },
       };
+      // Strict mode, so assigning to a name that was never declared (`scor = 5;`, a typo or a
+      // forgotten `int`) is an error, as it is in Java. Without it JavaScript quietly creates a
+      // new global and the mistake never shows. The directive shares line 1 with the generated
+      // code's first line, so error line numbers are unchanged. If strict mode rejects the
+      // translated code outright (it forbids a few old JavaScript forms Java allows, such as
+      // 010 for octal), fall back to ordinary mode rather than stop a valid sketch.
       var body;
+      var prelude = 'var ' + Object.keys(bare).map(function (k) { return k + '=__pj.' + k; }).join(',') + ';return (';
+      function build(strict) {
+        return (new Function('__pj', (strict ? "'use strict';" : '') + prelude + sk.sourceCode + ');'))(bare);
+      }
       try {
-        body = (new Function('__pj', 'var ' + Object.keys(bare).map(function (k) { return k + '=__pj.' + k; }).join(',')
-          + ';return (' + sk.sourceCode + ');'))(bare);
+        try { body = build(!msg.sloppy); }
+        catch (e) { if (e instanceof SyntaxError && !msg.sloppy) body = build(false); else throw e; }
       } catch (e) { log('error', 'Could not prepare this sketch: ' + e.message); return; }
 
       sk.attachFunction = function (p) {
@@ -174,9 +195,23 @@
         if (typeof p.settings === 'function') { try { p.settings(); } catch (e) { log('error', 'settings(): ' + e.message); } }
       };
 
-      var canvas = document.getElementById('c');
+      // An element's id becomes a global variable in its page, so this canvas must not be
+      // called something a student might also name a variable (it used to be `c`, which made a
+      // forgotten `int c` run silently instead of failing).
+      var canvas = document.getElementById('__pj_canvas');
       try { inst = new Processing(canvas, sk); }
-      catch (e) { log('error', 'Could not start the sketch: ' + (e && e.message ? e.message : e)); return; }
+      catch (e) {
+        // setup() runs while the sketch is being created, so a mistake in it lands here rather
+        // than in the window's error handler. Same report, so it gets the same line number.
+        send({
+          type: 'error',
+          name: String((e && e.name) || 'Error'),
+          message: String((e && e.message) || e),
+          stack: String((e && e.stack) || '').slice(0, 8000),
+          generated: generatedCode,
+        });
+        return;
+      }
 
       var lw = 0; var lh = 0;
       setInterval(function () {

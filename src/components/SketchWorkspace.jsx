@@ -7,7 +7,7 @@ import {
   ACCEPT_ATTR, MAX_ASSET_BYTES, MAX_ASSETS_TOTAL_BYTES, assetFromBlob, formatBytes, loadAssets,
 } from "@/lib/processing/assets";
 import { baseName, partIdOf } from "@/lib/processing/programs";
-import { findMissingSemicolons } from "@/lib/processing/syntaxCheck";
+import { findBracketProblems, findMissingSemicolons } from "@/lib/processing/syntaxCheck";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { keymap } from "@codemirror/view";
@@ -384,7 +384,13 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
       if (!hasCode(list)) continue;
       const title = multi ? parts.find((p) => p.id === id)?.title : null;
       for (const t of list) {
-        for (const m of findMissingSemicolons(t.code)) out.push({ where: [title, `${t.name}.pde`].filter(Boolean).join(" / "), ...m });
+        const where = [title, `${t.name}.pde`].filter(Boolean).join(" / ");
+        // Brackets first, as the run does: until they pair up, the semicolon check means little.
+        const unpaired = findBracketProblems(t.code);
+        const found = unpaired.length > 0
+          ? unpaired.map((m) => ({ ...m, what: m.message }))
+          : findMissingSemicolons(t.code).map((m) => ({ ...m, what: "needs a semicolon" }));
+        for (const m of found) out.push({ where, ...m });
       }
     }
     return out;
@@ -789,12 +795,11 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
           {syntaxProblems.length > 0 && (
             <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
               <p>
-                Heads up: Processing won&rsquo;t run this as written. {syntaxProblems.length === 1 ? "A statement is" : `${syntaxProblems.length} statements are`} missing a
-                semicolon:
+                Heads up: Processing won&rsquo;t run this as written - {syntaxProblems.length === 1 ? "there's a mistake" : `there are ${syntaxProblems.length} mistakes`} it would stop at:
               </p>
               <ul className="font-mono text-xs space-y-0.5">
                 {syntaxProblems.slice(0, 4).map((m, i) => (
-                  <li key={i}>{m.where}, line {m.line}: {m.text.slice(0, 50)}</li>
+                  <li key={i}>{m.where}, line {m.line} {m.what}: {m.text.slice(0, 40)}</li>
                 ))}
                 {syntaxProblems.length > 4 && <li>...and {syntaxProblems.length - 4} more</li>}
               </ul>

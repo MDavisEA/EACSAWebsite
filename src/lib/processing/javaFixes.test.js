@@ -80,6 +80,28 @@ check('a single int method is still truncated',
   'int half(){ return 7; } void f(){ println(half()/2); }',
   'int half(){ return 7; } void f(){ println(int(half()/2)); }');
 
+
+// ---- variables named like Processing functions (found in real student sketches)
+check('a variable called size, and a call to size()',
+  'int size = 150;\nvoid setup() { size(400, 400); }\nvoid draw() { ellipse(10, 10, size, size); }',
+  'int size__v = 150;\nvoid setup() { size(400, 400); }\nvoid draw() { ellipse(10, 10, size__v, size__v); }');
+check('a variable called text AND a call text(text, ...)',
+  'String text = "hi";\nvoid draw() { text(text, 10, 20); }',
+  'String text__v = "hi";\nvoid draw() { text(text__v, 10, 20); }');
+check('a field and this.field and a parameter, renamed together',
+  'class Ball {\n  float size;\n  Ball(float size) { this.size = size; }\n  void show() { ellipse(0, 0, size, size); }\n}\nvoid setup() { size(100, 100); Ball b = new Ball(5); println(b.size); }',
+  'class Ball {\n  float size__v;\n  Ball(float size__v) { this.size__v = size__v; }\n  void show() { ellipse(0, 0, size__v, size__v); }\n}\nvoid setup() { size(100, 100); Ball b = new Ball(5); println(b.size__v); }');
+unchanged('a variable named like a function that is never called is left alone',
+  'int size = 5;\nvoid draw() { ellipse(0, 0, size, size); }');
+check('the program defines its own size() method: the older method-rename rule handles it, not this one',
+  'int size = 5;\nint size() { return 1; }\nvoid draw() { println(size()); }',
+  'int size = 5;\nint size__fn() { return 1; }\nvoid draw() { println(size__fn()); }');
+check('a method call on the renamed variable still works',
+  'String line = "a";\nvoid draw() { line(0, 0, 5, 5); println(line.length()); }',
+  'String line__v = "a";\nvoid draw() { line(0, 0, 5, 5); println(line__v.length()); }');
+unchanged('names inside strings and comments are never touched',
+  'void setup() { size(10, 10); // size is 10\n  println("size"); }');
+
 // ---- whitespace and comments survive
 check('comments preserved', '// top\nint a = 5;\n/* c */ int b = a / 2; // end', '// top\nint a = 5;\n/* c */ int b = int(a / 2); // end');
 

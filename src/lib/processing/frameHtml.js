@@ -30,7 +30,7 @@ export function buildFrameHtml() {
     // Processing.js itself needs eval and a data: font.
     `<meta http-equiv="Content-Security-Policy" content="${CSP}">` +
     "<style>html,body{margin:0;padding:0;overflow:hidden;background:#fff}canvas{display:block;outline:none}</style>" +
-    '</head><body><canvas id="c" tabindex="0"></canvas>' +
+    '</head><body><canvas id="__pj_canvas" tabindex="0"></canvas>' +
     `<script>${safe(processingSource)}</script>` +
     `<script>${safe(frameRunnerSource)}</script></body></html>`
   );

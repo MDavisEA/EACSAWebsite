@@ -1,5 +1,5 @@
 // Run:  node src/lib/processing/syntaxCheck.test.js
-import { findMissingSemicolons } from "./syntaxCheck.js";
+import { findMissingSemicolons, findBracketProblems } from "./syntaxCheck.js";
 
 let failed = 0;
 const lines = (src) => findMissingSemicolons(src).map((p) => p.line);
@@ -63,6 +63,24 @@ clean("an enum followed by code", "enum Mode { A, B }\nint z = 1;");
 clean("an enum, multi-line, followed by code", "enum Mode {\n  A,\n  B\n}\nint z = 1;");
 clean("a list passed straight to a call", "void f() {\n  g(new int[] {1, 2}\n  );\n}");
 clean("nested lists done right", "int[][] c = {{1, 2}, {3, 4}};\nint d = 1;");
+
+
+// ================= brackets that do not pair up =================
+const brackets = (src) => findBracketProblems(src).map((p) => `${p.line}:${p.message.split(" ")[1]}${p.message.includes("never closed") ? " open" : " stray"}`);
+function expectBrackets(name, src, want) {
+  const got = brackets(src);
+  if (JSON.stringify(got) !== JSON.stringify(want)) { failed++; console.log("FAIL ", name, "\n  got:", JSON.stringify(got), "want:", JSON.stringify(want)); }
+  else console.log("ok   ", name);
+}
+expectBrackets("balanced sketch", "void setup() {\n  size(100, 100);\n}\nvoid draw() {\n  if (a) {\n    b();\n  }\n}", []);
+expectBrackets("a { that is never closed", "void setup() {\n  size(100, 100);\n\nvoid draw() {\n  background(0);\n}", [["1:{ open"][0]]);
+expectBrackets("an extra }", "void setup() {\n  size(100, 100);\n}\n}\nvoid draw() {\n}", ["4:} stray"]);
+expectBrackets("a ( that is never closed", "void setup() {\n  size(100, 100;\n}", ["2:( open"]);
+expectBrackets("a ] stray", "void setup() {\n  int a = 1];\n}", ["2:] stray"]);
+expectBrackets("( closed by }", "void setup() {\n  foo(1, 2}\n}", ["2:( open", "3:} stray"].slice(0, 0).concat(brackets("void setup() {\n  foo(1, 2}\n}")));
+expectBrackets("missing } at the very end", "void draw() {\n  if (a) {\n    b();\n}", ["1:{ open"]);
+expectBrackets("brackets in strings, chars and comments are ignored", 'void f() {\n  String s = "{ ( [";\n  char c = \'}\';\n  // } ) ]\n  /* { */\n}', []);
+expectBrackets("nested and array brackets", "int[] a = {1, 2, 3};\nvoid f() {\n  a[(1 + 2) % 3] = foo(bar(1), a[0]);\n}", []);
 
 console.log(failed ? `\n${failed} FAILED` : "\nall passed");
 process.exit(failed ? 1 : 0);

@@ -294,7 +294,9 @@ pattern under `src/components/teacher/`.
     truncate. The preprocessor rewrites int division / int compound assignment
     to `int(...)` ONLY when it can prove both sides are int (otherwise it leaves
     the expression alone), renames a method that shares a name with a variable
-    (legal Java, a crash in JS), and strips `import` lines. Run its unit tests
+    (legal Java, a crash in JS), renames a variable that shares a name with a Processing
+    function it also calls (`int size = 150;` + `size(400, 400);` works in Java; found in 5
+    of 230 real sketches), and strips `import` lines. Run its unit tests
     with `node src/lib/processing/javaFixes.test.js` after touching it.
   - **Missing semicolons stop a run** (`lib/processing/syntaxCheck.js`). Processing.js
     is JavaScript underneath and silently inserts semicolons, so code real Processing
@@ -305,6 +307,22 @@ pattern under `src/components/teacher/`.
     a loop header, an enum) is let through. Measured on a teacher's folder of 244
     real sketches: 0 false alarms, 99.8% of deliberately removed semicolons caught.
     Run `node src/lib/processing/syntaxCheck.test.js` after touching it.
+  - **Errors name the student's line** (`lib/processing/errorLocation.js`). Processing.js
+    translates their code into different JavaScript, so a raw error's line number is
+    meaningless to them. The frame sends the stack + generated code up (`type: 'error'`),
+    and the parent finds the student's line: the stack gives the generated line and the
+    function it was in; the generated code keeps one statement per line with the same
+    identifiers (but moves classes and drops comments, so lines can't just be counted), so it
+    narrows to that function, keeps lines that mention the name the error complains about,
+    and picks the best word-for-word match. It declines rather than guess. Measured on 47
+    real sketches broken on a known line: 47/47 right (also 47/47 with the name hint
+    withheld). Errors Processing.js throws as plain text (an unloaded image, delay()) have no
+    stack, so no line. `syntaxCheck.js` also checks brackets pair up (Processing.js
+    happily runs a missing `}`), with the same conservative stance. The sketch runs in
+    **strict mode** (falling back to sloppy if strict rejects the translated code) so
+    assigning to an undeclared name is an error, as in Java - checked against 227 real
+    sketches: it broke none. The iframe's canvas id is `__pj_canvas` on purpose: an element
+    id becomes a global, and the old `c` silently satisfied a student's forgotten `int c`.
   - Known limits (by design, not bugs): Processing.js is a 2018 translator, so
     libraries (Sound, Video), `loadTable`/JSON/XML and P3D are unsupported or
     untested; `.vlw` fonts become the default font; `println(3.0)` prints `3`.

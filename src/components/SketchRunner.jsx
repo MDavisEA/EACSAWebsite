@@ -1,7 +1,8 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { preprocess } from "@/lib/processing/javaFixes";
-import { findMissingSemicolons } from "@/lib/processing/syntaxCheck";
+import { findBracketProblems, findMissingSemicolons } from "@/lib/processing/syntaxCheck";
+import { explainError, locateRuntimeError } from "@/lib/processing/errorLocation";
 import { assetsToRunnerFiles } from "@/lib/processing/assets";
 import { Play, Square, Loader2 } from "lucide-react";
 
@@ -26,6 +27,19 @@ import { Play, Square, Loader2 } from "lucide-react";
 // Ref: { run(), stop() } so a parent's own button / shortcut can drive it.
 
 const MAX_LOG_LINES = 300;
+
+// The tabs are joined into one program before running, so a line number found in
+// that program has to be turned back into "this tab, this line".
+function locateInTabs(tabs, line) {
+  let start = 1;
+  for (const t of tabs) {
+    const lines = String(t.content).split("\n");
+    if (line < start + lines.length) return { file: t.filename, line: line - start + 1, text: (lines[line - start] || "").trim() };
+    start += lines.length;
+  }
+  return null;
+}
+
 const MAX_LOG_CHARS = 2000;
 const LOG_LEVELS = new Set(["info", "warn", "error", "out"]);
 
@@ -64,6 +78,8 @@ const SketchRunner = forwardRef(function SketchRunner(
   const consoleRef = useRef(null);
   const htmlRef = useRef(null);
   const runCounter = useRef(0);
+  // What the current run was made from, to trace an error back to the student's own lines.
+  const runInfo = useRef(null);
   const latest = useRef({ files, assets });
   latest.current = { files, assets };
   const onReportRef = useRef(onReport);
@@ -90,6 +106,21 @@ const SketchRunner = forwardRef(function SketchRunner(
     if (!source.trim()) {
       setStatus("idle");
       log("warn", "There is no code to run.");
+      return;
+    }
+    // Brackets first: a missing } or ) throws every later line off, so fixing it comes before
+    // anything else. Processing.js carries on regardless; real Processing stops.
+    const unpaired = [];
+    for (const f of tabs || []) for (const m of findBracketProblems(f.content)) unpaired.push({ file: f.filename, ...m });
+    if (unpaired.length > 0) {
+      const several = (tabs || []).length > 1;
+      log("error", unpaired.length === 1
+        ? "Processing would stop here - a bracket doesn't have its partner."
+        : `Processing would stop here - ${unpaired.length} brackets don't have their partners.`);
+      unpaired.slice(0, 5).forEach((m) =>
+        log("error", `${several ? `${m.file}, ` : ""}line ${m.line}: ${m.message}\n    ${m.text}`)
+      );
+      if (unpaired.length > 5) log("error", `...and ${unpaired.length - 5} more.`);
       return;
     }
     // Real Processing (Java) refuses to run code with a statement missing its
@@ -130,6 +161,7 @@ const SketchRunner = forwardRef(function SketchRunner(
       h: Math.max(200, (stage?.clientHeight || 600) - 24),
     };
     runCounter.current += 1;
+    runInfo.current = { tabs: (tabs || []).map((t) => ({ filename: t.filename, content: t.content })), code };
     setRun({
       id: runCounter.current,
       html: htmlRef.current,
@@ -170,6 +202,40 @@ const SketchRunner = forwardRef(function SketchRunner(
         if (!(w >= 1 && h >= 1)) return;
         setSize({ w: Math.min(w, MAX_CANVAS_SIDE), h: Math.min(h, MAX_CANVAS_SIDE) });
         setStatus((s) => (s === "starting" ? "running" : s));
+      } else if (d.type === "error") {
+        if (typeof d.message !== "string") return;
+        const message = d.message.replace(/^Uncaught\s+/, "").slice(0, 500);
+        const info = runInfo.current;
+        let found = null;
+        try {
+          const loc = info && locateRuntimeError({
+            preprocessed: info.code,
+            generated: typeof d.generated === "string" ? d.generated.slice(0, 2_000_000) : "",
+            stack: typeof d.stack === "string" ? d.stack.slice(0, 8000) : "",
+            message,
+          });
+          const at = loc && locateInTabs(info.tabs, loc.line);
+          if (at) {
+            found = {
+              ...at,
+              others: (loc.others || []).map((l) => locateInTabs(info.tabs, l)).filter(Boolean),
+            };
+          }
+        } catch {
+          found = null; // never let helping fail the report itself
+        }
+        if (!found) {
+          // Can't say where - still say what, in words a student can act on.
+          const plain = explainError(message);
+          log("error", plain === message ? `Error: ${message}` : `Error: ${plain}\n    (${message})`);
+        } else {
+          const several = info.tabs.length > 1;
+          const where = `${several ? `${found.file}, ` : ""}line ${found.line}`;
+          const extra = found.others.length
+            ? `\n    It's also on ${found.others.length === 1 ? "line" : "lines"} ${found.others.map((o) => o.line).join(", ")}.`
+            : "";
+          log("error", `${where}: ${explainError(message, found.text)}\n    ${found.text}${extra}`);
+        }
       } else if (d.type === "files") onReportRef.current?.(cleanReport(d));
       else if (d.type === "exit") setStatus("stopped");
     };
