@@ -178,9 +178,11 @@ export function buildWorkItems(
       // total would read as a lower maximum than the real one.
       points_possible: (() => {
         const parts: Record<string, any>[] = Array.isArray(pr.parts) ? pr.parts : [];
-        return parts.length > 0 && parts.every((p) => typeof p.points === 'number')
-          ? parts.reduce((sum, p) => sum + p.points, 0)
-          : null;
+        if (parts.length > 0) {
+          return parts.every((p) => typeof p.points === 'number') ? parts.reduce((sum, p) => sum + p.points, 0) : null;
+        }
+        // A single-program project: its own total, if the teacher set one.
+        return pr.points_possible != null ? Number(pr.points_possible) : null;
       })(),
       submitted_at: sub?.submitted_at ?? null,
       is_late: !!(pr.due_date && sub?.submitted_at && new Date(sub.submitted_at) > new Date(pr.due_date)),

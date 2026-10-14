@@ -123,6 +123,11 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
       unit_id: form.unit_id || null,
       // Single-program instructions; with programs listed they live on each program.
       brief: isSketch ? { description: form.brief?.description || "", images: form.brief?.images || [] } : {},
+      // A single program's total. (With programs listed, the total is their points added up.)
+      points_possible:
+        isSketch && (form.parts || []).length === 0 && form.points_possible !== "" && form.points_possible != null
+          ? Number(form.points_possible)
+          : null,
       parts: isSketch
         ? (form.parts || []).map((p) => ({
             id: p.id,
@@ -323,6 +328,20 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
           <p className="text-xs text-muted-foreground">
             Optional. Students see this next to their code, so they don't have to flip to the Assignment tab.
           </p>
+          <div className="pt-2 space-y-1">
+            <Label>Points</Label>
+            <Input
+              type="number"
+              min="0"
+              value={form.points_possible ?? ""}
+              onChange={(e) => updateField("points_possible", e.target.value)}
+              placeholder="e.g. 10"
+              className="w-28"
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional. Setting it gives you a one-click <strong>Full credit</strong> button when you grade.
+            </p>
+          </div>
         </div>
       )}
 

@@ -29,6 +29,8 @@ function sanitizeForStudent(project: Record<string, any>) {
     // Instructions + screenshots when it is a single program (a multi-program
     // assignment keeps them on each part).
     brief: project.brief || {},
+    // How many points a single-program project is worth (null = not set).
+    points_possible: project.points_possible ?? null,
     description_html: project.description_html,
     rubric_md: project.rubric_md,
     starter_files: project.starter_files || [],
@@ -49,6 +51,13 @@ function sanitizeForStudent(project: Record<string, any>) {
 async function kindForCourse(admin: any, courseId: string): Promise<'gist' | 'sketch'> {
   const { data } = await admin.from('courses').select('language').eq('id', courseId).maybeSingle();
   return data?.language === 'processing' ? 'sketch' : 'gist';
+}
+
+// A points total from the form: a non-negative number, or null for "not set".
+function cleanPoints(v: unknown): number | null {
+  if (v === null || v === '' || v === undefined) return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 Deno.serve(async (req) => {
@@ -137,6 +146,7 @@ Deno.serve(async (req) => {
         return json({ error: 'Pick one of your own courses for this project.' }, 403);
       }
       const { section_due_dates, kind: _kind, ...insertData } = body.data || {};
+      if ('points_possible' in insertData) insertData.points_possible = cleanPoints(insertData.points_possible);
       insertData.kind = await kindForCourse(admin, insertData.course_id);
       // Programs only mean something for a sketch.
       insertData.parts = insertData.kind === 'sketch' ? normalizeParts(insertData.parts) : [];
@@ -158,6 +168,7 @@ Deno.serve(async (req) => {
         return json({ error: 'Pick one of your own courses for this project.' }, 403);
       }
       const { section_due_dates, kind: _kind, ...updateData } = body.data || {};
+      if ('points_possible' in updateData) updateData.points_possible = cleanPoints(updateData.points_possible);
       if (updateData.course_id) {
         const { data: existing } = await admin.from('projects').select('kind').eq('id', body.id).maybeSingle();
         if ((await kindForCourse(admin, updateData.course_id)) !== (existing?.kind || 'gist')) {

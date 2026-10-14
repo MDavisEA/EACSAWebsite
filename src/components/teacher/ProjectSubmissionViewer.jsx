@@ -72,6 +72,10 @@ export default function ProjectSubmissionViewer({ project }) {
   // A problem set: several programs, each scored separately and summed.
   const parts = isSketch ? project.parts || [] : [];
   const hasParts = parts.length > 0;
+  // The most this assignment can score: its programs' points added up, or - for a
+  // single program - the total the teacher set. Null when neither is known, in
+  // which case there is no Full credit button (nothing to give full credit of).
+  const maxPoints = partsTotalPoints(project.parts) ?? (project.points_possible != null ? Number(project.points_possible) : null);
   const [reviewScores, setReviewScores] = useState({}); // programId -> typed score
   const [reviewDraft, setReviewDraft] = useState({
     teacher_comments: "",
@@ -411,7 +415,7 @@ export default function ProjectSubmissionViewer({ project }) {
               <TableHead>Files</TableHead>
               <TableHead>AI Help</TableHead>
               <TableHead>Feedback</TableHead>
-              <TableHead>Gist</TableHead>
+              {!isSketch && <TableHead>Gist</TableHead>}
               <TableHead className="w-10"></TableHead>
             </TableRow>
           </TableHeader>
@@ -465,16 +469,19 @@ export default function ProjectSubmissionViewer({ project }) {
                       )}
                     </button>
                   </TableCell>
-                  <TableCell>
-                    <a
-                      href={s.gist_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline inline-flex items-center gap-1 text-sm"
-                    >
-                      View <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </TableCell>
+                  {/* A sketch is pasted into the site, so there is no Gist to link to. */}
+                  {!isSketch && (
+                    <TableCell>
+                      <a
+                        href={s.gist_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline inline-flex items-center gap-1 text-sm"
+                      >
+                        View <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(s)}>
                       <Trash2 className="w-4 h-4 text-destructive" />
@@ -494,7 +501,7 @@ export default function ProjectSubmissionViewer({ project }) {
         submissions={submissions}
         courseId={project.course_id}
         preloadedRoster={roster}
-        maxPoints={partsTotalPoints(project.parts)}
+        maxPoints={maxPoints}
         scoreOf={(s) => s.score ?? null}
       />
 
@@ -650,7 +657,25 @@ export default function ProjectSubmissionViewer({ project }) {
 
             {hasParts ? (
               <div className="space-y-2 max-w-md">
-                <Label>Score each program</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Score each program</Label>
+                  {parts.some((p) => typeof p.points === "number") && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-green-700 border-green-300 hover:bg-green-50"
+                      onClick={() =>
+                        setReviewScores((q) => ({
+                          ...q,
+                          ...Object.fromEntries(parts.filter((p) => typeof p.points === "number").map((p) => [p.id, String(p.points)])),
+                        }))
+                      }
+                    >
+                      Full credit
+                    </Button>
+                  )}
+                </div>
                 {parts.map((p, i) => (
                   <div key={p.id} className="flex items-center gap-2">
                     <span className="text-sm flex-1 truncate" title={p.title}>{i + 1}. {p.title}</span>
@@ -660,7 +685,16 @@ export default function ProjectSubmissionViewer({ project }) {
                       onChange={(e) => setReviewScores((q) => ({ ...q, [p.id]: e.target.value }))}
                       className="w-20 text-center h-8"
                     />
-                    {typeof p.points === "number" && <span className="text-xs text-muted-foreground w-10">/ {p.points}</span>}
+                    {typeof p.points === "number" && (
+                      <button
+                        type="button"
+                        onClick={() => setReviewScores((q) => ({ ...q, [p.id]: String(p.points) }))}
+                        className="text-xs text-muted-foreground hover:text-green-700 w-10 text-left"
+                        title="Full credit for this program"
+                      >
+                        / {p.points}
+                      </button>
+                    )}
                   </div>
                 ))}
                 <p className="text-sm">
@@ -670,14 +704,28 @@ export default function ProjectSubmissionViewer({ project }) {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2 max-w-[160px]">
-                <Label>Score (optional)</Label>
-                <Input
-                  type="number"
-                  value={reviewDraft.score}
-                  onChange={(e) => setReviewDraft((d) => ({ ...d, score: e.target.value }))}
-                  placeholder="—"
-                />
+              <div className="space-y-2">
+                <Label>Score{maxPoints != null ? ` / ${maxPoints}` : " (optional)"}</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={reviewDraft.score}
+                    onChange={(e) => setReviewDraft((d) => ({ ...d, score: e.target.value }))}
+                    placeholder="—"
+                    className="w-24"
+                  />
+                  {maxPoints != null && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-green-700 border-green-300 hover:bg-green-50"
+                      onClick={() => setReviewDraft((d) => ({ ...d, score: String(maxPoints) }))}
+                    >
+                      Full credit
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 

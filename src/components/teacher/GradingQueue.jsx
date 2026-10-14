@@ -194,7 +194,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
       : kind === "code"
       ? work?.points_possible ?? null
       : kind === "project"
-      ? partsTotalPoints(work?.parts)
+      ? partsTotalPoints(work?.parts) ?? (work?.points_possible != null ? Number(work.points_possible) : null)
       : null;
 
   // Only a Project has files, so only there does a comment need to record
@@ -676,7 +676,23 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                     </p>
                   ) : hasParts ? (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-500">Score each program</Label>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs text-slate-500">Score each program</Label>
+                        {/* Every program that says how many points it is worth gets all of them. */}
+                        {parts.some((p) => typeof p.points === "number") && (
+                          <button
+                            onClick={() =>
+                              setQuestionScores((q) => ({
+                                ...q,
+                                ...Object.fromEntries(parts.filter((p) => typeof p.points === "number").map((p) => [p.id, String(p.points)])),
+                              }))
+                            }
+                            className="text-xs px-2 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors font-medium"
+                          >
+                            Full credit
+                          </button>
+                        )}
+                      </div>
                       {parts.map((p, i) => (
                         <div key={p.id} className="flex items-center gap-2">
                           <span className="text-sm flex-1 truncate" title={p.title}>{i + 1}. {p.title}</span>
@@ -686,7 +702,15 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                             onChange={(e) => setQuestionScores((q) => ({ ...q, [p.id]: e.target.value }))}
                             className="w-20 text-center h-8"
                           />
-                          {typeof p.points === "number" && <span className="text-xs text-muted-foreground w-10">/ {p.points}</span>}
+                          {typeof p.points === "number" && (
+                            <button
+                              onClick={() => setQuestionScores((q) => ({ ...q, [p.id]: String(p.points) }))}
+                              className="text-xs text-muted-foreground hover:text-green-700 w-10 text-left"
+                              title="Full credit for this program"
+                            >
+                              / {p.points}
+                            </button>
+                          )}
                         </div>
                       ))}
                       <p className="text-sm pt-1">

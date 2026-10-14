@@ -261,7 +261,11 @@ pattern under `src/components/teacher/`.
     Code view shows them side by side (`ProgramBrief`), and `BriefEditor` is the
     one teacher-side editor for both. Grading a sketch opens on its **Output**
     (not its code) with the score/comment column beside it; **Code** is the other
-    tab, and the open program is shared between the two. **Starter code is
+    tab, and the open program is shared between the two. **Full credit**
+    buttons appear wherever a maximum is known: a problem set fills every program
+    that has points, and a single program uses `projects.points_possible`
+    (migration 0039, optional - no total means no button, since there is nothing
+    to give full credit of). **Starter code is
     per program** (`parts[].starter`, empty = blank editor): a program opens on
     its starter only when nothing is saved for it yet (a draft or turn-in wins,
     even if cleared on purpose), and the student can "Reset to starter code". The
