@@ -571,6 +571,26 @@ export default function StudentDashboard() {
             <p className="text-sm text-destructive py-4">{detailError}</p>
           ) : detail?.submission ? (
             <div className="space-y-4">
+              {/* A Processing sketch goes back into its editor (the same page they first turned it
+                  in from). At the TOP, not after their code: a long sketch pushes anything below it
+                  off-screen, and a student who cannot find this believes she is locked out.
+                  After grading, the old grade is archived and this goes back to waiting on one - the
+                  server (submitSketch) does that, this just says so. */}
+              {detail.item.kind === "project" &&
+                detail.item.project_kind === "sketch" &&
+                ["submitted", "graded", "reviewed"].includes(detail.item.status) && (
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-center gap-3 flex-wrap">
+                    <Button onClick={() => navigate(`/project?id=${detail.item.id}`)}>
+                      <RotateCcw className="w-4 h-4 mr-1.5" /> Open it to change and turn in again
+                    </Button>
+                    <span className="text-xs text-muted-foreground flex-1 min-w-[200px]">
+                      {detail.item.status === "submitted"
+                        ? "Want to fix something? This opens your sketch with your work still in it."
+                        : "Want to fix something? This opens your sketch with your work still in it. If you turn it in again, your current grade and feedback go back to waiting until your teacher looks at it again."}
+                    </span>
+                  </div>
+                )}
+
               <SubmissionDetail
                 result={detail.submission}
                 codingProblem={
@@ -634,24 +654,6 @@ export default function StudentDashboard() {
                   </div>
                 );
               })()}
-
-              {/* A Processing sketch goes back into its editor (the same page they first turned it
-                  in from). After grading the old grade is archived and this goes back to waiting on
-                  one - the server (submitSketch) does that, this just says so. */}
-              {detail.item.kind === "project" &&
-                detail.item.project_kind === "sketch" &&
-                ["submitted", "graded", "reviewed"].includes(detail.item.status) && (
-                  <div className="border-t pt-3 flex items-center gap-3 flex-wrap">
-                    <Button variant="outline" onClick={() => navigate(`/project?id=${detail.item.id}`)}>
-                      <RotateCcw className="w-4 h-4 mr-1.5" /> Open it to change and turn in again
-                    </Button>
-                    <span className="text-xs text-muted-foreground">
-                      {detail.item.status === "submitted"
-                        ? "Opens your sketch with your work still in it."
-                        : "Opens your sketch with your work still in it. If you turn it in again, your current grade and feedback go back to waiting until your teacher looks at it again."}
-                    </span>
-                  </div>
-                )}
 
               {/* The point of the whole Reviewed section: once they have
                   actually read the feedback they say so, and it moves out of
