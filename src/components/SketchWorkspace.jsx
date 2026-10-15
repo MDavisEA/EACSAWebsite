@@ -829,6 +829,15 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
             )}
           </div>
 
+          {/* Only visible when the feedback was released - the server withholds the score otherwise. */}
+          {submitted && submission?.feedback_released && (
+            <p className="text-sm text-blue-900 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              Your teacher has already graded this. If you turn it in again, it goes back to waiting for a grade:
+              your current grade and feedback are kept, but you won&rsquo;t see them until your teacher looks at the
+              new version.
+            </p>
+          )}
+
           {submitError && <p className="text-sm text-destructive">{submitError}</p>}
 
           <div className="flex justify-end gap-2 pt-2">

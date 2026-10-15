@@ -280,6 +280,16 @@ pattern under `src/components/teacher/`.
     off), fed by the same sanitized `previewAsStudent` payload a student gets -
     so it cannot drift from the student page; Java/other work keeps the older
     summary dialog.
+  - **Turning a sketch in again.** From the student dashboard a turned-in sketch has an
+    "Open it to change and turn in again" button (it routes back to `/project?id=`; the
+    WorkItem carries `project_kind` so only sketches get it). If the sketch was already
+    graded, `submitSketch` archives that version into `submission_versions` and clears the
+    grade (score, per-program scores, comments, line comments, release) so the new work is
+    back in the teacher's grading queue - exactly what `reopenMine` does for a hand-graded
+    Coding Assignment, and the grading window shows it as Resubmitted with the old version.
+    Without this, new code sat under the old grade and never reappeared in the queue. (A
+    gist `submitProject` resubmit does not do this - unchanged, pre-existing behavior.) An
+    **inactive** assignment can't be reopened at all and drops off the student's dashboard.
   - **How the code runs** (`src/lib/processing/`, `SketchRunner.jsx`): Processing.js
     (vendored at `src/vendor/processing.min.js`, MIT) translates the Java-syntax
     sketch to JS inside an iframe with `sandbox="allow-scripts"` and **no

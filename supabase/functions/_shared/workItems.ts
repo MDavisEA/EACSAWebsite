@@ -46,6 +46,9 @@ export interface WorkItem {
   // feedback view can label each program's code and score. Absent for
   // everything else.
   parts?: { id: string; title: string; points: number | null }[];
+  // 'gist' | 'sketch' for a project; lets a student's dashboard know whether it can be
+  // reopened in the sketch editor. Absent for everything else.
+  project_kind?: 'gist' | 'sketch';
 }
 
 // Project feedback is release-gated (see submissions/index.ts); FRQ and code
@@ -192,6 +195,7 @@ export function buildWorkItems(
       sort_order: pr.sort_order ?? null,
       ...feedbackFlags(sub, true),
       needs_ack: status === 'graded' && !!sub?.feedback_ack_required,
+      project_kind: pr.kind === 'sketch' ? 'sketch' : 'gist',
       parts: (Array.isArray(pr.parts) ? pr.parts : []).map((p: Record<string, any>) => ({
         id: p.id,
         title: p.title,

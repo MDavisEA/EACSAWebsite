@@ -875,17 +875,48 @@ Deno.serve(async (req) => {
 
       const { data: existing, error: existingErr } = await admin
         .from('submissions')
-        .select('id')
+        .select('*')
         .eq('project_id', project_id)
         .eq('student_user_id', student.id)
         .maybeSingle();
       if (existingErr) return json({ error: existingErr.message }, 500);
+
+      // Turning in again AFTER it was graded. Left alone, the new code would sit under the old
+      // grade and comments, and - since the grading queue is "submitted but unscored" - never
+      // come back to the teacher at all. So, like a hand-graded Coding Assignment (reopenMine):
+      // archive the graded version first (nothing the teacher wrote is lost - see
+      // submission_versions, which the grading window shows as "Resubmitted"), then clear the
+      // grade so this is a fresh thing to grade.
+      let regrade: Record<string, unknown> = {};
+      if (existing && existing.submitted) {
+        const wasGraded =
+          existing.score !== null ||
+          !!(existing.teacher_comments || '').trim() ||
+          (existing.line_comments || []).length > 0 ||
+          Object.keys(existing.question_scores || {}).length > 0;
+        if (wasGraded) {
+          const { error: archiveErr } = await admin
+            .from('submission_versions')
+            .insert({ submission_id: existing.id, snapshot: existing });
+          if (archiveErr) return json({ error: archiveErr.message }, 500);
+          regrade = {
+            score: null,
+            question_scores: {},
+            teacher_comments: null,
+            line_comments: [],
+            feedback_released: false,
+            feedback_reviewed_at: null,
+            graded_notified_at: null,
+          };
+        }
+      }
 
       const row = {
         project_id,
         student_name: student.name,
         student_user_id: student.id,
         student_email: student.email,
+        ...regrade,
         files: checked.files,
         ai_help_used: aiHelp.ai_help_used,
         ai_help_link: aiHelp.ai_help_link,
