@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
     const [assignments, problems, projects, loopAssignments, subs, units, courses, notes] = await Promise.all([
       admin.from('assignments').select('id, title, due_date, course_id, unit_id, sort_order, questions').eq('is_active', true),
       admin.from('coding_problems').select('id, title, due_date, course_id, unit_id, sort_order, points_possible').eq('is_active', true),
-      admin.from('projects').select('id, title, due_date, course_id, unit_id, sort_order, parts, points_possible, kind').eq('is_active', true),
+      admin.from('projects').select('id, title, due_date, course_id, unit_id, sort_order, parts, questions, points_possible, kind').eq('is_active', true),
       admin.from('loop_assignments').select('id, title, due_date, course_id, unit_id, sort_order, target_score').eq('is_active', true),
       // Same reason as courses/index.ts: this builds statuses, not detail
       // views, so the heavy columns stay on the server.

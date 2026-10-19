@@ -372,11 +372,12 @@ const Submission = {
   // same `files` column a gist's files go in, so grading looks identical. Their
   // images / data files are uploaded separately through SketchAsset as they add
   // them, not here.
-  async submitSketch(project_id, files, ai_help_used, ai_help_link) {
+  async submitSketch(project_id, files, ai_help_used, ai_help_link, answers = {}) {
     const data = await callFunction('submissions', {
       action: 'submitSketch',
       project_id,
       files,
+      answers,
       ai_help_used,
       ai_help_link,
     });

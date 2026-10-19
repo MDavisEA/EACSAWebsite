@@ -15,6 +15,7 @@ import MarkdownToolbar, { useMarkdownShortcuts } from "./MarkdownToolbar";
 import DueTimeQuickPicks from "./DueTimeQuickPicks";
 import SectionDueDatesEditor from "./SectionDueDatesEditor";
 import ProgramsEditor from "./ProgramsEditor";
+import QuestionsEditor from "./QuestionsEditor";
 import BriefEditor from "./BriefEditor";
 
 const DEFAULT_REVIEW_PROMPT = `Review each submission against the rubric above. Do not assign grades or numeric scores.
@@ -44,6 +45,7 @@ function defaultForm() {
     google_doc_url: "",
     sample_outputs: [],
     parts: [],
+    questions: [],
     brief: { description: "", images: [] },
     course_id: null,
     unit_id: null,
@@ -136,7 +138,19 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
             images: p.images || [],
             starter: p.starter || "",
             points: p.points === "" || p.points == null ? null : Number(p.points),
+            optional: p.optional === true,
           }))
+        : [],
+      // Written questions (answered before the programs). Ones with no wording are dropped.
+      questions: isSketch
+        ? (form.questions || [])
+            .filter((q) => (q.prompt || "").trim())
+            .map((q) => ({
+              id: q.id,
+              prompt: q.prompt.trim(),
+              points: q.points === "" || q.points == null ? null : Number(q.points),
+              code: q.code === true,
+            }))
         : [],
     });
   };
@@ -309,6 +323,8 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
           the directions on the student page, which is where "what is this
           supposed to do?" actually comes up. */}
       <SampleOutputsEditor value={form.sample_outputs} onChange={(v) => updateField("sample_outputs", v)} />
+
+      {isSketch && <QuestionsEditor value={form.questions} onChange={(v) => setForm((f) => ({ ...f, questions: v }))} />}
 
       {isSketch && <ProgramsEditor
           value={form.parts}

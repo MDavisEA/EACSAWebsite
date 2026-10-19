@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import BriefEditor from "./BriefEditor";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 
 // The list of programs a sketch assignment asks for - a problem set of mini
@@ -26,8 +27,10 @@ export default function ProgramsEditor({ value, onChange }) {
     [next[i], next[j]] = [next[j], next[i]];
     onChange(next);
   };
-  const total = parts.length > 0 && parts.every((p) => p.points !== "" && p.points != null && !Number.isNaN(Number(p.points)))
-    ? parts.reduce((sum, p) => sum + Number(p.points), 0)
+  // A bonus program is extra credit, so it is not part of what the assignment is worth.
+  const required = parts.filter((p) => !p.optional);
+  const total = required.length > 0 && required.every((p) => p.points !== "" && p.points != null && !Number.isNaN(Number(p.points)))
+    ? required.reduce((sum, p) => sum + Number(p.points), 0)
     : null;
 
   return (
@@ -75,6 +78,10 @@ export default function ProgramsEditor({ value, onChange }) {
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer pl-7">
+                <Checkbox checked={!!p.optional} onCheckedChange={(v) => update(i, { optional: !!v })} />
+                Optional bonus &mdash; students don&rsquo;t have to do it, and its points are extra credit on top of the total
+              </label>
               <BriefEditor
                 value={{ description: p.description, images: p.images }}
                 // The editor hands back an updater so a late-finishing upload applies to the latest text.

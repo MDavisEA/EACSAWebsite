@@ -62,3 +62,60 @@ export function sumPartScores(scores) {
     .filter((n) => !Number.isNaN(n));
   return nums.length ? nums.reduce((a, b) => a + b, 0) : null;
 }
+
+// ---- scoring: written questions and programs share one list --------------------------
+// A teacher's score for a question is filed in submissions.question_scores under the
+// question's id, in the same object as the per-program scores (the projects function
+// keeps the two kinds of id from ever colliding), and the total is their sum.
+
+/**
+ * Everything on a sketch assignment that gets its own score, in the order the student
+ * meets it: the written questions, then the programs.
+ *   [{ id, label, points, optional, kind: "question" | "program" }]
+ */
+export function scoreItems(project) {
+  const questions = (project?.questions || []).map((q, i) => ({
+    id: q.id,
+    label: `Q${i + 1}. ${shorten(q.prompt)}`,
+    points: typeof q.points === "number" ? q.points : null,
+    optional: false,
+    kind: "question",
+  }));
+  const programs = (project?.parts || []).map((p, i) => ({
+    id: p.id,
+    label: `${i + 1}. ${p.title}${p.optional ? " (bonus)" : ""}`,
+    points: typeof p.points === "number" ? p.points : null,
+    optional: p.optional === true,
+    kind: "program",
+  }));
+  // A single-program assignment with written questions still needs somewhere to score
+  // the program itself. "main" is reserved: the projects function never gives a question that id.
+  if (questions.length > 0 && programs.length === 0) {
+    programs.push({
+      id: SINGLE_PROGRAM_ID,
+      label: "Program",
+      points: project?.points_possible != null && project.points_possible !== "" ? Number(project.points_possible) : null,
+      optional: false,
+      kind: "program",
+    });
+  }
+  return [...questions, ...programs];
+}
+
+export const SINGLE_PROGRAM_ID = "main";
+
+function shorten(text) {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  return t.length > 48 ? `${t.slice(0, 47)}…` : t;
+}
+
+/**
+ * What the assignment is worth: every item that must be done, added up. A bonus program is
+ * extra credit, so it is left out. Null when any required item has no points - a partial
+ * total would read as too low.
+ */
+export function itemsTotalPoints(items) {
+  const required = (items || []).filter((i) => !i.optional);
+  if (required.length === 0 || !required.every((i) => typeof i.points === "number")) return null;
+  return required.reduce((sum, i) => sum + i.points, 0);
+}

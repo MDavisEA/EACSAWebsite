@@ -1,6 +1,6 @@
 // Run:  node --experimental-strip-types supabase/functions/_shared/sketchFiles.test.ts
 // (Not imported by any Edge Function, so it is never bundled or deployed.)
-import { cleanAssetName, contentTypeForAsset, normalizeBrief, normalizeParts, validateSketchFiles } from './sketchFiles.ts';
+import { cleanAssetName, contentTypeForAsset, normalizeAnswers, normalizeBrief, normalizeParts, normalizeQuestions, validateSketchFiles } from './sketchFiles.ts';
 const eq = (a: unknown, b: unknown, m: string) => { if (JSON.stringify(a) !== JSON.stringify(b)) { console.log('FAIL', m, JSON.stringify(a), '!=', JSON.stringify(b)); process.exitCode = 1; } else console.log('ok  ', m); };
 eq(cleanAssetName('Casino Table.jpg'), 'Casino Table.jpg', 'spaces ok');
 eq(cleanAssetName('C:\\fakepath\\turtle.PNG'), 'turtle.PNG', 'strips path');
@@ -33,7 +33,7 @@ eq(validateSketchFiles([{ part: 'p1', filename: 'Sketch', content: 'a' }], undef
 eq(validateSketchFiles([{ part: 'p1', filename: 'Sketch', content: 'a' }], []), { files: [{ filename: 'Sketch.pde', content: 'a' }] }, 'empty parts list = single program');
 // ---- normalizeParts
 eq(normalizeParts('x'), [], 'not an array');
-eq(normalizeParts([{ id: 'keep_1', title: ' Ball ', description: 'd', points: '5' }]), [{ id: 'keep_1', title: 'Ball', description: 'd', points: 5, images: [], starter: '' }], 'keeps a sound id, trims, numeric points');
+eq(normalizeParts([{ id: 'keep_1', title: ' Ball ', description: 'd', points: '5' }]), [{ id: 'keep_1', title: 'Ball', description: 'd', points: 5, images: [], starter: '', optional: false }], 'keeps a sound id, trims, numeric points');
 const gen = normalizeParts([{ title: '' }, { id: 'bad id!', title: 'B', points: -2 }, { id: 'dup', title: 'C' }, { id: 'dup', title: 'D' }]);
 eq(gen.map((p) => p.title), ['Program 1', 'B', 'C', 'D'], 'blank title defaulted');
 eq(new Set(gen.map((p) => p.id)).size, 4, 'ids unique');
@@ -54,3 +54,23 @@ eq(normalizeBrief('nope'), { description: '', images: [] }, 'brief: not an objec
 eq(normalizeParts([{ title: 'a', starter: 'void setup(){}' }, { title: 'b' }]).map((p) => p.starter), ['void setup(){}', ''], 'starter kept on one program, blank on the other');
 eq(normalizeParts([{ title: 'a', starter: 42 }])[0].starter, '', 'a non-string starter is dropped');
 eq(normalizeParts([{ title: 'a', starter: 'x'.repeat(400000) }])[0].starter.length, 300000, 'starter capped at one tab\'s worth');
+
+// ---- optional programs
+eq(normalizeParts([{ id: 'b', title: 'Bonus', optional: true }, { id: 'c', title: 'C', optional: 'yes' }]).map((p) => p.optional), [true, false], 'optional only when exactly true');
+// ---- written questions
+eq(normalizeQuestions('x'), [], 'questions: not an array');
+eq(normalizeQuestions([{ id: 'q1', prompt: ' Why? ', points: '2', code: true }]), [{ id: 'q1', prompt: 'Why?', points: 2, code: true }], 'question kept and cleaned');
+eq(normalizeQuestions([{ id: 'q1', prompt: '   ' }, { prompt: 'Real' }]).map((q) => q.prompt), ['Real'], 'blank question dropped');
+const qs = normalizeQuestions([{ id: 'p1', prompt: 'A' }, { id: 'dup', prompt: 'B' }, { id: 'dup', prompt: 'C' }], ['p1']);
+eq(new Set([...qs.map((q) => q.id), 'p1']).size, 4, 'question ids unique and never a program id');
+eq(normalizeQuestions([{ prompt: 'A', points: -1 }])[0].points, null, 'negative points dropped');
+eq(normalizeQuestions([{ prompt: 'A' }])[0].code, false, 'plain box by default');
+eq(normalizeQuestions(Array.from({ length: 50 }, () => ({ prompt: 'x' }))).length, 40, 'capped at 40');
+// ---- answers
+eq(normalizeAnswers({ q1: 'hi', q2: '   ', zzz: 'ghost', q3: 5 }, ['q1', 'q2', 'q3']), { q1: 'hi' }, 'only real, non-blank, text answers');
+eq(normalizeAnswers([1], ['q1']), {}, 'array is not answers');
+eq(normalizeAnswers({ q1: 'x'.repeat(30000) }, ['q1']).q1.length, 20000, 'answer length capped');
+// ---- turning in answers before any code
+eq(validateSketchFiles([], ids, true), { files: [] }, 'no code is fine when answers exist');
+eq(validateSketchFiles(undefined, ids, true), { files: [] }, 'no files at all is fine when answers exist');
+eq(validateSketchFiles([], ids), { error: 'There is no code to turn in.' }, 'no code is still an error otherwise');

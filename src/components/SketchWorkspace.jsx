@@ -41,6 +41,7 @@ import {
 
 const MAIN_TAB_DEFAULT = "Sketch";
 const SINGLE = "main"; // the one program of an assignment that lists none
+const WRITTEN = "__written"; // the step that holds the written questions (not a program)
 
 function safeTabName(raw) {
   let s = String(raw || "").replace(/\.pde$/i, "").replace(/[^A-Za-z0-9_]/g, "_");
@@ -90,6 +91,25 @@ function readDraft(key) {
     // storage unavailable or corrupt: just start from the submission
   }
   return null;
+}
+
+// Written answers as they are turned in: only questions that exist, only ones with something
+// in them. Used for the submit payload AND the "changed since you turned it in" comparison.
+function cleanAnswers(answers, questions) {
+  const out = {};
+  for (const q of questions) {
+    const v = answers?.[q.id];
+    if (typeof v === "string" && v.trim() !== "") out[q.id] = v;
+  }
+  return out;
+}
+
+// Same rule as the code: a draft wins over the turned-in copy unless the turn-in is newer.
+function initialAnswers(draftKey, submission, questions) {
+  const draft = readDraft(draftKey);
+  const turnedInAt = submission?.submitted_at ? new Date(submission.submitted_at).getTime() : 0;
+  const useDraft = draft && draft.answers && !(turnedInAt && turnedInAt > (draft.savedAt || 0));
+  return cleanAnswers(useDraft ? draft.answers : submission?.answers, questions);
 }
 
 // A program's starter code, as the one tab it opens with (null = start blank).
@@ -177,6 +197,55 @@ function ProgramBrief({ meta, open, onToggle }) {
   );
 }
 
+// The written questions: the prompt (light Markdown) and a box for the answer. A question the
+// teacher marked as a code answer gets a code font and keeps its spacing; Tab inserts spaces
+// there instead of leaving the box.
+function WrittenQuestions({ questions, answers, onChange }) {
+  return (
+    <div className="flex-1 overflow-auto p-5 space-y-5">
+      <p className="text-sm text-muted-foreground">
+        Answer these in your own words. Your answers are saved on this computer as you type, and turned in with your
+        programs.
+      </p>
+      {questions.map((q, i) => {
+        const value = answers[q.id] || "";
+        return (
+          <div key={q.id} className="space-y-1.5">
+            <div className="flex items-baseline gap-2">
+              <span className="text-sm font-semibold">{i + 1}.</span>
+              <div className="flex-1 min-w-0 text-sm markdown-render"><ReactMarkdown>{q.prompt}</ReactMarkdown></div>
+              {typeof q.points === "number" && (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">{q.points} pt{q.points === 1 ? "" : "s"}</span>
+              )}
+            </div>
+            <textarea
+              value={value}
+              onChange={(e) => onChange(q.id, e.target.value)}
+              onKeyDown={(e) => {
+                if (!q.code || e.key !== "Tab" || e.shiftKey) return;
+                e.preventDefault();
+                const el = e.target;
+                const next = `${value.slice(0, el.selectionStart)}  ${value.slice(el.selectionEnd)}`;
+                const caret = el.selectionStart + 2;
+                onChange(q.id, next);
+                requestAnimationFrame(() => el.setSelectionRange(caret, caret));
+              }}
+              spellCheck={!q.code}
+              rows={q.code ? 6 : 4}
+              maxLength={20000}
+              aria-label={`Your answer to question ${i + 1}`}
+              placeholder={q.code ? "Write your code here" : "Type your answer here"}
+              className={`w-full rounded-md border bg-white px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/40 ${
+                q.code ? "font-mono text-[13px] whitespace-pre" : ""
+              }`}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // `preview` is the teacher's "see exactly what students see": the same page, but
 // nothing is saved or turned in - no draft in localStorage, files stay in the
 // browser (they can still try images to see the sketch run), and Turn in is off.
@@ -185,8 +254,12 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   const multi = parts.length > 0;
   const programIds = useMemo(() => (multi ? parts.map((p) => p.id) : [SINGLE]), [multi, parts]);
 
+  const questions = useMemo(() => project.questions || [], [project.questions]);
+  const hasWritten = questions.length > 0;
+  // Written questions come first, when there are any.
   const [programs, setPrograms] = useState(() => initialPrograms(draftKey, submission, project, programIds, multi));
-  const [activePart, setActivePart] = useState(programIds[0]);
+  const [answers, setAnswers] = useState(() => initialAnswers(draftKey, submission, questions));
+  const [activePart, setActivePart] = useState(hasWritten ? WRITTEN : programIds[0]);
   const [activeTabs, setActiveTabs] = useState({}); // programId -> open tab index
   const [view, setView] = useState("code"); // code | assignment
   const [split, setSplit] = useState(46);
@@ -227,6 +300,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
     []
   );
 
+  const onWritten = hasWritten && activePart === WRITTEN;
   const tabs = programs[activePart] || blankProgram();
   const active = Math.min(activeTabs[activePart] || 0, tabs.length - 1);
   const current = tabs[active];
@@ -239,22 +313,30 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   useEffect(() => {
     if (preview) return;
     try {
-      localStorage.setItem(draftKey, JSON.stringify({ programs, savedAt: Date.now() }));
+      localStorage.setItem(draftKey, JSON.stringify({ programs, answers, savedAt: Date.now() }));
     } catch {
       // private window / storage full - the page still works, it just can't remember
     }
-  }, [programs, draftKey, preview]);
+  }, [programs, answers, draftKey, preview]);
 
   // What the runner is handed: just the open program's tabs.
   const runFiles = useMemo(() => tabs.map((t) => ({ filename: `${t.name}.pde`, content: t.code })), [tabs]);
   const anyCode = programIds.some((id) => hasCode(programs[id]));
-  const filledCount = programIds.filter((id) => hasCode(programs[id])).length;
+  // A bonus program is not asked for, so it never counts against "started" or "nothing written".
+  const requiredParts = multi ? parts.filter((p) => !p.optional) : [];
+  const filledCount = multi ? requiredParts.filter((p) => hasCode(programs[p.id])).length : programIds.filter((id) => hasCode(programs[id])).length;
+  const turnedInAnswers = useMemo(() => cleanAnswers(answers, questions), [answers, questions]);
+  const answeredCount = Object.keys(turnedInAnswers).length;
+  // Something to turn in: code, or - when there are questions - an answer.
+  const anyWork = anyCode || answeredCount > 0;
   const submitted = !!submission?.submitted;
   const changedSinceSubmit = useMemo(() => {
     if (!submitted) return false;
     const stored = toSubmission(programsFromFiles(submission.files, programIds, multi), programIds, multi);
-    return JSON.stringify(stored) !== JSON.stringify(toSubmission(programs, programIds, multi));
-  }, [submitted, submission?.files, programs, programIds, multi]);
+    const codeChanged = JSON.stringify(stored) !== JSON.stringify(toSubmission(programs, programIds, multi));
+    const answersChanged = JSON.stringify(cleanAnswers(submission.answers, questions)) !== JSON.stringify(turnedInAnswers);
+    return codeChanged || answersChanged;
+  }, [submitted, submission?.files, submission?.answers, programs, programIds, multi, questions, turnedInAnswers]);
 
   // ---- existing uploaded files ----
   useEffect(() => {
@@ -373,7 +455,8 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   const missingNow = (report?.missing || []).filter(
     (m) => !assets.some((a) => a.name.toLowerCase() === m.name.toLowerCase())
   );
-  const emptyPrograms = multi ? parts.filter((p) => !hasCode(programs[p.id])) : [];
+  const emptyPrograms = requiredParts.filter((p) => !hasCode(programs[p.id]));
+  const unanswered = questions.filter((q) => !turnedInAnswers[q.id]);
   // Code Processing itself would refuse to run. Only worked out while the dialog is
   // open (it tokenizes everything), and only a warning: they can still turn it in.
   const syntaxProblems = useMemo(() => {
@@ -404,7 +487,8 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
         project.id,
         toSubmission(programs, programIds, multi),
         aiHelpUsed,
-        aiHelpLink.trim() || null
+        aiHelpLink.trim() || null,
+        turnedInAnswers
       );
       onSubmitted(sub);
       setSubmitOpen(false);
@@ -465,7 +549,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
           )}
           <Button
             onClick={() => { setSubmitError(""); setSubmitOpen(true); }}
-            disabled={!anyCode || preview}
+            disabled={!anyWork || preview}
             title={preview ? "Turning in is switched off in the preview" : undefined}
           >
             <Send className="w-4 h-4 mr-1.5" />
@@ -476,7 +560,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
 
       <div id="sketch-split" className="flex-1 min-h-0 flex">
         {/* ---------------- left: code / assignment ---------------- */}
-        <div className="flex flex-col min-w-0 bg-white" style={{ width: `${split}%` }}>
+        <div className="flex flex-col min-w-0 bg-white" style={{ width: onWritten && view === "code" ? "100%" : `${split}%` }}>
           <div className="flex items-center gap-1 px-3 pt-2 border-b">
             {[["code", "Code"], ["assignment", "Assignment"]].map(([id, label]) => (
               <button
@@ -491,10 +575,12 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
             ))}
             {multi && (
               <span className="ml-3 text-xs text-muted-foreground pb-1.5">
-                {filledCount} of {parts.length} programs started
+                {filledCount} of {requiredParts.length} programs started
               </span>
             )}
-            <span className="ml-auto text-[11px] text-muted-foreground pb-1.5">Run: Ctrl/Cmd + Enter</span>
+            {!(onWritten && view === "code") && (
+              <span className="ml-auto text-[11px] text-muted-foreground pb-1.5">Run: Ctrl/Cmd + Enter</span>
+            )}
           </div>
 
           {view === "assignment" ? (
@@ -571,9 +657,36 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
           ) : (
             <>
               {/* ---- the programs of a problem set ---- */}
-              {multi && (
+              {(multi || hasWritten) && (
                 <div className="flex items-center gap-1 px-2 py-1.5 border-b bg-slate-50 overflow-x-auto">
-                  {parts.map((p, i) => {
+                  {hasWritten && (
+                    <button
+                      onClick={() => setActivePart(WRITTEN)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 text-sm rounded-md whitespace-nowrap border transition-colors ${
+                        onWritten
+                          ? "bg-white border-primary/50 font-medium shadow-sm"
+                          : "border-transparent text-muted-foreground hover:bg-white hover:text-foreground"
+                      }`}
+                      title={`${answeredCount} of ${questions.length} questions answered`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${answeredCount === questions.length ? "bg-emerald-500" : answeredCount > 0 ? "bg-amber-400" : "bg-slate-300"}`} />
+                      Written ({answeredCount}/{questions.length})
+                    </button>
+                  )}
+                  {!multi && hasWritten && (
+                    <button
+                      onClick={() => setActivePart(SINGLE)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 text-sm rounded-md whitespace-nowrap border transition-colors ${
+                        !onWritten
+                          ? "bg-white border-primary/50 font-medium shadow-sm"
+                          : "border-transparent text-muted-foreground hover:bg-white hover:text-foreground"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${hasCode(programs[SINGLE]) ? "bg-emerald-500" : "bg-slate-300"}`} />
+                      Program
+                    </button>
+                  )}
+                  {multi && parts.map((p, i) => {
                     const filled = hasCode(programs[p.id]);
                     return (
                       <button
@@ -587,12 +700,20 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                         title={filled ? "Has code" : "Nothing here yet"}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full ${filled ? "bg-emerald-500" : "bg-slate-300"}`} />
-                        {i + 1}. {p.title}
+                        {i + 1}. {p.title}{p.optional && <span className="text-[10px] uppercase tracking-wide text-violet-600">bonus</span>}
                       </button>
                     );
                   })}
                 </div>
               )}
+              {onWritten ? (
+                <WrittenQuestions
+                  questions={questions}
+                  answers={answers}
+                  onChange={(id, text) => setAnswers((a) => ({ ...a, [id]: text }))}
+                />
+              ) : (
+              <>
               {(activeMeta?.description || (activeMeta?.images || []).length > 0) && (
                 <ProgramBrief meta={activeMeta} open={briefOpen} onToggle={() => setBriefOpen((o) => !o)} />
               )}
@@ -752,14 +873,18 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                   </p>
                 )}
               </div>
+              </>
+              )}
             </>
           )}
         </div>
 
-        <ResizableDivider containerId="sketch-split" leftPercent={split} onResize={setSplit} />
+        {!(onWritten && view === "code") && (
+          <ResizableDivider containerId="sketch-split" leftPercent={split} onResize={setSplit} />
+        )}
 
         {/* ---------------- right: the running sketch ---------------- */}
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+        <div className={`flex-1 min-w-0 min-h-0 flex flex-col ${onWritten && view === "code" ? "hidden" : ""}`}>
           <SketchRunner
             ref={runnerRef}
             className="h-full"
@@ -777,13 +902,23 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
           <DialogHeader>
             <DialogTitle>{submitted ? "Turn in again?" : "Turn in your work"}</DialogTitle>
             <DialogDescription>
+              {hasWritten && `${answeredCount} of ${questions.length} written answers, `}
               {multi
-                ? `${filledCount} of ${parts.length} programs`
-                : `${tabs.length} tab${tabs.length === 1 ? "" : "s"} of code`}{" "}
+                ? `${programIds.filter((id) => hasCode(programs[id])).length} of ${parts.length} programs`
+                : anyCode
+                ? `${programs[SINGLE].length} tab${programs[SINGLE].length === 1 ? "" : "s"} of code`
+                : "no code yet"}{" "}
               and {assets.length} file{assets.length === 1 ? "" : "s"}.
               {submitted && " This replaces what you turned in before."}
             </DialogDescription>
           </DialogHeader>
+
+          {unanswered.length > 0 && (
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              Not answered yet: {unanswered.map((q) => `question ${questions.indexOf(q) + 1}`).join(", ")}. You can turn in
+              now and answer {unanswered.length === 1 ? "it" : "them"} later by turning in again.
+            </p>
+          )}
 
           {emptyPrograms.length > 0 && (
             <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -842,7 +977,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setSubmitOpen(false)} disabled={submitting}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={submitting || !aiHelpAnswered || !anyCode}>
+            <Button onClick={handleSubmit} disabled={submitting || !aiHelpAnswered || !anyWork}>
               {submitting ? "Turning in..." : submitted ? "Turn in again" : "Turn in"}
             </Button>
           </div>

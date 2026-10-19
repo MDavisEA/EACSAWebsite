@@ -280,6 +280,23 @@ pattern under `src/components/teacher/`.
     off), fed by the same sanitized `previewAsStudent` payload a student gets -
     so it cannot drift from the student page; Java/other work keeps the older
     summary dialog.
+  - **Written questions + bonus programs** (migration 0040). `projects.questions` is an
+    optional list `[{ id, prompt, points, code }]` of text-answer questions that come BEFORE
+    the programs (a "Written" step in the student's strip; `WrittenQuestions` in
+    `SketchWorkspace.jsx`). A student's answers are `submissions.answers`
+    (`{ [questionId]: text }`), turned in with the code by `submitSketch` and validated by
+    `normalizeAnswers`; answering is enough to turn something in (no code is allowed when
+    there are answers). Scores go in `submissions.question_scores` under the question's id,
+    in the same object as the per-program scores, so ids must never collide - the projects
+    function reserves `main` and every program id when it normalizes questions.
+    `lib/processing/programs.js`'s `scoreItems()` is the one list of everything scorable
+    (questions, then programs; a single program with questions gets a `main` slot) and
+    `itemsTotalPoints()` its total. `parts[].optional` marks a **bonus** program: not
+    required (never counted in "nothing written yet"), and its points are extra credit
+    outside the total (and outside Full credit). Teacher UI: `QuestionsEditor`, a bonus
+    checkbox in `ProgramsEditor`, `WrittenAnswers` above the code in both graders, answers
+    in the student's results view and in the review export (`answers.md` per student).
+    A code-style question (`code: true`) just gets a monospace box.
   - **Turning a sketch in again.** From the student dashboard a turned-in sketch has an
     "Open it to change and turn in again" button (it routes back to `/project?id=`; the
     WorkItem carries `project_kind` so only sketches get it). If the sketch was already

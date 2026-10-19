@@ -45,7 +45,8 @@ export interface WorkItem {
   // A sketch assignment's list of programs ([{ id, title, points }]), so a
   // feedback view can label each program's code and score. Absent for
   // everything else.
-  parts?: { id: string; title: string; points: number | null }[];
+  parts?: { id: string; title: string; points: number | null; optional?: boolean }[];
+  questions?: { id: string; prompt: string; points: number | null }[];
   // 'gist' | 'sketch' for a project; lets a student's dashboard know whether it can be
   // reopened in the sketch editor. Absent for everything else.
   project_kind?: 'gist' | 'sketch';
@@ -180,9 +181,20 @@ export function buildWorkItems(
       // Only when every program says how many points it is worth - a partial
       // total would read as a lower maximum than the real one.
       points_possible: (() => {
+        // Written questions and required programs add up; a bonus program is extra credit
+        // on top, so it is not part of the maximum.
         const parts: Record<string, any>[] = Array.isArray(pr.parts) ? pr.parts : [];
-        if (parts.length > 0) {
-          return parts.every((p) => typeof p.points === 'number') ? parts.reduce((sum, p) => sum + p.points, 0) : null;
+        const questions: Record<string, any>[] = Array.isArray(pr.questions) ? pr.questions : [];
+        // A single program with questions: the program's own total is one more item.
+        const counted = [
+          ...questions,
+          ...parts.filter((p) => !p.optional),
+          ...(parts.length === 0 && questions.length > 0 ? [{ points: pr.points_possible != null ? Number(pr.points_possible) : null }] : []),
+        ];
+        if (parts.length > 0 || questions.length > 0) {
+          return counted.length > 0 && counted.every((p) => typeof p.points === 'number')
+            ? counted.reduce((sum, p) => sum + p.points, 0)
+            : null;
         }
         // A single-program project: its own total, if the teacher set one.
         return pr.points_possible != null ? Number(pr.points_possible) : null;
@@ -200,6 +212,12 @@ export function buildWorkItems(
         id: p.id,
         title: p.title,
         points: typeof p.points === 'number' ? p.points : null,
+        optional: p.optional === true,
+      })),
+      questions: (Array.isArray(pr.questions) ? pr.questions : []).map((q: Record<string, any>) => ({
+        id: q.id,
+        prompt: q.prompt,
+        points: typeof q.points === 'number' ? q.points : null,
       })),
     });
   }

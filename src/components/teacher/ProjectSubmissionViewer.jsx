@@ -17,7 +17,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { FileDown, Trash2, ExternalLink, Loader2, Upload, CheckCircle2, XCircle, AlertTriangle, RefreshCw, UserX, ChevronDown, ChevronUp, Clock, Send, Bot } from "lucide-react";
 import AiHelpBadge from "./AiHelpBadge";
 import SketchTestingPanel, { FeedbackTestingToggle } from "./SketchTestingPanel";
-import { baseName, groupFilesByPart, partIdOf, partsTotalPoints, sumPartScores } from "@/lib/processing/programs";
+import { baseName, groupFilesByPart, itemsTotalPoints, partIdOf, scoreItems, sumPartScores } from "@/lib/processing/programs";
+import WrittenAnswers from "./WrittenAnswers";
 import { exportProjectForReview } from "@/lib/exportProjectZip";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
 import { byLastName } from "@/lib/groupSubmissionsByStudent";
@@ -72,10 +73,14 @@ export default function ProjectSubmissionViewer({ project }) {
   // A problem set: several programs, each scored separately and summed.
   const parts = isSketch ? project.parts || [] : [];
   const hasParts = parts.length > 0;
+  // Everything with its own score: written questions, then programs (a bonus one is marked).
+  // Empty means the plain single score a one-program sketch has always had.
+  const items = isSketch ? scoreItems(project) : [];
+  const hasItems = items.length > 0;
   // The most this assignment can score: its programs' points added up, or - for a
   // single program - the total the teacher set. Null when neither is known, in
   // which case there is no Full credit button (nothing to give full credit of).
-  const maxPoints = partsTotalPoints(project.parts) ?? (project.points_possible != null ? Number(project.points_possible) : null);
+  const maxPoints = itemsTotalPoints(items) ?? (project.points_possible != null && !hasItems ? Number(project.points_possible) : null);
   const [reviewScores, setReviewScores] = useState({}); // programId -> typed score
   const [reviewDraft, setReviewDraft] = useState({
     teacher_comments: "",
@@ -257,8 +262,8 @@ export default function ProjectSubmissionViewer({ project }) {
     setSavingReview(true);
     try {
       let perProgram = {};
-      if (hasParts) {
-        const ids = new Set(parts.map((p) => p.id));
+      if (hasItems) {
+        const ids = new Set(items.map((p) => p.id));
         perProgram = Object.fromEntries(
           Object.entries(reviewScores)
             .filter(([k]) => ids.has(k))
@@ -270,8 +275,8 @@ export default function ProjectSubmissionViewer({ project }) {
         teacher_comments: reviewDraft.teacher_comments,
         // With programs the total is the sum of the per-program scores, which are
         // filed under each program's id (the same column an FRQ uses).
-        ...(hasParts ? { question_scores: perProgram } : {}),
-        score: hasParts
+        ...(hasItems ? { question_scores: perProgram } : {}),
+        score: hasItems
           ? (Object.keys(perProgram).length > 0 ? sumPartScores(perProgram) : null)
           : reviewDraft.score === "" ? null : Number(reviewDraft.score),
         feedback_released: reviewDraft.feedback_released,
@@ -537,6 +542,10 @@ export default function ProjectSubmissionViewer({ project }) {
             <FeedbackTestingToggle tab={reviewTab} onTab={setReviewTab} className="w-fit" sketch />
           )}
 
+          {isSketch && (project.questions || []).length > 0 && reviewTarget && (
+            <WrittenAnswers questions={project.questions} answers={reviewTarget.answers} scores={reviewScores} />
+          )}
+
           {isSketch && reviewTab === "testing" && reviewTarget && (
             reviewTarget.files === undefined ? (
               <p className="text-sm text-muted-foreground p-6 text-center flex items-center justify-center gap-2 border rounded-lg">
@@ -655,11 +664,11 @@ export default function ProjectSubmissionViewer({ project }) {
               </div>
             )}
 
-            {hasParts ? (
+            {hasItems ? (
               <div className="space-y-2 max-w-md">
                 <div className="flex items-center justify-between">
-                  <Label>Score each program</Label>
-                  {parts.some((p) => typeof p.points === "number") && (
+                  <Label>{items.some((p) => p.kind === "question") ? "Score each question and program" : "Score each program"}</Label>
+                  {items.some((p) => !p.optional && p.points != null) && (
                     <Button
                       type="button"
                       variant="outline"
@@ -668,7 +677,7 @@ export default function ProjectSubmissionViewer({ project }) {
                       onClick={() =>
                         setReviewScores((q) => ({
                           ...q,
-                          ...Object.fromEntries(parts.filter((p) => typeof p.points === "number").map((p) => [p.id, String(p.points)])),
+                          ...Object.fromEntries(items.filter((p) => !p.optional && p.points != null).map((p) => [p.id, String(p.points)])),
                         }))
                       }
                     >
@@ -676,9 +685,9 @@ export default function ProjectSubmissionViewer({ project }) {
                     </Button>
                   )}
                 </div>
-                {parts.map((p, i) => (
+                {items.map((p) => (
                   <div key={p.id} className="flex items-center gap-2">
-                    <span className="text-sm flex-1 truncate" title={p.title}>{i + 1}. {p.title}</span>
+                    <span className="text-sm flex-1 truncate" title={p.label}>{p.label}</span>
                     <Input
                       type="number"
                       value={reviewScores[p.id] ?? ""}
@@ -690,7 +699,7 @@ export default function ProjectSubmissionViewer({ project }) {
                         type="button"
                         onClick={() => setReviewScores((q) => ({ ...q, [p.id]: String(p.points) }))}
                         className="text-xs text-muted-foreground hover:text-green-700 w-10 text-left"
-                        title="Full credit for this program"
+                        title="Full credit for this one"
                       >
                         / {p.points}
                       </button>
@@ -699,8 +708,8 @@ export default function ProjectSubmissionViewer({ project }) {
                 ))}
                 <p className="text-sm">
                   Total <span className="font-semibold">{sumPartScores(reviewScores) ?? "—"}</span>
-                  {partsTotalPoints(parts) != null && <span className="text-muted-foreground"> / {partsTotalPoints(parts)}</span>}
-                  <span className="text-xs text-muted-foreground"> &middot; added up from the programs</span>
+                  {itemsTotalPoints(items) != null && <span className="text-muted-foreground"> / {itemsTotalPoints(items)}</span>}
+                  <span className="text-xs text-muted-foreground"> &middot; added up from the {items.some((p) => p.kind === "question") ? "questions and programs" : "programs"}</span>
                 </p>
               </div>
             ) : (

@@ -12,7 +12,7 @@ import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { attachSectionDueDates, fetchOverridesByWorkId, replaceSectionDueDates, resolveDueDates } from '../_shared/sectionDueDates.ts';
 import { propagateToLinkedCourses } from '../_shared/courseLinks.ts';
 import { deleteAssetsForSubmissions, submissionIdsForProjects } from '../_shared/sketchAssetStorage.ts';
-import { normalizeBrief, normalizeParts } from '../_shared/sketchFiles.ts';
+import { normalizeBrief, normalizeParts, normalizeQuestions } from '../_shared/sketchFiles.ts';
 
 // Students see the rubric (it's the point - they should know what they're
 // reviewed against) but never review_prompt, which is instructions aimed at
@@ -26,6 +26,8 @@ function sanitizeForStudent(project: Record<string, any>) {
     kind: project.kind || 'gist',
     // The programs a sketch assignment asks for (empty = a single program).
     parts: project.parts || [],
+    // Written questions the student answers in text boxes (empty = none).
+    questions: project.questions || [],
     // Instructions + screenshots when it is a single program (a multi-program
     // assignment keeps them on each part).
     brief: project.brief || {},
@@ -151,6 +153,10 @@ Deno.serve(async (req) => {
       // Programs only mean something for a sketch.
       insertData.parts = insertData.kind === 'sketch' ? normalizeParts(insertData.parts) : [];
       insertData.brief = insertData.kind === 'sketch' ? normalizeBrief(insertData.brief) : {};
+      // Question ids must not collide with program ids: both key the one question_scores object.
+      insertData.questions = insertData.kind === 'sketch'
+        ? normalizeQuestions(insertData.questions, ['main', ...insertData.parts.map((x: { id: string }) => x.id)])
+        : [];
       const { data, error } = await admin.from('projects').insert(insertData).select().single();
       if (error) return json({ error: error.message }, 500);
       const { error: sddErr } = await replaceSectionDueDates(admin, 'project_id', data.id, section_due_dates);
@@ -175,11 +181,16 @@ Deno.serve(async (req) => {
           return json({ error: "That course teaches the other language, so this work can't move there." }, 400);
         }
       }
-      if (updateData.parts !== undefined || updateData.brief !== undefined) {
-        const { data: existing } = await admin.from('projects').select('kind').eq('id', body.id).maybeSingle();
+      if (updateData.parts !== undefined || updateData.brief !== undefined || updateData.questions !== undefined) {
+        const { data: existing } = await admin.from('projects').select('kind, parts').eq('id', body.id).maybeSingle();
         const isSketch = existing?.kind === 'sketch';
         if (updateData.parts !== undefined) updateData.parts = isSketch ? normalizeParts(updateData.parts) : [];
         if (updateData.brief !== undefined) updateData.brief = isSketch ? normalizeBrief(updateData.brief) : {};
+        if (updateData.questions !== undefined) {
+          // Against the programs it will be saved with (the new list if sent, else the stored one).
+          const programs: { id: string }[] = Array.isArray(updateData.parts) ? updateData.parts : existing?.parts || [];
+          updateData.questions = isSketch ? normalizeQuestions(updateData.questions, ['main', ...programs.map((x) => x.id)]) : [];
+        }
       }
       if (section_due_dates !== undefined) {
         const { error: sddErr } = await replaceSectionDueDates(admin, 'project_id', body.id, section_due_dates);

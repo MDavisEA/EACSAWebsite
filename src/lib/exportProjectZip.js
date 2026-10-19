@@ -29,6 +29,12 @@ export async function exportProjectForReview(project, submissions, options = {})
   // Starter code given to every student: the assignment-wide files, plus - for a
   // problem set - whatever starter a particular program opened with.
   const partStarters = (project.parts || []).filter((p) => (p.starter || "").trim());
+  // Written questions (a sketch assignment's text answers): the prompts go in CLAUDE.md, each
+  // student's answers in an answers.md beside their code.
+  const questions = project.questions || [];
+  const questionsText = questions
+    .map((q, i) => `${i + 1}. ${q.prompt}${typeof q.points === "number" ? ` (${q.points} pt${q.points === 1 ? "" : "s"})` : ""}`)
+    .join("\n");
   const hasStarterCode = (project.starter_files || []).length > 0 || partStarters.length > 0;
 
   zip.file(
@@ -42,6 +48,7 @@ export async function exportProjectForReview(project, submissions, options = {})
         : "") +
       `## Rubric\n${rubric}\n\n` +
       `## Assignment\n${assignmentText}\n\n` +
+      (questions.length > 0 ? `## Written questions\nEach student also answered these in writing (their answers are in \`answers.md\` in their folder):\n\n${questionsText}\n\n` : "") +
       `## Layout\n` +
       (hasStarterCode ? `- \`starter/\` — the starter code given to every student\n` : "") +
       `- \`submissions/\` — one folder per student, containing their ` +
@@ -49,6 +56,7 @@ export async function exportProjectForReview(project, submissions, options = {})
         ? `Processing .pde files (the sketch code only - uploaded images are not included)`
         : `.java files`) +
       `\n` +
+      (questions.length > 0 ? `- \`answers.md\` in each folder — that student's written answers\n` : "") +
       `- \`_meta.json\` in each folder — gist URL (blank for a sketch), submission time, and whether the student disclosed ` +
       `using an AI chatbot (\`ai_help_used\`) plus a link to that conversation (\`ai_help_link\`) if so\n` +
       `- \`roster.csv\` — every student who submitted, for cross-reference\n`
@@ -68,6 +76,14 @@ export async function exportProjectForReview(project, submissions, options = {})
     const folderName = `${String(i + 1).padStart(2, "0")}-${safeName(s.student_name)}`;
     const folder = submissionsFolder.folder(folderName);
     (s.files || []).forEach((f) => folder.file(f.filename, f.content));
+    if (questions.length > 0) {
+      folder.file(
+        "answers.md",
+        questions
+          .map((q, i) => `## ${i + 1}. ${q.prompt}\n\n${(s.answers?.[q.id] || "").trim() || "(no answer)"}\n`)
+          .join("\n")
+      );
+    }
     folder.file(
       "_meta.json",
       JSON.stringify(

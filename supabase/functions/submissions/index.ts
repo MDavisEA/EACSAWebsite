@@ -5,7 +5,7 @@ import { extractGistId, fetchGistJavaFiles, fetchGistUpdatedAt } from '../_share
 import { fetchOverridesByWorkId } from '../_shared/sectionDueDates.ts';
 import { validateAiHelp } from '../_shared/aiHelp.ts';
 import { sendGradeNotification, sendReplyNotification } from '../_shared/email.ts';
-import { validateSketchFiles } from '../_shared/sketchFiles.ts';
+import { normalizeAnswers, validateSketchFiles } from '../_shared/sketchFiles.ts';
 import { deleteAssetsForSubmissions } from '../_shared/sketchAssetStorage.ts';
 
 // The title students see in the "new feedback" email - looked up only when
@@ -860,7 +860,7 @@ Deno.serve(async (req) => {
       if ('error' in aiHelp) return json({ error: aiHelp.error }, 400);
       const { data: proj } = await admin
         .from('projects')
-        .select('is_active, kind, parts')
+        .select('is_active, kind, parts, questions')
         .eq('id', project_id)
         .maybeSingle();
       if (!proj) return json({ error: 'Project not found.' }, 404);
@@ -870,7 +870,12 @@ Deno.serve(async (req) => {
       // An assignment can ask for several programs (a problem set); each tab
       // then has to say which one it belongs to.
       const partIds = (Array.isArray(proj.parts) ? proj.parts : []).map((p: Record<string, any>) => p.id);
-      const checked = validateSketchFiles(body.files, partIds);
+      // Written questions, if the assignment has any. Answering some of them is enough to
+      // turn something in (code is allowed to follow), so no code is only an error when
+      // there are no answers either.
+      const questionIds = (Array.isArray(proj.questions) ? proj.questions : []).map((q: Record<string, any>) => q.id);
+      const answers = normalizeAnswers(body.answers, questionIds);
+      const checked = validateSketchFiles(body.files, partIds, Object.keys(answers).length > 0);
       if ('error' in checked) return json({ error: checked.error }, 400);
 
       const { data: existing, error: existingErr } = await admin
@@ -918,6 +923,7 @@ Deno.serve(async (req) => {
         student_email: student.email,
         ...regrade,
         files: checked.files,
+        answers,
         ai_help_used: aiHelp.ai_help_used,
         ai_help_link: aiHelp.ai_help_link,
         submitted: true,

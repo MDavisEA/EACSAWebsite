@@ -68,7 +68,22 @@ export interface SketchPart {
   images: string[];
   /** Starter code this program opens with ('' = a blank editor). */
   starter: string;
+  /** A bonus: not required, and its points are extra credit rather than part of the total. */
+  optional: boolean;
 }
+
+/** A written question a student answers in a text box (see migration 0040). */
+export interface SketchQuestion {
+  id: string;
+  prompt: string;
+  points: number | null;
+  /** Answered in a code-style box (monospace, tabs allowed) instead of a plain one. */
+  code: boolean;
+}
+
+export const MAX_QUESTIONS = 40;
+export const MAX_PROMPT_CHARS = 5000;
+export const MAX_ANSWER_CHARS = 20000;
 
 export const MAX_PARTS = 30;
 export const MAX_PART_IMAGES = 8;
@@ -118,7 +133,50 @@ export function normalizeParts(raw: unknown): SketchPart[] {
       points: p.points !== null && p.points !== '' && Number.isFinite(points) && points >= 0 ? points : null,
       images,
       starter: typeof p.starter === 'string' ? p.starter.slice(0, MAX_TAB_CHARS) : '',
+      optional: p.optional === true,
     });
+  }
+  return out;
+}
+
+/**
+ * Cleans the teacher's list of written questions. Same id rules as programs, and
+ * for a stronger reason: a question's score is filed in submissions.question_scores
+ * under its id, in the same object as the per-program scores, so an id must never
+ * collide with a program's (`reserved`). A question with no wording is dropped.
+ */
+export function normalizeQuestions(raw: unknown, reserved: string[] = []): SketchQuestion[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>(reserved);
+  const out: SketchQuestion[] = [];
+  for (const q of raw.slice(0, MAX_QUESTIONS)) {
+    if (!q || typeof q !== 'object') continue;
+    const prompt = typeof q.prompt === 'string' ? q.prompt.trim().slice(0, MAX_PROMPT_CHARS) : '';
+    if (!prompt) continue;
+    let id = typeof q.id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(q.id) ? q.id : '';
+    while (!id || seen.has(id)) id = `q_${Math.random().toString(36).slice(2, 8)}`;
+    seen.add(id);
+    const points = Number(q.points);
+    out.push({
+      id,
+      prompt,
+      points: q.points !== null && q.points !== '' && q.points !== undefined && Number.isFinite(points) && points >= 0 ? points : null,
+      code: q.code === true,
+    });
+  }
+  return out;
+}
+
+/**
+ * A student's written answers: { [questionId]: text }. Only questions that exist,
+ * only text, only ones with something in them (a cleared box is no answer).
+ */
+export function normalizeAnswers(raw: unknown, questionIds: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const id of questionIds) {
+    const v = (raw as Record<string, unknown>)[id];
+    if (typeof v === 'string' && v.trim() !== '') out[id] = v.slice(0, MAX_ANSWER_CHARS);
   }
   return out;
 }
@@ -144,8 +202,12 @@ function cleanTabName(raw: unknown, fallback: string): string {
  */
 export function validateSketchFiles(
   raw: unknown,
-  partIds?: string[]
+  partIds?: string[],
+  // The assignment has written questions and the student has answered some: turning in
+  // answers before any code is fine, so no code at all is not an error.
+  allowEmpty = false
 ): { files: SketchFile[] } | { error: string } {
+  if (allowEmpty && (raw === undefined || (Array.isArray(raw) && raw.length === 0))) return { files: [] };
   if (!Array.isArray(raw) || raw.length === 0) return { error: 'There is no code to turn in.' };
   const multi = Array.isArray(partIds) && partIds.length > 0;
   if (raw.length > (multi ? MAX_TABS * partIds!.length : MAX_TABS)) {
@@ -176,7 +238,7 @@ export function validateSketchFiles(
     files.push(part ? { part, filename: `${part}/${filename}`, content: f.content } : { filename, content: f.content });
   }
   if (total > MAX_CODE_CHARS) return { error: 'This is too long to turn in.' };
-  if (!files.some((f) => f.content.trim() !== '')) return { error: 'There is no code to turn in.' };
+  if (!allowEmpty && !files.some((f) => f.content.trim() !== '')) return { error: 'There is no code to turn in.' };
   if (multi) {
     // Keep the teacher's program order, then the student's tab order within each.
     const order = new Map(partIds!.map((id, i) => [id, i]));

@@ -604,7 +604,7 @@ export default function StudentDashboard() {
                 // A multi-program sketch labels each program's code and score.
                 project={
                   detail.item.kind === "project"
-                    ? { title: detail.item.title, parts: detail.item.parts || [] }
+                    ? { title: detail.item.title, parts: detail.item.parts || [], questions: detail.item.questions || [] }
                     : undefined
                 }
                 onReply={postReply}

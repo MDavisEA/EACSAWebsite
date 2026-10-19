@@ -1,4 +1,5 @@
 import { baseName, groupFilesByPart } from "@/lib/processing/programs";
+import ReactMarkdown from "react-markdown";
 import React, { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -318,6 +319,35 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
               </a>
             )}
             <div className="mt-3 space-y-3">
+              {/* Written answers (a sketch assignment's questions) come first, as they did for the student. */}
+              {(project?.questions || []).length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm border-b pb-1">Written answers</h3>
+                  {project.questions.map((q, i) => {
+                    const answer = result.answers?.[q.id];
+                    const qScore = projectFeedbackVisible ? result.question_scores?.[q.id] : null;
+                    return (
+                      <div key={q.id} className="space-y-1">
+                        <p className="text-sm">
+                          <span className="font-semibold">{i + 1}.</span>{" "}
+                          <span className="markdown-render inline-block align-top"><ReactMarkdown>{q.prompt}</ReactMarkdown></span>
+                          {qScore != null && (
+                            <span className="ml-2 text-xs text-emerald-700">
+                              {qScore}
+                              {typeof q.points === "number" ? ` / ${q.points}` : ""}
+                            </span>
+                          )}
+                        </p>
+                        {answer ? (
+                          <p className="text-sm whitespace-pre-wrap bg-slate-50 border rounded-lg px-3 py-2">{answer}</p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">No answer.</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               {groupFilesByPart(result.files, project?.parts || []).map((g) => {
                 const partScore = g.part && projectFeedbackVisible ? result.question_scores?.[g.part.id] : null;
                 return (
@@ -353,7 +383,7 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
                   </div>
                 );
               })}
-              {(result.files || []).length === 0 && (
+              {(result.files || []).length === 0 && (project?.questions || []).length === 0 && (
                 <p className="text-sm text-muted-foreground">No files were captured.</p>
               )}
             </div>
