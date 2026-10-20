@@ -1757,6 +1757,60 @@ Deno.serve(async (req) => {
       return json({ result: data });
     }
 
+    // Mini Problem practice runs: who is mid-problem, and a way to give one of
+    // them more. `extra_test_runs` is added to the problem's max_test_runs in
+    // run-java-tests. Runs that failed to compile don't count (see countedRuns
+    // there), so "used" here is computed the same way.
+    if (action === 'listInProgress') {
+      const { data: prob } = await admin
+        .from('coding_problems')
+        .select('course_id, max_test_runs')
+        .eq('id', body.coding_problem_id)
+        .maybeSingle();
+      if (!prob || !myCourses.includes(prob.course_id)) return json({ results: [] });
+      const { data, error } = await admin
+        .from('submissions')
+        .select('id, student_name, student_email, extra_test_runs, run_history, updated_at')
+        .eq('coding_problem_id', body.coding_problem_id)
+        .eq('submitted', false)
+        .order('student_name');
+      if (error) return json({ error: error.message }, 500);
+      return json({
+        results: (data || []).map((s: Record<string, any>) => ({
+          id: s.id,
+          student_name: s.student_name,
+          student_email: s.student_email,
+          extra_test_runs: s.extra_test_runs || 0,
+          runs_used: (s.run_history || []).filter((h: Record<string, any>) => !h.final && !h.compile_error).length,
+          max_test_runs: prob.max_test_runs,
+        })),
+      });
+    }
+
+    // `delta` adds (or, negative, takes back) runs; `reset` gives the student a
+    // full fresh allowance from now by setting the extra to what they have
+    // already used. Never goes below zero extra.
+    if (action === 'adjustTestRuns') {
+      if (!(await ownsSubmissionId(body.submission_id))) return json({ error: 'Not found' }, 404);
+      const { data: sub } = await admin
+        .from('submissions')
+        .select('extra_test_runs, run_history, submitted')
+        .eq('id', body.submission_id)
+        .maybeSingle();
+      if (!sub) return json({ error: 'Not found' }, 404);
+      const used = (sub.run_history || []).filter((h: Record<string, any>) => !h.final && !h.compile_error).length;
+      const current = sub.extra_test_runs || 0;
+      const next = body.reset ? used : current + (Math.trunc(Number(body.delta)) || 0);
+      const { data, error } = await admin
+        .from('submissions')
+        .update({ extra_test_runs: Math.max(0, next) })
+        .eq('id', body.submission_id)
+        .select('id, extra_test_runs')
+        .single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ result: data });
+    }
+
     if (action === 'setAccessCode') {
       if (!(await ownsSubmissionId(body.submission_id))) return json({ error: 'Not found' }, 404);
       const { data, error } = await admin

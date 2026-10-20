@@ -511,14 +511,20 @@ Deno.serve(async (req) => {
     // directly. Only non-final runs count: a student who has used every
     // practice run must still be able to turn the work in, or the cap would
     // stop them submitting at all.
-    if (!final && problem.max_test_runs !== null && problem.max_test_runs !== undefined) {
+    // The teacher can grant one student extra runs (submissions.extra_test_runs),
+    // so the real allowance is per submission.
+    const allowedRuns =
+      problem.max_test_runs !== null && problem.max_test_runs !== undefined
+        ? problem.max_test_runs + (Number(submission.extra_test_runs) || 0)
+        : null;
+    if (!final && allowedRuns !== null) {
       const used = countedRuns(submission.run_history);
-      if (used >= problem.max_test_runs) {
+      if (used >= allowedRuns) {
         return json(
           {
-            error: `You have used all ${problem.max_test_runs} test runs for this problem. You can still submit your work when you are ready.`,
+            error: `You have used all ${allowedRuns} test runs for this problem. You can still submit your work when you are ready.`,
             runs_used: used,
-            max_test_runs: problem.max_test_runs,
+            max_test_runs: allowedRuns,
           },
           429
         );
@@ -600,7 +606,7 @@ Deno.serve(async (req) => {
         compile_error: compileError,
         test_results: [],
         runs_used: countedRuns(run_history),
-        max_test_runs: problem.max_test_runs ?? null,
+        max_test_runs: allowedRuns,
       });
     }
 
@@ -825,7 +831,7 @@ Deno.serve(async (req) => {
       tests_total: results.length,
       autograde_score,
       runs_used: countedRuns(run_history),
-      max_test_runs: problem.max_test_runs ?? null,
+      max_test_runs: allowedRuns,
     });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);

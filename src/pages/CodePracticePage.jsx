@@ -49,6 +49,8 @@ export default function CodePracticePage() {
   // Practice runs already spent. Seeded from the resumed submission so the
   // count survives a reload, then kept in step with what the server reports.
   const [runsUsed, setRunsUsed] = useState(0);
+  // Runs the teacher has granted this student on top of the problem's cap.
+  const [extraRuns, setExtraRuns] = useState(0);
   // Coding Assignment problems only: the live runner, opened on demand.
   const [showRunner, setShowRunner] = useState(false);
 
@@ -107,6 +109,7 @@ export default function CodePracticePage() {
 
     submissionRef.current = { id: sub.id, session_token: sub.session_token };
     setRunsUsed((sub.run_history || []).filter((h) => !h.final && !h.compile_error).length);
+    setExtraRuns(sub.extra_test_runs || 0);
     setCode(draft || sub.code || p.starter_code || "");
     setLoading(false);
   };
@@ -170,13 +173,16 @@ export default function CodePracticePage() {
       const data = await runTests(false);
       setResults(data);
       if (typeof data.runs_used === "number") setRunsUsed(data.runs_used);
+      if (typeof data.max_test_runs === "number" && problem?.max_test_runs != null) {
+        setExtraRuns(Math.max(0, data.max_test_runs - problem.max_test_runs));
+      }
     } catch (e) {
       setRunError(e.message || "Something went wrong running your code. Please try again.");
       // Only the cap itself should disable the button - a network blip or a
       // Piston outage must not cost a student their remaining runs. Matches on
       // the message this app's own edge function returns for that one case.
       if (problem?.max_test_runs != null && /used all \d+ test runs/.test(e.message || "")) {
-        setRunsUsed(problem.max_test_runs);
+        setRunsUsed(problem.max_test_runs + extraRuns);
       }
     } finally {
       setRunning(false);
@@ -235,7 +241,7 @@ export default function CodePracticePage() {
 
   // null when the problem has no cap, so the counter stays hidden entirely.
   const runsLeft =
-    problem.max_test_runs == null ? null : Math.max(0, problem.max_test_runs - runsUsed);
+    problem.max_test_runs == null ? null : Math.max(0, problem.max_test_runs + extraRuns - runsUsed);
 
   const resultsByKey = {};
   (results?.test_results || []).forEach((r) => { resultsByKey[`${r.method_name}::${r.test_id}`] = r; });
@@ -441,8 +447,8 @@ export default function CodePracticePage() {
               >
                 {runsLeft === 0
                   ? "No test runs left — you can still submit."
-                  : `${runsLeft} of ${problem.max_test_runs} test run${
-                      problem.max_test_runs === 1 ? "" : "s"
+                  : `${runsLeft} of ${problem.max_test_runs + extraRuns} test run${
+                      problem.max_test_runs + extraRuns === 1 ? "" : "s"
                     } left`}
               </span>
             )}

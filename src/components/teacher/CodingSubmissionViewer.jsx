@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
 import { Checkbox } from "@/components/ui/checkbox";
 import AnnotatedCodeView from "./AnnotatedCodeView";
+import InProgressRuns from "./InProgressRuns";
 import GradesDialog from "./GradesDialog";
 import AiHelpBadge from "./AiHelpBadge";
 import { getCachedList, setCachedList } from "@/lib/submissionListCache";
@@ -275,6 +276,7 @@ export default function CodingSubmissionViewer({ problem }) {
 
   return (
     <div>
+      <InProgressRuns problem={problem} />
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">
           {visible.length} Submission{visible.length !== 1 ? "s" : ""}

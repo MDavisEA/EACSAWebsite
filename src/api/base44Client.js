@@ -239,6 +239,20 @@ const Submission = {
     return data.results;
   },
 
+  // Mini Problem students who have started but not turned in, with how many
+  // practice runs each has used - for granting extra runs mid-quiz.
+  async listInProgress(codingProblemId) {
+    const data = await callFunction('submissions', { action: 'listInProgress', coding_problem_id: codingProblemId });
+    return data.results;
+  },
+
+  // Teacher: give one student more practice runs (`{ delta: 2 }`) or a fresh
+  // full allowance (`{ reset: true }`).
+  async adjustTestRuns(submissionId, opts) {
+    const data = await callFunction('submissions', { action: 'adjustTestRuns', submission_id: submissionId, ...opts });
+    return data.result;
+  },
+
   // One complete submission row, for the student the teacher just opened.
   async getFull(id) {
     const data = await callFunction('submissions', { action: 'getFullOne', submission_id: id });
