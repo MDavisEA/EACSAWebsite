@@ -52,6 +52,11 @@ export default function CodingProblemCard({ problem, ungradedCount = 0, dragHand
               <div>
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="text-lg font-semibold">{problem.title}</h3>
+                {(problem.section_ids || []).length > 0 && (
+                  <Badge variant="outline">
+                    {problem.section_ids.length === 1 ? "1 section only" : `${problem.section_ids.length} sections only`}
+                  </Badge>
+                )}
                 <Badge variant={problem.is_active ? "default" : "secondary"}>
                   {problem.is_active ? "Active" : "Inactive"}
                 </Badge>

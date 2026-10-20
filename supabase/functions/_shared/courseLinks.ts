@@ -68,6 +68,8 @@ export async function propagateToLinkedCourses(
         const targetUnitId = await findOrCreateUnit(admin, link.target_course_id, sourceUnitName);
         const insertRow: Record<string, any> = { ...rest, ...liveFlagOverride, course_id: link.target_course_id };
         insertRow.unit_id = targetUnitId;
+        // Section ids belong to the source course.
+        if (table === 'coding_problems') insertRow.section_ids = [];
         const { error: copyErr } = await admin.from(table).insert(insertRow);
         if (copyErr) {
           // Not re-thrown - see the function doc comment - but still worth a

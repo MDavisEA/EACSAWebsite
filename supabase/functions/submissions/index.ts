@@ -1,3 +1,4 @@
+import { inAudience, studentSectionId } from '../_shared/sectionAudience.ts';
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest, teacherCourseIds, teacherOwnsRow } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
@@ -190,11 +191,14 @@ Deno.serve(async (req) => {
       if (coding_problem_id) {
         const { data: prob } = await admin
           .from('coding_problems')
-          .select('is_active')
+          .select('is_active, course_id, section_ids')
           .eq('id', coding_problem_id)
           .maybeSingle();
         if (!prob) return json({ error: 'Problem not found.' }, 404);
         if (!prob.is_active) return json({ error: 'This problem is no longer active.' }, 409);
+        if (!inAudience(prob, await studentSectionId(admin, student, prob.course_id))) {
+          return json({ error: 'Problem not found.' }, 404);
+        }
       }
 
       const { data, error } = await admin
@@ -544,11 +548,14 @@ Deno.serve(async (req) => {
       // skips the picker page where this was previously the only check.
       const { data: prob } = await admin
         .from('coding_problems')
-        .select('is_active')
+        .select('is_active, course_id, section_ids')
         .eq('id', coding_problem_id)
         .maybeSingle();
       if (!prob) return json({ error: 'Problem not found.' }, 404);
       if (!prob.is_active) return json({ error: 'This problem is no longer active.' }, 409);
+      if (!inAudience(prob, await studentSectionId(admin, student, prob.course_id))) {
+        return json({ error: 'Problem not found.' }, 404);
+      }
 
       const { data, error } = await admin
         .from('submissions')

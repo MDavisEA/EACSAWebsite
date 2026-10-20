@@ -49,6 +49,7 @@ function defaultForm() {
     sample_outputs: [],
     due_date: "",
     section_due_dates: [],
+    section_ids: [],
     max_test_runs: 5,
     is_active: true,
   };
@@ -240,6 +241,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
       class_name: form.class_name.trim() || "Solution",
       course_id: form.course_id || null,
       unit_id: form.unit_id || null,
+      section_ids: form.section_ids || [],
       due_date: form.due_date ? new Date(form.due_date).toISOString() : null,
       section_due_dates: (form.section_due_dates || [])
         .filter((e) => e.due_date)
@@ -293,7 +295,7 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           <Label>Course *</Label>
           <Select
             value={form.course_id || ""}
-            onValueChange={(v) => updateField("course_id", v)}
+            onValueChange={(v) => setForm((f) => ({ ...f, course_id: v, section_ids: v === f.course_id ? f.section_ids : [] }))}
           >
             <SelectTrigger>
               <SelectValue placeholder="Choose a course" />
@@ -343,6 +345,32 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
           <p className="text-xs text-muted-foreground">Optional — shown to students.</p>
         </div>
       </div>
+
+      {(() => {
+        const sections = courses.find((c) => c.id === form.course_id)?.sections || [];
+        if (sections.length < 2) return null;
+        const chosen = form.section_ids || [];
+        const toggle = (id) =>
+          updateField("section_ids", chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id]);
+        return (
+          <div className="space-y-2 border rounded-lg p-3 bg-slate-50/50">
+            <p className="text-xs font-medium text-slate-600">Only show to these sections (optional)</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {sections.map((sec) => (
+                <label key={sec.id} className="flex items-center gap-1.5 text-sm">
+                  <input type="checkbox" checked={chosen.includes(sec.id)} onChange={() => toggle(sec.id)} />
+                  {sec.name}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {chosen.length === 0
+                ? "None checked: every section in the course gets this problem."
+                : "Only students on the roster in a checked section can see or start it."}
+            </p>
+          </div>
+        );
+      })()}
 
       <SectionDueDatesEditor
         sections={courses.find((c) => c.id === form.course_id)?.sections || []}

@@ -8,6 +8,7 @@ import {
 } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { attachSectionDueDates, fetchOverridesByWorkId, replaceSectionDueDates, resolveDueDates } from '../_shared/sectionDueDates.ts';
+import { inAudience, studentSectionId, validSectionIds } from '../_shared/sectionAudience.ts';
 import { propagateToLinkedCourses } from '../_shared/courseLinks.ts';
 
 // Students get starter code, description, and the LABELS of test cases
@@ -104,7 +105,20 @@ Deno.serve(async (req) => {
     if (action === 'listActive') {
       const { data, error } = await admin.from('coding_problems').select('*').eq('is_active', true);
       if (error) return json({ error: error.message }, 500);
-      return json({ results: (data || []).map(sanitizeForStudent) });
+      // Problems limited to some blocks are only listed to students in them.
+      const student = await getStudentFromRequest(req, admin);
+      const sectionByCourse = new Map<string, string | null>();
+      const visible: Record<string, any>[] = [];
+      for (const p of data || []) {
+        if ((p.section_ids || []).length > 0) {
+          if (!sectionByCourse.has(p.course_id)) {
+            sectionByCourse.set(p.course_id, await studentSectionId(admin, student, p.course_id));
+          }
+          if (!inAudience(p, sectionByCourse.get(p.course_id) ?? null)) continue;
+        }
+        visible.push(p);
+      }
+      return json({ results: visible.map(sanitizeForStudent) });
     }
 
     if (action === 'getActive') {
@@ -121,6 +135,12 @@ Deno.serve(async (req) => {
       // block with its own due date sees that date, anonymous/access-code
       // students see the base due_date unchanged.
       const student = await getStudentFromRequest(req, admin);
+      if (
+        (data.section_ids || []).length > 0 &&
+        !inAudience(data, await studentSectionId(admin, student, data.course_id))
+      ) {
+        return json({ result: null });
+      }
       let resolved = data;
       if (student && data.course_id) {
         const { data: rosterRow } = await admin
@@ -277,6 +297,8 @@ Deno.serve(async (req) => {
           course_id: body.course_id,
           unit_id: body.unit_id ?? null,
           is_active: false,
+          // Section ids belong to the source's course.
+          section_ids: [],
         })
         .select()
         .single();
@@ -292,6 +314,7 @@ Deno.serve(async (req) => {
       // created below. Stripped before withDerivedPoints so it is never
       // spread back into the insert payload.
       const { section_due_dates, ...rest } = body.data || {};
+      rest.section_ids = await validSectionIds(admin, rest.course_id, rest.section_ids);
       const { data, error } = await admin
         .from('coding_problems')
         .insert(withDerivedPoints(rest))
@@ -322,6 +345,15 @@ Deno.serve(async (req) => {
       if (section_due_dates !== undefined) {
         const { error: sddErr } = await replaceSectionDueDates(admin, 'coding_problem_id', body.id, section_due_dates);
         if (sddErr) return json({ error: sddErr }, 500);
+      }
+      // Validated against the course the row will be in after this write.
+      if ('section_ids' in rest || rest.course_id) {
+        let courseId = rest.course_id;
+        if (!courseId) {
+          const { data: cur } = await admin.from('coding_problems').select('course_id').eq('id', body.id).maybeSingle();
+          courseId = cur?.course_id;
+        }
+        rest.section_ids = await validSectionIds(admin, courseId, rest.section_ids);
       }
       const { data, error } = await admin
         .from('coding_problems')
