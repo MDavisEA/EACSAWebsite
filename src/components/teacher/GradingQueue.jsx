@@ -510,9 +510,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                           {groupFilesByPart(submission.files, parts).map((g) => (
                             <div key={g.key} className="flex items-center gap-1 flex-wrap">
                               {hasParts && g.title && (
-                                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mr-0.5">
-                                  {g.title}
-                                </span>
+                                <span className="text-xs font-semibold text-slate-700 mr-0.5">{g.title}:</span>
                               )}
                               {g.files.map((f) => {
                                 const count = lineComments.filter((c) => (c.file ?? null) === f.filename).length;
@@ -520,10 +518,10 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                                   <button
                                     key={f.filename}
                                     onClick={() => selectFile(f)}
-                                    className={`text-xs font-mono rounded px-2 py-1 transition-colors ${
+                                    className={`text-xs font-mono rounded-md border px-2.5 py-1 transition-colors ${
                                       activeFile === f.filename
-                                        ? "bg-white shadow-sm font-semibold"
-                                        : "text-slate-500 hover:text-slate-800"
+                                        ? "bg-primary text-primary-foreground border-primary shadow-sm font-semibold"
+                                        : "bg-white border-slate-300 text-slate-700 hover:border-primary hover:text-primary"
                                     }`}
                                   >
                                     {hasParts ? baseName(f.filename) : f.filename}
