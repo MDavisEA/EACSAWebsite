@@ -297,6 +297,11 @@ pattern under `src/components/teacher/`.
     checkbox in `ProgramsEditor`, `WrittenAnswers` above the code in both graders, answers
     in the student's results view and in the review export (`answers.md` per student).
     A code-style question (`code: true`) just gets a monospace box.
+  - **Scratch editing while grading.** The Output view has an **Edit code** button
+    (`SketchTestingPanel.jsx`): an editor beside the running sketch so the teacher can
+    change a student's code and re-run it. Edits live only in a module-level map in that
+    file (per submission + program), are never sent anywhere, and "Back to their code"
+    restores the original - what the student turned in is never touched.
   - **Turning a sketch in again.** From the student dashboard a turned-in sketch has an
     "Open it to change and turn in again" button (it routes back to `/project?id=`; the
     WorkItem carries `project_kind` so only sketches get it). If the sketch was already
