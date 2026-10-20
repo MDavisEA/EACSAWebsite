@@ -5,6 +5,8 @@ import { base44 } from "@/api/base44Client";
 import { useGoogleSession } from "@/lib/useGoogleSession";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
+import { indentUnit } from "@codemirror/language";
+import { indentSelection } from "@codemirror/commands";
 import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import SampleOutputs from "@/components/SampleOutputs";
 import CodeFontSizeControl from "@/components/CodeFontSizeControl";
@@ -16,12 +18,12 @@ import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import InteractiveRunner from "@/components/InteractiveRunner";
-import { Play, Send, CheckCircle2, XCircle, EyeOff, Loader2, Trophy, Home } from "lucide-react";
+import { AlignLeft, Play, Send, CheckCircle2, XCircle, EyeOff, Loader2, Trophy, Home } from "lucide-react";
 
 // Defined once at module scope, not inline in JSX - a new array reference
 // on every render makes @uiw/react-codemirror tear down and rebuild the
 // editor's state, which drops the current selection/cursor mid-edit.
-const CODE_EXTENSIONS = [java(), ...a11yDarkEditorTheme];
+const CODE_EXTENSIONS = [java(), indentUnit.of("    "), ...a11yDarkEditorTheme];
 
 export default function CodePracticePage() {
   const navigate = useNavigate();
@@ -48,6 +50,7 @@ export default function CodePracticePage() {
   const [finalized, setFinalized] = useState(false);
   // Practice runs already spent. Seeded from the resumed submission so the
   // count survives a reload, then kept in step with what the server reports.
+  const editorViewRef = useRef(null);
   const [runsUsed, setRunsUsed] = useState(0);
   // Runs the teacher has granted this student on top of the problem's cap.
   const [extraRuns, setExtraRuns] = useState(0);
@@ -112,6 +115,20 @@ export default function CodePracticePage() {
     setExtraRuns(sub.extra_test_runs || 0);
     setCode(draft || sub.code || p.starter_code || "");
     setLoading(false);
+  };
+
+  // Re-indents the whole program the way Java is normally laid out. Selects
+  // everything so the standard indent command covers it, then puts the cursor
+  // back where it was (clamped, since lines can shift by a few characters).
+  const handleAutoIndent = () => {
+    const view = editorViewRef.current;
+    if (!view || finalized) return;
+    const head = view.state.selection.main.head;
+    view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+    indentSelection(view);
+    const pos = Math.min(head, view.state.doc.length);
+    view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+    view.focus();
   };
 
   const handleCodeChange = (value) => {
@@ -390,6 +407,7 @@ export default function CodePracticePage() {
               height="100%"
               style={{ height: "100%" }}
               basicSetup={{ tabSize: 4 }}
+              onCreateEditor={(view) => { editorViewRef.current = view; }}
             />
           </div>
 
@@ -452,6 +470,15 @@ export default function CodePracticePage() {
                     } left`}
               </span>
             )}
+            <Button
+              variant="outline"
+              onClick={handleAutoIndent}
+              disabled={finalized}
+              title="Fix the indentation of your whole program"
+              className="border-slate-600 text-slate-100 bg-transparent hover:bg-slate-700 hover:text-slate-100"
+            >
+              <AlignLeft className="w-4 h-4 mr-1.5" /> Auto-indent
+            </Button>
             <Button
               variant="outline"
               onClick={isReviewKind ? handlePlainRun : handleRun}
