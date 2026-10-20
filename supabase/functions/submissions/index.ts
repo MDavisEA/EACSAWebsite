@@ -1550,7 +1550,33 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      return json({ result: { submission: { ...sub, resubmitted: !!versionRow }, work, kind } });
+      // Late against the due date THIS student actually had: a block with its
+      // own override is judged on that, not the assignment's base date (same
+      // resolution the student-facing paths use).
+      let dueDate: string | null = work.due_date ?? null;
+      if (work.course_id && sub.student_email) {
+        const sectionId = await studentSectionId(admin, { email: sub.student_email }, work.course_id);
+        if (sectionId) {
+          const workKind = sub.assignment_id ? 'assignment_id' : sub.coding_problem_id ? 'coding_problem_id' : 'project_id';
+          const workId = sub.assignment_id || sub.coding_problem_id || sub.project_id;
+          const overrides = await fetchOverridesByWorkId(admin, workKind, [workId]);
+          dueDate = overrides.get(workId)?.get(sectionId) ?? dueDate;
+        }
+      }
+      const lateBy =
+        dueDate && sub.submitted_at && new Date(sub.submitted_at) > new Date(dueDate)
+          ? new Date(sub.submitted_at).getTime() - new Date(dueDate).getTime()
+          : null;
+
+      return json({
+        result: {
+          submission: { ...sub, resubmitted: !!versionRow },
+          work,
+          kind,
+          due_date: dueDate,
+          late_by_ms: lateBy,
+        },
+      });
     }
 
     if (action === 'saveGrade') {

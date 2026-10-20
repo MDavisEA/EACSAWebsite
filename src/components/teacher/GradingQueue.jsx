@@ -19,10 +19,18 @@ import { baseName, groupFilesByPart, itemsTotalPoints, partIdOf, scoreItems, sum
 import WrittenAnswers from "./WrittenAnswers";
 import {
   Loader2, ChevronLeft, ChevronRight, CheckCircle2, EyeOff, FileCode, Terminal, Info, Play,
-  KeyRound, ExternalLink, Bot,
+  KeyRound, ExternalLink, Bot, Clock,
 } from "lucide-react";
 import AiHelpBadge from "./AiHelpBadge";
 import PreviousVersionsPanel from "./PreviousVersionsPanel";
+
+function formatLateBy(ms) {
+  const mins = Math.max(1, Math.round(ms / 60000));
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} hr`;
+  return `${Math.round(hours / 24)} days`;
+}
 
 const KIND_LABEL = { frq: "FRQ", code: "Mini Problem", review: "Coding Assignment", project: "Project" };
 
@@ -398,6 +406,14 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                   </Badge>
                 )}
               </div>
+
+              {detail?.late_by_ms != null && (
+                <div className="flex items-center gap-2 rounded-md bg-red-50 border border-red-300 px-3 py-1.5 text-sm font-bold text-red-700">
+                  <Clock className="w-4 h-4 flex-shrink-0" />
+                  LATE - turned in {formatLateBy(detail.late_by_ms)} after the{" "}
+                  {format(new Date(detail.due_date), "MMM d, h:mm a")} deadline
+                </div>
+              )}
 
               {(isCode || isSketch) && (
                 <div className="flex items-center gap-1 border rounded-lg p-1 bg-slate-50 ml-auto">
