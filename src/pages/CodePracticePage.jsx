@@ -106,7 +106,7 @@ export default function CodePracticePage() {
     }
 
     submissionRef.current = { id: sub.id, session_token: sub.session_token };
-    setRunsUsed((sub.run_history || []).filter((h) => !h.final).length);
+    setRunsUsed((sub.run_history || []).filter((h) => !h.final && !h.compile_error).length);
     setCode(draft || sub.code || p.starter_code || "");
     setLoading(false);
   };

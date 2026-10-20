@@ -439,6 +439,14 @@ function evaluateProperty(tc: TestCase, trials: string[]): { passed: boolean; de
   }
 }
 
+// Practice runs that use up a student's allowance. A run that failed to
+// compile (or crashed before producing anything) is a typo, not an attempt
+// at the answer, so it is still recorded in run_history for the teacher but
+// does not count against max_test_runs. Final submits never count either.
+function countedRuns(history: Record<string, any>[] | null | undefined): number {
+  return (history || []).filter((h) => !h.final && !h.compile_error).length;
+}
+
 Deno.serve(async (req) => {
   const preflight = handleOptions(req);
   if (preflight) return preflight;
@@ -504,9 +512,7 @@ Deno.serve(async (req) => {
     // practice run must still be able to turn the work in, or the cap would
     // stop them submitting at all.
     if (!final && problem.max_test_runs !== null && problem.max_test_runs !== undefined) {
-      const used = (submission.run_history || []).filter(
-        (h: Record<string, any>) => !h.final
-      ).length;
+      const used = countedRuns(submission.run_history);
       if (used >= problem.max_test_runs) {
         return json(
           {
@@ -593,7 +599,7 @@ Deno.serve(async (req) => {
       return json({
         compile_error: compileError,
         test_results: [],
-        runs_used: run_history.filter((h: Record<string, any>) => !h.final).length,
+        runs_used: countedRuns(run_history),
         max_test_runs: problem.max_test_runs ?? null,
       });
     }
@@ -818,7 +824,7 @@ Deno.serve(async (req) => {
       tests_passed,
       tests_total: results.length,
       autograde_score,
-      runs_used: run_history.filter((h: Record<string, any>) => !h.final).length,
+      runs_used: countedRuns(run_history),
       max_test_runs: problem.max_test_runs ?? null,
     });
   } catch (error) {
