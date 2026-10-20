@@ -6,7 +6,7 @@ import { useGoogleSession } from "@/lib/useGoogleSession";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { indentUnit } from "@codemirror/language";
-import { indentSelection } from "@codemirror/commands";
+import { autoIndentView } from "@/lib/autoIndent";
 import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import SampleOutputs from "@/components/SampleOutputs";
 import CodeFontSizeControl from "@/components/CodeFontSizeControl";
@@ -117,17 +117,11 @@ export default function CodePracticePage() {
     setLoading(false);
   };
 
-  // Re-indents the whole program the way Java is normally laid out. Selects
-  // everything so the standard indent command covers it, then puts the cursor
-  // back where it was (clamped, since lines can shift by a few characters).
+  // Brace-on-its-own-line style, see lib/autoIndent.js.
   const handleAutoIndent = () => {
     const view = editorViewRef.current;
     if (!view || finalized) return;
-    const head = view.state.selection.main.head;
-    view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
-    indentSelection(view);
-    const pos = Math.min(head, view.state.doc.length);
-    view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+    autoIndentView(view);
     view.focus();
   };
 

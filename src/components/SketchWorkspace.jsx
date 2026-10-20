@@ -13,6 +13,7 @@ import { java } from "@codemirror/lang-java";
 import { keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import { indentWithTab } from "@codemirror/commands";
+import { autoIndentView } from "@/lib/autoIndent";
 import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import CodeFontSizeControl from "@/components/CodeFontSizeControl";
 import { useCodeFontSize } from "@/lib/useCodeFontSize";
@@ -280,6 +281,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
   const [renaming, setRenaming] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
 
+  const editorViewRef = useRef(null);
   const runnerRef = useRef(null);
   const pickerRef = useRef(null);
   // Same size preference (and control) the Java editor uses - one setting for all of their code.
@@ -753,6 +755,13 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                   <Plus className="w-4 h-4" />
                 </button>
                 <div className="ml-auto self-center mr-1 flex items-center gap-2">
+                  <button
+                    onClick={() => { if (editorViewRef.current) { autoIndentView(editorViewRef.current); editorViewRef.current.focus(); } }}
+                    className="text-xs px-2 py-1 rounded text-muted-foreground hover:text-foreground"
+                    title="Fix the indentation of this tab"
+                  >
+                    Auto-indent
+                  </button>
                   <CodeFontSizeControl
                     fontSize={fontSize}
                     onIncrease={increase}
@@ -793,6 +802,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                   height="100%"
                   style={{ height: "100%" }}
                   basicSetup={{ tabSize: 2 }}
+                  onCreateEditor={(view) => { editorViewRef.current = view; }}
                   placeholder={multi ? `Paste program ${parts.findIndex((p) => p.id === activePart) + 1} here, then press Run.` : "Paste your Processing code here, then press Run."}
                 />
               </div>
