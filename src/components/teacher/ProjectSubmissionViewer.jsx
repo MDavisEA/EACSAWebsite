@@ -18,7 +18,7 @@ import { FileDown, Trash2, ExternalLink, Loader2, Upload, CheckCircle2, XCircle,
 import AiHelpBadge from "./AiHelpBadge";
 import SketchTestingPanel, { FeedbackTestingToggle } from "./SketchTestingPanel";
 import { baseName, groupFilesByPart, itemsTotalPoints, partIdOf, scoreItems, sumPartScores } from "@/lib/processing/programs";
-import WrittenAnswers from "./WrittenAnswers";
+import WrittenAnswers, { cleanComments } from "./WrittenAnswers";
 import { exportProjectForReview } from "@/lib/exportProjectZip";
 import { diffRosterAgainstSubmissions } from "@/lib/rosterCsv";
 import { byLastName } from "@/lib/groupSubmissionsByStudent";
@@ -82,6 +82,7 @@ export default function ProjectSubmissionViewer({ project }) {
   // which case there is no Full credit button (nothing to give full credit of).
   const maxPoints = itemsTotalPoints(items) ?? (project.points_possible != null && !hasItems ? Number(project.points_possible) : null);
   const [reviewScores, setReviewScores] = useState({}); // programId -> typed score
+  const [answerComments, setAnswerComments] = useState({}); // questionId -> note on that answer
   const [reviewDraft, setReviewDraft] = useState({
     teacher_comments: "",
     score: "",
@@ -216,6 +217,7 @@ export default function ProjectSubmissionViewer({ project }) {
     });
     setLineComments([]);
     setReviewScores(Object.fromEntries(Object.entries(s.question_scores || {}).map(([k, v]) => [k, String(v)])));
+    setAnswerComments(s.part_comments || {});
     setReviewError("");
     // What you are marking in a sketch is what it does, so that is what opens.
     setReviewTab(isSketch ? "testing" : "feedback");
@@ -276,6 +278,7 @@ export default function ProjectSubmissionViewer({ project }) {
         // With programs the total is the sum of the per-program scores, which are
         // filed under each program's id (the same column an FRQ uses).
         ...(hasItems ? { question_scores: perProgram } : {}),
+        ...(isSketch && (project.questions || []).length > 0 ? { part_comments: cleanComments(answerComments, project.questions) } : {}),
         score: hasItems
           ? (Object.keys(perProgram).length > 0 ? sumPartScores(perProgram) : null)
           : reviewDraft.score === "" ? null : Number(reviewDraft.score),
@@ -543,7 +546,7 @@ export default function ProjectSubmissionViewer({ project }) {
           )}
 
           {isSketch && (project.questions || []).length > 0 && reviewTarget && (
-            <WrittenAnswers questions={project.questions} answers={reviewTarget.answers} scores={reviewScores} onScore={(id, v) => setReviewScores((q) => ({ ...q, [id]: v }))} />
+            <WrittenAnswers questions={project.questions} answers={reviewTarget.answers} scores={reviewScores} onScore={(id, v) => setReviewScores((q) => ({ ...q, [id]: v }))} comments={answerComments} onComment={(id, v) => setAnswerComments((c) => ({ ...c, [id]: v }))} />
           )}
 
           {isSketch && reviewTab === "testing" && reviewTarget && (

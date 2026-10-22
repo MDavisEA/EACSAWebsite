@@ -16,7 +16,7 @@ import HighlightedCode from "@/components/HighlightedCode";
 import InteractiveRunner from "@/components/InteractiveRunner";
 import SketchTestingPanel from "./SketchTestingPanel";
 import { baseName, groupFilesByPart, itemsTotalPoints, partIdOf, scoreItems, sumPartScores } from "@/lib/processing/programs";
-import WrittenAnswers from "./WrittenAnswers";
+import WrittenAnswers, { cleanComments } from "./WrittenAnswers";
 import {
   Loader2, ChevronLeft, ChevronRight, CheckCircle2, EyeOff, FileCode, Terminal, Info, Play,
   KeyRound, ExternalLink, Bot, Clock,
@@ -60,6 +60,8 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
 
   const [score, setScore] = useState("");
   const [questionScores, setQuestionScores] = useState({});
+  // Notes on individual written answers of a sketch, keyed by question id (submissions.part_comments).
+  const [answerComments, setAnswerComments] = useState({});
   const [comments, setComments] = useState("");
   const [lineComments, setLineComments] = useState([]);
   const [release, setRelease] = useState(false);
@@ -146,6 +148,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
         setQuestionScores(
           Object.fromEntries(Object.entries(s.question_scores || {}).map(([k, v]) => [k, String(v)]))
         );
+        setAnswerComments(s.part_comments || {});
         setComments(s.teacher_comments || "");
         setLineComments(s.line_comments || []);
         setRelease(!!s.feedback_released);
@@ -306,6 +309,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
         );
         patch.question_scores = parsed;
         patch.score = Object.keys(parsed).length > 0 ? sumPartScores(parsed) : null;
+        if ((work?.questions || []).length > 0) patch.part_comments = cleanComments(answerComments, work.questions);
       } else {
         const parsed = score.trim() === "" ? null : Number(score);
         patch.score = Number.isFinite(parsed) ? parsed : null;
@@ -488,7 +492,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
               <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 items-start">
                 <div className={isSketch ? "min-w-0 space-y-3" : "min-w-0"}>
                 {isSketch && (work?.questions || []).length > 0 && (
-                  <WrittenAnswers questions={work.questions} answers={submission?.answers} scores={questionScores} onScore={(id, v) => setQuestionScores((q) => ({ ...q, [id]: v }))} />
+                  <WrittenAnswers questions={work.questions} answers={submission?.answers} scores={questionScores} onScore={(id, v) => setQuestionScores((q) => ({ ...q, [id]: v }))} comments={answerComments} onComment={(id, v) => setAnswerComments((c) => ({ ...c, [id]: v }))} />
                 )}
                 <div className={isSketch && tab === "testing" ? "min-w-0" : "border rounded-lg overflow-hidden"}>
                   {/* What they turned in - code, files, or written answers. */}

@@ -343,6 +343,12 @@ export default function SubmissionDetail({ result, assignment, codingProblem, pr
                         ) : (
                           <p className="text-sm text-muted-foreground italic">No answer.</p>
                         )}
+                        {projectFeedbackVisible && (result.part_comments?.[q.id] || "").trim() && (
+                          <p className="text-sm whitespace-pre-wrap bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            <span className="text-xs font-semibold text-amber-800 block mb-0.5">Your teacher</span>
+                            {result.part_comments[q.id]}
+                          </p>
+                        )}
                       </div>
                     );
                   })}

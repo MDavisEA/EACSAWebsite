@@ -83,7 +83,9 @@ function feedbackFlags(
 ): { has_comment: boolean; has_line_comments: boolean } {
   if (!sub || (gated && !sub.feedback_released)) return { has_comment: false, has_line_comments: false };
   return {
-    has_comment: !!(sub.teacher_comments || '').trim(),
+    has_comment:
+      !!(sub.teacher_comments || '').trim() ||
+      Object.values(sub.part_comments || {}).some((c) => String(c || '').trim() !== ''),
     has_line_comments: (sub.line_comments || []).length > 0,
   };
 }

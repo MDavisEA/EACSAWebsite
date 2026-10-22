@@ -1,12 +1,13 @@
-import React from "react";
+import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Check, X } from "lucide-react";
+import { Check, MessageSquarePlus, X } from "lucide-react";
 
 // What a student typed for a sketch assignment's written questions, read-only, for the
 // grader to read next to their code. With `onScore` each question gets quick marks - a check
 // (full credit), a half, and an X (none) - beside a box for any other number, so an answer can
-// be scored right where it is read. The same scores are in the score column.
-export default function WrittenAnswers({ questions, answers, scores = {}, onScore }) {
+// be scored right where it is read. The same scores are in the score column. With `onComment`
+// each answer can also get its own note to the student (released with the rest of the feedback).
+export default function WrittenAnswers({ questions, answers, scores = {}, onScore, comments = {}, onComment }) {
   if (!questions || questions.length === 0) return null;
   const answered = questions.filter((q) => (answers?.[q.id] || "").trim()).length;
   return (
@@ -41,12 +42,23 @@ export default function WrittenAnswers({ questions, answers, scores = {}, onScor
               ) : (
                 <p className="text-sm text-amber-700 italic">No answer.</p>
               )}
+              {onComment && <AnswerComment value={comments[q.id] || ""} onChange={(v) => onComment(q.id, v)} />}
             </div>
           );
         })}
       </div>
     </div>
   );
+}
+
+/** Notes keyed by question id -> only real questions, only ones with something written. */
+export function cleanComments(comments, questions) {
+  const out = {};
+  for (const q of questions || []) {
+    const t = (comments?.[q.id] || "").trim();
+    if (t) out[q.id] = t;
+  }
+  return out;
 }
 
 // Half of the points, in halves (5 -> 2.5, 3 -> 1.5, 1 -> 0.5).
@@ -93,5 +105,28 @@ function QuickMarks({ question, score, onScore }) {
       />
       {has && <span className="text-xs text-muted-foreground w-9">/ {pts}</span>}
     </span>
+  );
+}
+
+// A note on one answer. Closed behind a small button until wanted, open once there is a note.
+function AnswerComment({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  if (!open && !value) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1">
+        <MessageSquarePlus className="w-3.5 h-3.5" /> Comment on this answer
+      </button>
+    );
+  }
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      autoFocus={open && !value}
+      rows={2}
+      aria-label="Your comment on this answer"
+      placeholder="What the student should see about this answer..."
+      className="w-full rounded-md border border-amber-300 bg-amber-50/50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+    />
   );
 }

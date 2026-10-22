@@ -77,7 +77,9 @@ function withheldIfUnreleased(row: Record<string, any> | null) {
   // saveGrade) - the score broken down, so it is withheld with the score. Added
   // when sketches gained programs; without it the one place the number lives
   // twice would have been the only one that leaked before release.
-  return { ...row, score: null, teacher_comments: null, line_comments: [], question_scores: {} };
+  // part_comments holds the teacher's notes on individual written answers (a sketch's
+  // questions - see saveGrade), which are feedback too.
+  return { ...row, score: null, teacher_comments: null, line_comments: [], question_scores: {}, part_comments: {} };
 }
 
 // Verifies the caller actually owns this submission before allowing any
@@ -905,7 +907,8 @@ Deno.serve(async (req) => {
           existing.score !== null ||
           !!(existing.teacher_comments || '').trim() ||
           (existing.line_comments || []).length > 0 ||
-          Object.keys(existing.question_scores || {}).length > 0;
+          Object.keys(existing.question_scores || {}).length > 0 ||
+          Object.values(existing.part_comments || {}).some((c) => String(c || '').trim() !== '');
         if (wasGraded) {
           const { error: archiveErr } = await admin
             .from('submission_versions')
@@ -914,6 +917,7 @@ Deno.serve(async (req) => {
           regrade = {
             score: null,
             question_scores: {},
+            part_comments: {},
             teacher_comments: null,
             line_comments: [],
             feedback_released: false,
