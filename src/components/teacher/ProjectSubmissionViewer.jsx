@@ -543,7 +543,7 @@ export default function ProjectSubmissionViewer({ project }) {
           )}
 
           {isSketch && (project.questions || []).length > 0 && reviewTarget && (
-            <WrittenAnswers questions={project.questions} answers={reviewTarget.answers} scores={reviewScores} />
+            <WrittenAnswers questions={project.questions} answers={reviewTarget.answers} scores={reviewScores} onScore={(id, v) => setReviewScores((q) => ({ ...q, [id]: v }))} />
           )}
 
           {isSketch && reviewTab === "testing" && reviewTarget && (

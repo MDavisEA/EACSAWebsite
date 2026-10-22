@@ -488,7 +488,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
               <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 items-start">
                 <div className={isSketch ? "min-w-0 space-y-3" : "min-w-0"}>
                 {isSketch && (work?.questions || []).length > 0 && (
-                  <WrittenAnswers questions={work.questions} answers={submission?.answers} scores={questionScores} />
+                  <WrittenAnswers questions={work.questions} answers={submission?.answers} scores={questionScores} onScore={(id, v) => setQuestionScores((q) => ({ ...q, [id]: v }))} />
                 )}
                 <div className={isSketch && tab === "testing" ? "min-w-0" : "border rounded-lg overflow-hidden"}>
                   {/* What they turned in - code, files, or written answers. */}
