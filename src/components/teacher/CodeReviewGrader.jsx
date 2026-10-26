@@ -16,11 +16,12 @@ import HighlightedCode from "@/components/HighlightedCode";
 import ResizableDivider from "@/components/exam/ResizableDivider";
 import { getCachedList, setCachedList } from "@/lib/submissionListCache";
 import GradesDialog from "./GradesDialog";
+import { exportCodingForReview } from "@/lib/exportCodingZip";
 import AiHelpBadge from "./AiHelpBadge";
 import PreviousVersionsPanel from "./PreviousVersionsPanel";
 import { groupByStudent, nameParts } from "@/lib/groupSubmissionsByStudent";
 import {
-  Loader2, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, User, KeyRound,
+  Loader2, FileDown, Save, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, User, KeyRound,
   FileCode, Terminal, Info, ChevronRight as Arrow, Bot, ExternalLink,
 } from "lucide-react";
 
@@ -54,6 +55,7 @@ export default function CodeReviewGrader({ problem, onGraded }) {
   const [ackRequired, setAckRequired] = useState(false);
 
   const [gradesOpen, setGradesOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [showKey, setShowKey] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -252,6 +254,24 @@ export default function CodeReviewGrader({ problem, onGraded }) {
     );
   }
 
+  // List rows carry no code, so fetch each student's latest in full (a few at a time).
+  const handleExportForReview = async () => {
+    setExporting(true);
+    setError("");
+    try {
+      const rows = [...groups].sort((a, b) => nameParts(a.name).last.localeCompare(nameParts(b.name).last) || nameParts(a.name).first.localeCompare(nameParts(b.name).first));
+      const full = [];
+      for (let i = 0; i < rows.length; i += 5) {
+        full.push(...(await Promise.all(rows.slice(i, i + 5).map((g) => base44.entities.Submission.getFull(g.latest.id)))));
+      }
+      await exportCodingForReview(problem, full);
+    } catch (e) {
+      setError(e.message || "Couldn't build the export.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const gradedCount = groups.filter((g) => g.latest.score != null).length;
   const maxPoints = problem.manual_points ?? problem.points_possible ?? null;
 
@@ -268,10 +288,18 @@ export default function CodeReviewGrader({ problem, onGraded }) {
           {groups.length} turned in &middot; {gradedCount} graded
           {gradedCount < groups.length && `, ${groups.length - gradedCount} to go`}
         </p>
-        <Button variant="outline" size="sm" onClick={() => setGradesOpen(true)}>
-          Grades
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExportForReview} disabled={exporting || groups.length === 0}>
+            {exporting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <FileDown className="w-4 h-4 mr-1" />}
+            {exporting ? "Building zip..." : "Export for Review"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setGradesOpen(true)}>
+            Grades
+          </Button>
+        </div>
       </div>
+
+      {!open && error && <p className="text-sm text-destructive mb-2">{error}</p>}
 
       <GradesDialog
         open={gradesOpen}
