@@ -17,8 +17,15 @@ import { highlightNoteCode } from "@/lib/highlightNoteCode";
 // Recognizing that shape up front and inserting it as an actual code block
 // means it comes in clean and gets real syntax colors once saved (see
 // highlightNoteCode.js), without the teacher having to know that step exists.
+// Processing sketches (AP CSP) have none of those markers - no class, no imports - so they used to
+// paste in as plain white text. A method declaration (`void setup() {`, `void draw() {`, a handler
+// like `void mousePressed() {`) is code in any language of ours, and so is a run of two or more
+// call statements (`size(400, 400);` / `background(255);`).
 function looksLikeJava(text) {
-  return text.includes("\n") && /\bpublic\s+class\b|\bpublic\s+static\s+void\s+main\b|\bimport\s+java\./.test(text);
+  if (!text.includes("\n")) return false;
+  if (/\bpublic\s+class\b|\bpublic\s+static\s+void\s+main\b|\bimport\s+java\./.test(text)) return true;
+  if (/\bvoid\s+[A-Za-z_]\w*\s*\([^)]*\)\s*\{/.test(text)) return true;
+  return text.split("\n").filter((l) => /\w\s*\(.*\)\s*;\s*$/.test(l.trim())).length >= 2;
 }
 
 // Scoped to a single, already-open course - unlike Assignment/Coding/Project
