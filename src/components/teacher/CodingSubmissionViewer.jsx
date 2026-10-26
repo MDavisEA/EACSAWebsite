@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { FileDown, Clock, User, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Check, Link2, CheckCircle2, XCircle, EyeOff, AlertTriangle } from "lucide-react";
+import { Loader2, FileDown, Clock, User, Trash2, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Copy, Check, Link2, CheckCircle2, XCircle, EyeOff, AlertTriangle } from "lucide-react";
 import { latestPerStudent, studentKey, byLastName } from "@/lib/groupSubmissionsByStudent";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +17,7 @@ import InProgressRuns from "./InProgressRuns";
 import GradesDialog from "./GradesDialog";
 import AiHelpBadge from "./AiHelpBadge";
 import { getCachedList, setCachedList } from "@/lib/submissionListCache";
+import { exportCodingForReview } from "@/lib/exportCodingZip";
 
 // Attempt counts come off `run_stats`, which the server derives from
 // run_history for the list. run_history itself (a full code snapshot per Run
@@ -54,6 +55,8 @@ export default function CodingSubmissionViewer({ problem }) {
   const [copiedCode, setCopiedCode] = useState(null);
   const [expandedAttempt, setExpandedAttempt] = useState(null);
   const [gradesOpen, setGradesOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
 
   // The autograder produces a score, but it cannot say anything useful about
   // HOW the code is written - so a teacher still wants to leave notes on an
@@ -230,6 +233,25 @@ export default function CodingSubmissionViewer({ problem }) {
     a.click();
   };
 
+  // The list rows carry no code, so each student's row is fetched in full -
+  // a few at a time, in the order shown, so the zip folders match the list.
+  const handleExportForReview = async () => {
+    setExporting(true);
+    setExportError("");
+    try {
+      const rows = [...visible].sort(byLastName);
+      const full = [];
+      for (let i = 0; i < rows.length; i += 5) {
+        full.push(...(await Promise.all(rows.slice(i, i + 5).map((r) => base44.entities.Submission.getFull(r.id)))));
+      }
+      await exportCodingForReview(problem, full);
+    } catch (e) {
+      setExportError(e.message || "Couldn't build the export.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Class-wide signal: across every submitted student's latest results,
   // which specific checks trip up the most people? Sorted worst-first so
   // the most useful reteach target surfaces immediately.
@@ -277,6 +299,7 @@ export default function CodingSubmissionViewer({ problem }) {
   return (
     <div>
       <InProgressRuns problem={problem} />
+      {exportError && <p className="text-sm text-red-600 mb-2">{exportError}</p>}
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">
           {visible.length} Submission{visible.length !== 1 ? "s" : ""}
@@ -298,6 +321,13 @@ export default function CodingSubmissionViewer({ problem }) {
             </Button>
             <Button variant="outline" size="sm" onClick={() => setGradesOpen(true)}>
               Grades
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportForReview} disabled={exporting}>
+              {exporting ? (
+                <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Building zip...</>
+              ) : (
+                <><FileDown className="w-4 h-4 mr-1" /> Export for Review</>
+              )}
             </Button>
           </div>
         )}
