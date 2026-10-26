@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import CommentBank from "./CommentBank";
@@ -38,6 +38,7 @@ export default function AnnotatedCodeView({
 }) {
   const [activeLine, setActiveLine] = useState(null);
   const [draft, setDraft] = useState("");
+  const draftRef = useRef(null);
 
   const lines = String(code ?? "").split("\n");
   const tokens = highlightJava(code ?? "");
@@ -106,7 +107,7 @@ export default function AnnotatedCodeView({
             {c && (
               <div className="flex items-start gap-1.5 bg-amber-500/15 border-l-2 border-amber-400 pl-11 pr-2 py-1">
                 <MessageSquare className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
-                <span className="text-amber-100 flex-1">{c.body}</span>
+                <span className="text-amber-100 flex-1 whitespace-pre-wrap">{c.body}</span>
                 {!readOnly && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onRemove(n); }}
@@ -128,6 +129,7 @@ export default function AnnotatedCodeView({
                   rows={2}
                   className="text-xs bg-slate-900 border-slate-700 text-slate-100"
                   autoFocus
+                  ref={draftRef}
                 />
                 <div className="flex items-center gap-2">
                   <Button size="sm" className="h-7 text-xs" onClick={commit}>
@@ -143,7 +145,7 @@ export default function AnnotatedCodeView({
                   </Button>
                 </div>
                 <div className="[&_button]:text-slate-300">
-                  <CommentBank compact value={draft} onChange={setDraft} scope={commentScope} />
+                  <CommentBank compact value={draft} onChange={setDraft} scope={commentScope} inputRef={draftRef} />
                 </div>
               </div>
             )}

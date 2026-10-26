@@ -19,7 +19,7 @@ import { MessageSquarePlus, Plus, Trash2, Search } from "lucide-react";
 // "use everywhere" comments (see the Comments page on the dashboard), unioned
 // in by the server; a small "Everywhere" tag distinguishes those in the list
 // so it is clear why a comment is showing up outside the current scope.
-export default function CommentBank({ value, onChange, compact = false, scope = {} }) {
+export default function CommentBank({ value, onChange, compact = false, scope = {}, inputRef = null }) {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(!compact);
@@ -44,10 +44,27 @@ export default function CommentBank({ value, onChange, compact = false, scope = 
   const isGlobal = (c) => !c.assignment_id && !c.coding_problem_id && !c.project_id;
 
   const insert = (c) => {
-    const existing = (value || "").trim();
-    // Appended rather than replacing, so several saved remarks can stack up
-    // into one piece of feedback.
-    onChange(existing ? `${existing} ${c.body}` : c.body);
+    const el = inputRef?.current;
+    if (el && typeof el.selectionStart === "number") {
+      // Goes in where the cursor is (replacing any selection), with a space on
+      // either side only where the neighbouring text would otherwise run into it.
+      const text = value || "";
+      const before = text.slice(0, el.selectionStart);
+      const after = text.slice(el.selectionEnd);
+      const lead = before && !/\s$/.test(before) ? " " : "";
+      const trail = after && !/^\s/.test(after) ? " " : "";
+      const pos = before.length + lead.length + c.body.length;
+      onChange(before + lead + c.body + trail + after);
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(pos, pos);
+      });
+    } else {
+      const existing = (value || "").trim();
+      // Appended rather than replacing, so several saved remarks can stack up
+      // into one piece of feedback.
+      onChange(existing ? `${existing} ${c.body}` : c.body);
+    }
     base44.entities.Teacher.usedComment(c.id);
     setComments((prev) =>
       [...prev]

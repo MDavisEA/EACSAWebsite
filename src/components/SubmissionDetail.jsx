@@ -94,7 +94,7 @@ function CodeWithNotes({ code, file = null, lineComments = [] }) {
                 className="flex items-start gap-1.5 bg-amber-500/15 border-l-2 border-amber-400 pl-11 pr-3 py-1.5 scroll-mt-4"
               >
                 <MessageSquare className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
-                <span className="text-xs text-amber-100 font-sans">{note.body}</span>
+                <span className="text-xs text-amber-100 font-sans whitespace-pre-wrap">{note.body}</span>
               </div>
             )}
           </div>
