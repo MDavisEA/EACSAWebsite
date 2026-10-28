@@ -5,8 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Pencil, Trash2, ChevronDown, ChevronUp, FolderInput } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, ChevronUp, FolderInput, Video } from "lucide-react";
 import { highlightNoteCode } from "@/lib/highlightNoteCode";
+import NoteVideo from "@/components/NoteVideo";
 
 // `units`/`onMove` are optional - the Move menu only shows when given, so
 // filing a note is one click instead of opening the full editor for it.
@@ -19,6 +20,11 @@ export default function NoteCard({ note, units, onEdit, onDelete, onTogglePublis
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-semibold">{note.title}</h3>
+            {note.video_url && (
+              <Badge variant="outline" className="gap-1">
+                <Video className="w-3 h-3" /> Video
+              </Badge>
+            )}
             <Badge variant={note.is_published ? "default" : "secondary"}>
               {note.is_published ? "Published" : "Private"}
             </Badge>
@@ -70,10 +76,15 @@ export default function NoteCard({ note, units, onEdit, onDelete, onTogglePublis
         </button>
 
         {expanded && (
-          <div
-            className="prose prose-sm max-w-none quill-render quill-dark mt-3 p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
-            dangerouslySetInnerHTML={{ __html: highlightNoteCode(note.content_html) }}
-          />
+          <div className="mt-3 space-y-3">
+            {note.video_url && <NoteVideo url={note.video_url} />}
+            {note.content_html && (
+              <div
+                className="prose prose-sm max-w-none quill-render quill-dark p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
+                dangerouslySetInnerHTML={{ __html: highlightNoteCode(note.content_html) }}
+              />
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

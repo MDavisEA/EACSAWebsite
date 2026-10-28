@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
 import NoteFolderList from "@/components/NoteFolderList";
+import NoteVideo from "@/components/NoteVideo";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { format, isPast } from "date-fns";
 import { Eye, ChevronRight, Loader2 } from "lucide-react";
@@ -138,10 +139,13 @@ export default function StudentPreviewPage() {
           <DialogHeader>
             <DialogTitle>{openNote?.title}</DialogTitle>
           </DialogHeader>
-          <div
-            className="prose prose-sm max-w-none quill-render quill-dark p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
-            dangerouslySetInnerHTML={{ __html: highlightNoteCode(openNote?.content_html || "") }}
-          />
+          {openNote?.video_url && <NoteVideo url={openNote.video_url} />}
+          {openNote?.content_html && (
+            <div
+              className="prose prose-sm max-w-none quill-render quill-dark p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
+              dangerouslySetInnerHTML={{ __html: highlightNoteCode(openNote.content_html) }}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

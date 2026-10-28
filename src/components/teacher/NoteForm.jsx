@@ -8,6 +8,8 @@ import ReactQuill from "react-quill";
 import { QUILL_MODULES, QUILL_FORMATS } from "@/lib/quillConfig";
 import "react-quill/dist/quill.snow.css";
 import { highlightNoteCode } from "@/lib/highlightNoteCode";
+import { loomVideoId } from "@/lib/loom";
+import NoteVideo from "@/components/NoteVideo";
 
 // A teacher pasting a Java file from wherever they copied it from (an IDE, a
 // gist, a doc) almost never remembers to click the code-block toolbar button
@@ -36,6 +38,7 @@ export default function NoteForm({ initial, units = [], onSave, onCancel }) {
   const [title, setTitle] = useState(initial?.title || "");
   const [unitId, setUnitId] = useState(initial?.unit_id || null);
   const [contentHtml, setContentHtml] = useState(initial?.content_html || "");
+  const [videoUrl, setVideoUrl] = useState(initial?.video_url || "");
   const [isPublished, setIsPublished] = useState(initial?.is_published || false);
   const quillRef = useRef(null);
 
@@ -61,11 +64,14 @@ export default function NoteForm({ initial, units = [], onSave, onCancel }) {
     return () => root.removeEventListener("paste", handlePaste, true);
   }, []);
 
-  const isValid = title.trim().length > 0;
+  // Blank is fine (no video); anything typed has to be a Loom link, or Save
+  // stays off with the reason shown under the box. The server re-checks.
+  const videoInvalid = videoUrl.trim().length > 0 && !loomVideoId(videoUrl);
+  const isValid = title.trim().length > 0 && !videoInvalid;
 
   const handleSubmit = () => {
     if (!isValid) return;
-    onSave({ title, unit_id: unitId, content_html: contentHtml, is_published: isPublished });
+    onSave({ title, unit_id: unitId, content_html: contentHtml, video_url: videoUrl.trim() || null, is_published: isPublished });
   };
 
   return (
@@ -89,6 +95,20 @@ export default function NoteForm({ initial, units = [], onSave, onCancel }) {
             <SelectItem value="none">Other Notes (no unit)</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Loom video (optional)</Label>
+        <Input
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="https://www.loom.com/share/..."
+        />
+        {videoInvalid ? (
+          <p className="text-xs text-destructive">That doesn't look like a Loom link - use the Share link from Loom (loom.com/share/...).</p>
+        ) : (
+          videoUrl.trim() && <NoteVideo url={videoUrl} />
+        )}
       </div>
 
       <div className="space-y-2">

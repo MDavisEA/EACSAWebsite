@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import SubmissionDetail from "@/components/SubmissionDetail";
 import NoteFolderList from "@/components/NoteFolderList";
+import NoteVideo from "@/components/NoteVideo";
 import { format, isPast } from "date-fns";
 import {
   BookOpen, LogIn, LogOut, ChevronRight, Loader2, RotateCcw, CheckCheck, ChevronDown, ChevronUp,
@@ -549,10 +550,13 @@ export default function StudentDashboard() {
           <DialogHeader>
             <DialogTitle>{openNote?.title}</DialogTitle>
           </DialogHeader>
-          <div
-            className="prose prose-sm max-w-none quill-render quill-dark p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
-            dangerouslySetInnerHTML={{ __html: highlightNoteCode(openNote?.content_html || "") }}
-          />
+          {openNote?.video_url && <NoteVideo url={openNote.video_url} />}
+          {openNote?.content_html && (
+            <div
+              className="prose prose-sm max-w-none quill-render quill-dark p-4 rounded-lg bg-[#1e1e1e] text-slate-100"
+              dangerouslySetInnerHTML={{ __html: highlightNoteCode(openNote.content_html) }}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
