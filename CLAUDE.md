@@ -302,6 +302,16 @@ pattern under `src/components/teacher/`.
     change a student's code and re-run it. Edits live only in a module-level map in that
     file (per submission + program), are never sent anywhere, and "Back to their code"
     restores the original - what the student turned in is never touched.
+  - **Uploaded images are deleted a week after grading** (migration 0041, free-plan storage is
+    1 GB). `submissions.feedback_visible_at` is when a Project's grade first became visible to the
+    student (released AND scored) - set/cleared by `saveGrade`, cleared by a graded `submitSketch`
+    resubmit. The `sketch-cleanup` Edge Function removes the Storage files and `sketch_assets` rows
+    for submissions whose clock is over 7 days old and stamps `assets_purged_at` (both pages then
+    explain the missing images). It is strict about order (rows are only removed once their files
+    are, `purgeAssetsForSubmissions`), and gated by the `SKETCH_CLEANUP_SECRET` secret in an
+    `x-cleanup-secret` header - the platform gateway only needs the anon key. A daily `pg_cron`
+    job calls it via `pg_net`; `{"dryRun": true}` reports without deleting. Code, scores and
+    comments are never touched.
   - **Turning a sketch in again.** From the student dashboard a turned-in sketch has an
     "Open it to change and turn in again" button (it routes back to `/project?id=`; the
     WorkItem carries `project_kind` so only sketches get it). If the sketch was already

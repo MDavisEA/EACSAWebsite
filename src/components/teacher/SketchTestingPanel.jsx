@@ -208,8 +208,9 @@ export default function SketchTestingPanel({ submission, projectTitle, parts = [
         <div className="px-3 py-2 border-b bg-amber-50 text-xs text-amber-900 flex items-start gap-2">
           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
           <span>
-            Their code asks for {missing.map((m) => m.name).join(", ")}, which they never uploaded - that part
-            won&rsquo;t show.
+            {submission?.assets_purged_at
+              ? `Their uploaded images were removed on ${new Date(submission.assets_purged_at).toLocaleDateString()}, a week after grading, to save space - so ${missing.map((m) => m.name).join(", ")} won't show.`
+              : `Their code asks for ${missing.map((m) => m.name).join(", ")}, which they never uploaded - that part won't show.`}
           </span>
         </div>
       )}

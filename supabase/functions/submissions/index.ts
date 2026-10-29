@@ -918,6 +918,7 @@ Deno.serve(async (req) => {
             score: null,
             question_scores: {},
             part_comments: {},
+            feedback_visible_at: null,
             teacher_comments: null,
             line_comments: [],
             feedback_released: false,
@@ -1596,7 +1597,7 @@ Deno.serve(async (req) => {
       const { data: before } = await admin
         .from('submissions')
         .select(
-          'score, question_scores, part_comments, style_score, style_comments, teacher_comments, line_comments, feedback_ack_required, assignment_id, coding_problem_id, project_id, feedback_released, graded_notified_at, student_email, student_name'
+          'score, question_scores, part_comments, style_score, style_comments, teacher_comments, line_comments, feedback_ack_required, assignment_id, coding_problem_id, project_id, feedback_released, feedback_visible_at, graded_notified_at, student_email, student_name'
         )
         .eq('id', body.submission_id)
         .maybeSingle();
@@ -1706,6 +1707,12 @@ Deno.serve(async (req) => {
       const nowVisible = effectiveScore != null && (!isProject || rawFeedbackReleased === true);
       const shouldNotify = nowVisible && !before?.graded_notified_at && !!before?.student_email;
       if (shouldNotify) update.graded_notified_at = new Date().toISOString();
+      // The clock for deleting a sketch's uploaded images (see the sketch-cleanup function): starts
+      // the first time the grade is visible to the student, stops if it stops being visible.
+      if (isProject) {
+        if (nowVisible && !before?.feedback_visible_at) update.feedback_visible_at = new Date().toISOString();
+        else if (!nowVisible && before?.feedback_visible_at) update.feedback_visible_at = null;
+      }
 
       const { data, error } = await admin
         .from('submissions')

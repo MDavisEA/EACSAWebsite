@@ -835,6 +835,13 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
 
                 {assetError && <p className="text-xs text-destructive">{assetError}</p>}
 
+                {submission?.assets_purged_at && assets.length === 0 && (
+                  <p className="text-xs text-blue-900 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5">
+                    Your images were deleted on {new Date(submission.assets_purged_at).toLocaleDateString()}, a week after this
+                    was graded, to save space. If you turn it in again, add them back first.
+                  </p>
+                )}
+
                 {missingNow.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {missingNow.map((m) => (

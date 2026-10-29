@@ -31,3 +31,29 @@ export async function submissionIdsForProjects(admin: SupabaseClient, projectIds
   const { data } = await admin.from('submissions').select('id').in('project_id', projectIds);
   return (data || []).map((r: Record<string, any>) => r.id);
 }
+
+/**
+ * Deletes the stored files AND index rows for these submissions' sketch assets, strictly: a
+ * submission's rows are only removed once its files are, so a Storage failure leaves the rows
+ * (the only record of what to delete) in place for the next run instead of orphaning files.
+ * Returns the ids of submissions whose assets were actually removed.
+ */
+export async function purgeAssetsForSubmissions(admin: SupabaseClient, submissionIds: string[]): Promise<string[]> {
+  const purged: string[] = [];
+  for (const id of submissionIds) {
+    const { data, error } = await admin.from('sketch_assets').select('storage_path').eq('submission_id', id);
+    if (error) { console.error(`purge: list failed for ${id}: ${error.message}`); continue; }
+    const paths = (data || []).map((r: Record<string, any>) => r.storage_path);
+    if (paths.length === 0) continue;
+    let ok = true;
+    for (let i = 0; i < paths.length && ok; i += 100) {
+      const { error: rmErr } = await admin.storage.from(SKETCH_BUCKET).remove(paths.slice(i, i + 100));
+      if (rmErr) { console.error(`purge: storage remove failed for ${id}: ${rmErr.message}`); ok = false; }
+    }
+    if (!ok) continue;
+    const { error: delErr } = await admin.from('sketch_assets').delete().eq('submission_id', id);
+    if (delErr) { console.error(`purge: row delete failed for ${id}: ${delErr.message}`); continue; }
+    purged.push(id);
+  }
+  return purged;
+}
