@@ -61,9 +61,15 @@
     stopLoop();
   });
 
-  // Block page scrolling from arrow keys / space while the sketch has focus.
+  // Block page scrolling from arrow keys / space while the sketch has focus. Space is stopped on
+  // keypress, NOT keydown: Processing.js only fires keyPressed() for ordinary keys (space, letters)
+  // from the keypress event, and cancelling keydown suppresses it, so `key == ' '` never matched.
+  // The arrows are "coded" keys it handles on keydown itself, so those are safe to cancel here.
   window.addEventListener('keydown', function (e) {
-    if ([32, 37, 38, 39, 40].indexOf(e.keyCode) >= 0) e.preventDefault();
+    if ([37, 38, 39, 40].indexOf(e.keyCode) >= 0) e.preventDefault();
+  }, true);
+  window.addEventListener('keypress', function (e) {
+    if (e.keyCode === 32 || e.which === 32) e.preventDefault();
   }, true);
 
   var LOADERS = /\b(loadImage|requestImage|loadFont|loadStrings|loadTable|loadJSONObject|loadJSONArray|loadXML|loadShape|loadBytes|createReader|SoundFile|Movie|Capture)\s*\(\s*(?:this\s*,\s*)?"([^"\n]+)"\s*[,)]/g;
