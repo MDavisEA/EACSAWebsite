@@ -50,6 +50,10 @@ export interface WorkItem {
   // 'gist' | 'sketch' for a project; lets a student's dashboard know whether it can be
   // reopened in the sketch editor. Absent for everything else.
   project_kind?: 'gist' | 'sketch';
+  // Teacher-side view only (see buildWorkItems' forTeacher): a Project the
+  // teacher has scored but not yet released, so the roster can say "graded,
+  // not released" instead of implying there is still grading to do.
+  pending_release?: boolean;
 }
 
 // Project feedback is release-gated (see submissions/index.ts); FRQ and code
@@ -100,7 +104,13 @@ export function buildWorkItems(
   problems: Record<string, any>[],
   projects: Record<string, any>[],
   subs: Record<string, any>[],
-  loopAssignments: Record<string, any>[] = []
+  loopAssignments: Record<string, any>[] = [],
+  // A teacher looking at someone else's work asks "have I graded this?", not
+  // "can the student see it yet?" - so a Project's release gate is ignored for
+  // status and score (the caller is already authorized as the teacher), and an
+  // unreleased one is flagged via pending_release instead. Never pass this on a
+  // student-facing path: it would hand out unreleased scores.
+  forTeacher = false
 ): WorkItem[] {
   // A student can legitimately end up with more than one row for the same
   // item (reopening something already finished creates a second, empty one
@@ -172,7 +182,7 @@ export function buildWorkItems(
 
   for (const pr of projects) {
     const sub = findSub('project_id', pr.id);
-    const { status, score } = statusForSubmission(sub, sub?.score ?? null, true);
+    const { status, score } = statusForSubmission(sub, sub?.score ?? null, !forTeacher);
     items.push({
       kind: 'project',
       id: pr.id,
@@ -207,8 +217,9 @@ export function buildWorkItems(
       course_id: pr.course_id ?? null,
       unit_id: pr.unit_id ?? null,
       sort_order: pr.sort_order ?? null,
-      ...feedbackFlags(sub, true),
+      ...feedbackFlags(sub, !forTeacher),
       needs_ack: status === 'graded' && !!sub?.feedback_ack_required,
+      ...(forTeacher ? { pending_release: !!sub?.submitted && sub?.score != null && !sub?.feedback_released } : {}),
       project_kind: pr.kind === 'sketch' ? 'sketch' : 'gist',
       parts: (Array.isArray(pr.parts) ? pr.parts : []).map((p: Record<string, any>) => ({
         id: p.id,

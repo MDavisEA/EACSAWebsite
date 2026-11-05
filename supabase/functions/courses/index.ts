@@ -513,7 +513,8 @@ Deno.serve(async (req) => {
         resolveDueDates(problems.data || [], problemOverrides, sectionForRow),
         resolveDueDates(projects.data || [], projectOverrides, sectionForRow),
         theirSubs,
-        loopAssignments.data || []
+        loopAssignments.data || [],
+        true // teacher view: status follows whether it has been graded, not whether it was released
       );
 
       return json({
@@ -755,7 +756,8 @@ Deno.serve(async (req) => {
             resolveDueDates(activeProblems, problemOverrides, forThisRow),
             resolveDueDates(activeProjects, projectOverrides, forThisRow),
             subsForRow(r),
-            activeLoopAssignments
+            activeLoopAssignments,
+            true // teacher view: status follows whether it has been graded, not whether it was released
           ),
         };
       });

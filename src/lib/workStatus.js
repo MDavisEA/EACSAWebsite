@@ -37,6 +37,22 @@ export const STATUS = {
   complete: { label: "Complete", icon: CheckCircle2, className: "bg-teal-100 text-teal-800" },
 };
 
+// The teacher's wording for the same states. STATUS above is written for the
+// student ("New feedback", "Waiting on grade"); a teacher looking at someone
+// else's work is asking whether THEY have graded it. The server sets
+// pending_release (teacher views only) on a Project that is scored but not yet
+// released, which is graded as far as the teacher is concerned.
+export function teacherStatusMeta(item) {
+  const base = STATUS[item.status] || STATUS.not_started;
+  if (item.status === "submitted") return { ...base, label: "Needs grading" };
+  if (item.status === "graded" || item.status === "reviewed") {
+    return item.pending_release
+      ? { ...STATUS.graded, label: "Graded · not released", className: "bg-amber-100 text-amber-800" }
+      : { ...STATUS.graded, label: "Graded" };
+  }
+  return base;
+}
+
 // Groups a WorkItem[] into one entry per unit, ordered by course then the
 // teacher's own unit order; work never filed under a unit collects into a
 // trailing "Other work" group rather than vanishing. Within a unit: status

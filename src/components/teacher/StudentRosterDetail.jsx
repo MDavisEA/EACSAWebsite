@@ -2,7 +2,7 @@ import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ChevronRight } from "lucide-react";
-import { WORK_KIND_META, STATUS, groupWorkByUnit } from "@/lib/workStatus";
+import { WORK_KIND_META, teacherStatusMeta, groupWorkByUnit } from "@/lib/workStatus";
 
 // One student's status on every active piece of work in the course, grouped
 // by unit - the teacher-facing mirror of what the student sees on their own
@@ -45,7 +45,7 @@ export default function StudentRosterDetail({ open, onOpenChange, student, units
                   {g.items.map((item) => {
                     const kindMeta = WORK_KIND_META[item.kind];
                     const Icon = kindMeta.icon;
-                    const statusMeta = STATUS[item.status] || STATUS.not_started;
+                    const statusMeta = teacherStatusMeta(item);
                     const StatusIcon = statusMeta.icon;
                     // Nothing to grade yet on not-started/in-progress work -
                     // those rows just report status.

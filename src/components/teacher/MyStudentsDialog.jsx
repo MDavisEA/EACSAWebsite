@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { User, Loader2, ChevronRight, ChevronLeft, Search } from "lucide-react";
-import { WORK_KIND_META, STATUS, groupWorkByUnit } from "@/lib/workStatus";
+import { WORK_KIND_META, teacherStatusMeta, groupWorkByUnit } from "@/lib/workStatus";
 
 // Everyone in this teacher's classes, in one place, with one student's whole
 // record a click away. Distinct from the per-course People tab: that answers
@@ -233,7 +233,7 @@ function StudentRecord({ loading, error, detail }) {
               {g.items.map((item) => {
                 const kindMeta = WORK_KIND_META[item.kind];
                 const Icon = kindMeta.icon;
-                const statusMeta = STATUS[item.status] || STATUS.not_started;
+                const statusMeta = teacherStatusMeta(item);
                 const StatusIcon = statusMeta.icon;
                 return (
                   <div
