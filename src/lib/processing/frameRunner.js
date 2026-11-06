@@ -171,6 +171,33 @@
         var origTextFont = p.textFont;
         p.textFont = function (f, s) { if (f && f.__vlw) { if (s) p.textSize(s); return; } return origTextFont.apply(p, arguments); };
 
+        // --- background(image) ignores imageMode in real Processing ---
+        // Processing.js draws the picture with image(img, 0, 0), which obeys the current
+        // imageMode, so after the very common imageMode(CENTER) only the bottom-right quarter of
+        // the picture lands in the top-left corner and the rest of the window is never painted
+        // (old frames then smear across it). Real Processing always puts it at the corner.
+        // size() makes Processing.js install its drawing functions afresh (replacing anything
+        // set before it), so the wrapper is put back after every size() call.
+        var imgMode = p.CORNER;
+        var origImageMode = p.imageMode;
+        p.imageMode = function (m) { imgMode = m; return origImageMode.call(p, m); };
+        var wrappedBackground = null;
+        function patchBackground() {
+          if (p.background === wrappedBackground) return;
+          var origBackground = p.background;
+          wrappedBackground = function (a) {
+            if (a && (a.__isPImage || (p.PImage && a instanceof p.PImage))) {
+              origImageMode.call(p, p.CORNER);
+              try { return origBackground.apply(p, arguments); } finally { origImageMode.call(p, imgMode); }
+            }
+            return origBackground.apply(p, arguments);
+          };
+          p.background = wrappedBackground;
+        }
+        patchBackground();
+        var origSize = p.size;
+        p.size = function () { var r = origSize.apply(p, arguments); patchBackground(); return r; };
+
         // --- images: serve uploaded files, complain about missing ones ---
         var origLoadImage = p.loadImage;
         function loadImage(file, type, cb) {

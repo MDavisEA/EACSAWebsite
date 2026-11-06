@@ -365,6 +365,13 @@ pattern under `src/components/teacher/`.
     assigning to an undeclared name is an error, as in Java - checked against 227 real
     sketches: it broke none. The iframe's canvas id is `__pj_canvas` on purpose: an element
     id becomes a global, and the old `c` silently satisfied a student's forgotten `int c`.
+  - **`background(image)` ignores `imageMode` in real Processing but not in Processing.js.** It
+    draws the image with `image(img, 0, 0)`, so after the very common `imageMode(CENTER)` only a
+    quarter of the picture landed in the top-left corner and old frames smeared across the rest.
+    `frameRunner.js` wraps `background` to draw at the corner (restoring the mode after). The
+    wrapper is re-applied after every `size()` call, because `size()` makes Processing.js
+    re-install its drawing functions and would otherwise wipe it. Any future override of a
+    drawing function there has the same catch.
   - Known limits (by design, not bugs): Processing.js is a 2018 translator, so
     libraries (Sound, Video), `loadTable`/JSON/XML and P3D are unsupported or
     untested; `.vlw` fonts become the default font; `println(3.0)` prints `3`.
