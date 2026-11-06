@@ -54,6 +54,9 @@ export default function ProjectSubmissionViewer({ project }) {
   const [showMissing, setShowMissing] = useState(false);
 
   const [rechecking, setRechecking] = useState(false);
+  const [confirmRelease, setConfirmRelease] = useState(false);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseMsg, setReleaseMsg] = useState("");
   const [recheckResults, setRecheckResults] = useState(null);
 
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -163,6 +166,27 @@ export default function ProjectSubmissionViewer({ project }) {
       setExportError(e.message || "Couldn't build the export.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  // Graded work whose feedback is still withheld from the student.
+  const withheldCount = submissions.filter(
+    (s) => s.submitted && s.score != null && !s.feedback_released && !s.grading_skipped
+  ).length;
+
+  const handleReleaseAll = async () => {
+    setReleasing(true);
+    setReleaseMsg("");
+    try {
+      const { released, emailed } = await base44.entities.Submission.releaseAllFeedback(project.id);
+      setReleaseMsg(`Released feedback to ${released} student${released !== 1 ? "s" : ""}; ${emailed} emailed.`);
+      setConfirmRelease(false);
+      loadAll();
+    } catch (e) {
+      setReleaseMsg(e.message || "Couldn't release feedback.");
+      setConfirmRelease(false);
+    } finally {
+      setReleasing(false);
     }
   };
 
@@ -355,6 +379,9 @@ export default function ProjectSubmissionViewer({ project }) {
           <Button variant="outline" size="sm" onClick={() => setGradesOpen(true)}>
             Grades
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setConfirmRelease(true)} disabled={releasing || withheldCount === 0}>
+            <Send className="w-4 h-4 mr-1.5" /> Release all feedback{withheldCount > 0 ? ` (${withheldCount})` : ""}
+          </Button>
           <Button size="sm" onClick={handleExport} disabled={exporting || submissions.length === 0}>
             {exporting ? (
               <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Building zip...</>
@@ -365,6 +392,22 @@ export default function ProjectSubmissionViewer({ project }) {
         </div>
       </div>
       {exportError && <p className="text-sm text-destructive">{exportError}</p>}
+      {releaseMsg && <p className="text-sm text-muted-foreground">{releaseMsg}</p>}
+      <AlertDialog open={confirmRelease} onOpenChange={setConfirmRelease}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Release feedback to {withheldCount} student{withheldCount !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Every graded submission that is still withheld will show its score and comments to the
+              student, and anyone not yet notified gets an email. Ungraded work is left alone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleReleaseAll} disabled={releasing}>Release all</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {!project.course_id && (
         <p className="text-xs text-muted-foreground border rounded-lg p-3 bg-slate-50/50">

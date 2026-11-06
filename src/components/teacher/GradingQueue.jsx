@@ -64,7 +64,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
   const [answerComments, setAnswerComments] = useState({});
   const [comments, setComments] = useState("");
   const [lineComments, setLineComments] = useState([]);
-  const [release, setRelease] = useState(false);
+  const [release, setRelease] = useState(true);
   const [ackRequired, setAckRequired] = useState(false);
   const [activeFile, setActiveFile] = useState(null);
   const [tab, setTab] = useState("feedback");
@@ -151,7 +151,8 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
         setAnswerComments(s.part_comments || {});
         setComments(s.teacher_comments || "");
         setLineComments(s.line_comments || []);
-        setRelease(!!s.feedback_released);
+        // Not graded yet: release by default, so Save & next hands the student score and feedback together.
+        setRelease(s.score == null ? true : !!s.feedback_released);
         setAckRequired(!!s.feedback_ack_required);
         setActiveFile((s.files || [])[0]?.filename ?? null);
         setPartKey(null);

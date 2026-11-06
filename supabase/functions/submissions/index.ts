@@ -1842,6 +1842,47 @@ Deno.serve(async (req) => {
       return json({ success: true });
     }
 
+    // Release every graded-but-withheld Project submission at once, with the
+    // same side effects a single saveGrade release has: feedback_visible_at
+    // starts the image-cleanup clock and the first-time grade email goes out
+    // (graded_notified_at is the guard, so nobody is emailed twice). Ungraded
+    // work (no score) and skipped submissions are left alone.
+    if (action === 'releaseAllFeedback') {
+      const { project_id } = body;
+      if (!project_id) return json({ error: 'project_id is required' }, 400);
+      if (!(await teacherOwnsRow(admin, teacher.id, 'projects', project_id))) {
+        return json({ error: 'Not found' }, 404);
+      }
+      const { data: subs, error } = await admin
+        .from('submissions')
+        .select('*')
+        .eq('project_id', project_id)
+        .eq('submitted', true)
+        .eq('feedback_released', false)
+        .not('score', 'is', null)
+        .neq('grading_skipped', true);
+      if (error) return json({ error: error.message }, 500);
+
+      const now = new Date().toISOString();
+      let released = 0;
+      let emailed = 0;
+      for (const sub of subs || []) {
+        const update: Record<string, unknown> = { feedback_released: true };
+        if (!sub.feedback_visible_at) update.feedback_visible_at = now;
+        const shouldNotify = !sub.graded_notified_at && !!sub.student_email;
+        if (shouldNotify) update.graded_notified_at = now;
+        const { error: upErr } = await admin.from('submissions').update(update).eq('id', sub.id);
+        if (upErr) continue;
+        released++;
+        if (shouldNotify) {
+          const title = await titleForWork(admin, sub);
+          await sendGradeNotification({ to: sub.student_email, studentName: sub.student_name, title });
+          emailed++;
+        }
+      }
+      return json({ result: { released, emailed } });
+    }
+
     // Re-fetches each submitted gist's metadata (not its file bodies) and
     // reports any whose updated_at is now newer than what we recorded when we
     // snapshotted it - i.e. the student edited the gist after turning it in.

@@ -450,6 +450,12 @@ const Submission = {
     return data.results;
   },
 
+  // Teacher-only: release feedback on every graded, still-withheld submission
+  // of a project. Returns {released, emailed}.
+  async releaseAllFeedback(project_id) {
+    return (await callFunction('submissions', { action: 'releaseAllFeedback', project_id })).result;
+  },
+
   // Get-or-create the student's one progress row for a loop practice
   // assignment - same idea as create()'s startCoding branch, just its own
   // method since loop practice isn't "one answer" like the others.
