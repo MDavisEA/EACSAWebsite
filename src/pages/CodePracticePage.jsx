@@ -56,6 +56,8 @@ export default function CodePracticePage() {
   const [extraRuns, setExtraRuns] = useState(0);
   // Coding Assignment problems only: the live runner, opened on demand.
   const [showRunner, setShowRunner] = useState(false);
+  // Output of the last run against the teacher's driver: { stdout, stderr, exit_code }.
+  const [driverOut, setDriverOut] = useState(null);
 
   // Student's own code font size, remembered across problems and reloads.
   const { fontSize, increase, decrease, reset, canIncrease, canDecrease } = useCodeFontSize();
@@ -172,9 +174,31 @@ export default function CodePracticePage() {
   // program and talking to it - which is the only way to check a Scanner-driven
   // program does what it should. Unlimited: it is their own work, nothing is
   // scored until they submit.
-  const handlePlainRun = () => {
+  const handlePlainRun = async () => {
     setRunError("");
-    setShowRunner(true);
+    if (!problem?.has_driver) {
+      setShowRunner(true);
+      return;
+    }
+    // The teacher wrote the main() that uses this class, so run theirs against
+    // the student's code on the server and show what it printed.
+    setRunning(true);
+    setDriverOut(null);
+    try {
+      const sub = submissionRef.current;
+      const res = await base44.functions.invoke("runJavaTests", {
+        mode: "driver",
+        submission_id: sub.id,
+        session_token: sub.session_token,
+        coding_problem_id: problemId,
+        code,
+      });
+      setDriverOut(res.data);
+    } catch (e) {
+      setRunError(e.message || "Something went wrong running your code. Please try again.");
+    } finally {
+      setRunning(false);
+    }
   };
 
   const handleRun = async () => {
@@ -337,9 +361,19 @@ export default function CodePracticePage() {
                 Trying it out
               </h3>
               <p className="text-xs text-slate-400">
-                Hit <span className="text-slate-200">Run My Code</span> to actually run your program
-                and type into it, the same as running it on your own computer. Do it as many times
-                as you like — nothing is graded until you press Submit Final.
+                {problem.has_driver ? (
+                  <>
+                    Hit <span className="text-slate-200">Run My Code</span> to try your class with
+                    your teacher&rsquo;s test program and see what it prints. Do it as many times as
+                    you like — nothing is graded until you press Submit Final.
+                  </>
+                ) : (
+                  <>
+                    Hit <span className="text-slate-200">Run My Code</span> to actually run your
+                    program and type into it, the same as running it on your own computer. Do it as
+                    many times as you like — nothing is graded until you press Submit Final.
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -408,6 +442,25 @@ export default function CodePracticePage() {
           {runError && (
             <div className="border-t border-slate-700 bg-red-950/40 px-4 py-3 flex-shrink-0">
               <p className="text-sm text-red-300">{runError}</p>
+            </div>
+          )}
+
+          {driverOut && isReviewKind && (
+            <div className="border-t border-slate-700 bg-[#252526] px-4 py-3 max-h-64 overflow-y-auto flex-shrink-0">
+              <p className="text-sm font-medium text-slate-200 mb-1">Output</p>
+              {driverOut.stdout ? (
+                <pre className="text-xs text-slate-200 whitespace-pre-wrap font-mono">{driverOut.stdout}</pre>
+              ) : !driverOut.stderr ? (
+                <p className="text-xs text-slate-400 italic">Your program printed nothing.</p>
+              ) : null}
+              {driverOut.stderr && (
+                <>
+                  <p className="text-sm font-medium text-red-400 mt-2 mb-1">
+                    {driverOut.stdout ? "Errors" : "Your code did not run"}
+                  </p>
+                  <pre className="text-xs text-red-300 whitespace-pre-wrap font-mono">{driverOut.stderr}</pre>
+                </>
+              )}
             </div>
           )}
 

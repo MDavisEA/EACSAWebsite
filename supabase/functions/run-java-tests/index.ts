@@ -447,6 +447,66 @@ function countedRuns(history: Record<string, any>[] | null | undefined): number 
   return (history || []).filter((h) => !h.final && !h.compile_error).length;
 }
 
+// ---- Teacher driver runs ----------------------------------------------------
+// A Coding Assignment can carry a teacher-written driver (coding_problems.
+// driver_code): the class with main() that builds the student's object and
+// prints what happens. The student writes only the class.
+
+// Java's source-launch mode rejects a public top-level type whose name is not
+// the file's, and the driver and the student's class share one file, so every
+// top-level `public` is dropped. (Members keep theirs - the pattern only
+// matches a type declaration.)
+function stripPublicFromTypes(code: string): string {
+  return code.replace(
+    /\bpublic\s+((?:(?:final|abstract|strictfp|sealed|non-sealed)\s+)*(?:class|interface|enum|record)\b)/g,
+    '$1'
+  );
+}
+
+// Compile errors name lines of the COMBINED file, which means nothing to a
+// student. Lines inside their own code are translated back to the line they
+// see in the editor; anything in the driver is labelled as the driver's so it
+// is clear the fault may be a method or constructor the driver expected.
+function remapJavaLines(text: string, driverLines: number): string {
+  return text.replace(/(?:\w+\.java|Main)[:](\d+)/g, (_m, n) => {
+    const line = Number(n);
+    return line > driverLines ? `line ${line - driverLines}` : `teacher's driver, line ${line}`;
+  });
+}
+
+async function runWithDriver(driverCode: string, studentCode: string) {
+  const d = hoistImportsAndStripPackage(driverCode);
+  const s = hoistImportsAndStripPackage(studentCode);
+  const imports = [...new Set([...d.imports, ...s.imports])];
+  const importBlock = imports.length > 0 ? `${imports.join('\n')}\n\n` : '';
+  // The driver goes FIRST: source-launch runs the first class in the file.
+  const driverBlock = `${importBlock}${stripPublicFromTypes(d.body).trim()}\n\n`;
+  const driverLines = driverBlock.split('\n').length - 1;
+  const combined = `${driverBlock}${stripPublicFromTypes(s.body)}`;
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const key = Deno.env.get('PISTON_API_KEY');
+  if (key) headers['Authorization'] = key;
+  const resp = await fetch(PISTON_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      language: 'java',
+      version: '*',
+      files: [{ name: 'Main', content: combined }],
+    }),
+  });
+  if (!resp.ok) return { status: 502 as const, error: `Execution service error: ${resp.status}` };
+  const r = await resp.json();
+  const cap = (t: string) => (t.length > 20000 ? `${t.slice(0, 20000)}\n... (output cut off)` : t);
+  return {
+    status: 200 as const,
+    stdout: cap(String(r?.run?.stdout || '')),
+    stderr: cap(remapJavaLines(String(r?.compile?.stderr || r?.run?.stderr || ''), driverLines)),
+    exit_code: typeof r?.run?.code === 'number' ? r.run.code : null,
+  };
+}
+
 Deno.serve(async (req) => {
   const preflight = handleOptions(req);
   if (preflight) return preflight;
@@ -504,6 +564,18 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (probErr || !problems) return json({ error: 'CodingProblem not found' }, 404);
     const problem = problems as CodingProblem;
+
+    // "Run with the teacher's driver": a scratch run, not an attempt. Nothing
+    // is graded or recorded, it never counts against max_test_runs, and the
+    // driver source is not sent back - only what the program printed.
+    if (payload.mode === 'driver') {
+      const driverCode = String((problems as Record<string, any>).driver_code || '').trim();
+      if (!driverCode) return json({ error: 'This problem has no driver to run.' }, 400);
+      const out = await runWithDriver(driverCode, code);
+      if (out.status !== 200) return json({ error: out.error }, out.status);
+      const { status: _s, ...rest } = out;
+      return json(rest);
+    }
 
     // Practice runs are capped so the visible test cases can't just be
     // brute-forced. Enforced here rather than only by disabling the button,

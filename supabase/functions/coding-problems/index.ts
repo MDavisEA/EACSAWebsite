@@ -28,6 +28,10 @@ function sanitizeForStudent(problem: Record<string, any>) {
     // The student page needs to know there are no tests to run, so it can
     // offer a plain Run instead of "Run My Tests".
     grading_kind: problem.grading_kind || 'auto',
+    // Only THAT a teacher driver exists - the source stays on the server. The
+    // student page uses this to offer "Run with the driver" in place of the
+    // plain runner; run-java-tests does the combining.
+    has_driver: !!(problem.driver_code && String(problem.driver_code).trim()),
     // Students need to see how many practice runs they get; the cap itself is
     // enforced server-side in run-java-tests.
     max_test_runs: problem.max_test_runs,

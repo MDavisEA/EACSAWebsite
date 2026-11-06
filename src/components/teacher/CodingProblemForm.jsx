@@ -46,6 +46,7 @@ function defaultForm() {
     manual_points: 10,
     answer_key_code: "",
     answer_key_notes_html: "",
+    driver_code: "",
     sample_outputs: [],
     due_date: "",
     section_due_dates: [],
@@ -451,6 +452,33 @@ export default function CodingProblemForm({ initial, courses = [], onSave, onCan
       <div className="border-t pt-6">
         <SampleOutputsEditor value={form.sample_outputs} onChange={(v) => updateField("sample_outputs", v)} />
       </div>
+
+      {/* Teacher driver: the class with main() that exercises whatever the
+          student writes. Only for hand-graded work, where "Run My Code" is
+          otherwise a bare console. Never sent to students - they see what it
+          prints. */}
+      {isReview && (
+        <div className="space-y-2 border-t pt-6">
+          <Label>Driver (optional)</Label>
+          <p className="text-xs text-muted-foreground">
+            For when students write a class and you write the program that uses it. Put your
+            <code> main </code>method here; when a student presses Run My Code, their class and your
+            driver are run together and they see what it prints. They never see this code, only its
+            output. Leave blank to give them the plain interactive runner instead.
+          </p>
+          <div className="border rounded-md overflow-hidden">
+            <CodeMirror
+              value={form.driver_code || ""}
+              onChange={(value) => updateField("driver_code", value)}
+              placeholder={"public class Driver {\n    public static void main(String[] args) {\n        // create the student's object and call its methods\n    }\n}"}
+              extensions={CODE_EXTENSIONS}
+              theme="none"
+              minHeight="180px"
+              basicSetup={{ tabSize: 4 }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* A reference solution. Kept out of everything students can reach until
           it is released - see sanitizeForStudent. Offered for both kinds: it
