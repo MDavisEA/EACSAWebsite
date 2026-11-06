@@ -10,7 +10,7 @@ import ReactMarkdown from "react-markdown";
 import { googleDocEmbedUrl } from "@/lib/googleDoc";
 import SampleOutputs from "@/components/SampleOutputs";
 import SketchWorkspace from "@/components/SketchWorkspace";
-import { FolderGit2, AlertCircle, ChevronRight, LogIn, CheckCircle2, FileCode2, ExternalLink, ArrowLeft } from "lucide-react";
+import { Play, Loader2, FolderGit2, AlertCircle, ChevronRight, LogIn, CheckCircle2, FileCode2, ExternalLink, ArrowLeft } from "lucide-react";
 
 export default function ProjectPage() {
   const navigate = useNavigate();
@@ -32,6 +32,9 @@ export default function ProjectPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testError, setTestError] = useState("");
+  const [driverOut, setDriverOut] = useState(null);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
@@ -98,6 +101,27 @@ export default function ProjectPage() {
       // Non-fatal for the gist form (it still works without the previous
       // submission); the sketch workspace reads submissionState and says so.
       setSubmissionState("error");
+    }
+  };
+
+  // Runs the code in the student's gist against the teacher's driver. Nothing
+  // is submitted or recorded - it is just a way to check before turning in.
+  const handleTestDriver = async () => {
+    if (!gistUrl.trim()) return;
+    setTesting(true);
+    setTestError("");
+    setDriverOut(null);
+    try {
+      const res = await base44.functions.invoke("runJavaTests", {
+        mode: "project_driver",
+        project_id: projectId,
+        gist_url: gistUrl.trim(),
+      });
+      setDriverOut(res.data);
+    } catch (e) {
+      setTestError(e.message || "Something went wrong running your code. Please try again.");
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -396,6 +420,46 @@ export default function ProjectPage() {
                   onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
                 />
               </div>
+
+              {project.has_driver && (
+                <div className="space-y-2 rounded-lg border border-violet-200 bg-violet-50/50 p-4">
+                  <p className="text-sm font-medium">Test your code</p>
+                  <p className="text-xs text-muted-foreground">
+                    Runs the code in your gist with your teacher&rsquo;s test program and shows what
+                    it prints. Push your changes to the gist first. Nothing is submitted.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleTestDriver}
+                    disabled={testing || !gistUrl.trim()}
+                  >
+                    {testing ? (
+                      <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Running...</>
+                    ) : (
+                      <><Play className="w-4 h-4 mr-1.5" /> Test with teacher&rsquo;s driver</>
+                    )}
+                  </Button>
+                  {testError && <p className="text-sm text-destructive">{testError}</p>}
+                  {driverOut && (
+                    <div className="rounded-md bg-[#1e1e1e] p-3 max-h-80 overflow-y-auto">
+                      {driverOut.stdout ? (
+                        <pre className="text-xs text-slate-100 whitespace-pre-wrap font-mono">{driverOut.stdout}</pre>
+                      ) : !driverOut.stderr ? (
+                        <p className="text-xs text-slate-400 italic">Your program printed nothing.</p>
+                      ) : null}
+                      {driverOut.stderr && (
+                        <>
+                          <p className="text-xs font-semibold text-red-400 mt-2 mb-1">
+                            {driverOut.stdout ? "Errors" : "Your code did not run"}
+                          </p>
+                          <pre className="text-xs text-red-300 whitespace-pre-wrap font-mono">{driverOut.stderr}</pre>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2 border-t pt-4">
                 <Label>Did you get help from an AI chatbot on this?</Label>

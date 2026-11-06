@@ -36,6 +36,8 @@ function sanitizeForStudent(project: Record<string, any>) {
     description_html: project.description_html,
     rubric_md: project.rubric_md,
     starter_files: project.starter_files || [],
+    // Only THAT a teacher driver exists; the source stays server-side.
+    has_driver: !!(project.driver_code && String(project.driver_code).trim()),
     google_doc_url: project.google_doc_url,
     // What the finished program should look like when it runs. Deliberately
     // NOT withheld or gated: this is the assignment describing the target, not

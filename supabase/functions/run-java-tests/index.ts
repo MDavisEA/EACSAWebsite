@@ -2,6 +2,7 @@ import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { validateAiHelp } from '../_shared/aiHelp.ts';
+import { extractGistId, fetchGistJavaFiles } from '../_shared/gist.ts';
 
 const PISTON_URL = 'https://emkc.org/api/v2/piston/execute';
 
@@ -465,24 +466,37 @@ function stripPublicFromTypes(code: string): string {
 
 // Compile errors name lines of the COMBINED file, which means nothing to a
 // student. Lines inside their own code are translated back to the line they
-// see in the editor; anything in the driver is labelled as the driver's so it
-// is clear the fault may be a method or constructor the driver expected.
-function remapJavaLines(text: string, driverLines: number): string {
-  return text.replace(/(?:\w+\.java|Main)[:](\d+)/g, (_m, n) => {
-    const line = Number(n);
-    return line > driverLines ? `line ${line - driverLines}` : `teacher's driver, line ${line}`;
-  });
-}
+// see in the editor (with the file's name when there are several files);
+// anything in the driver is labelled as the driver's so it is clear the fault
+// may be a method or constructor the driver expected.
+type SourceFile = { filename: string; content: string };
 
-async function runWithDriver(driverCode: string, studentCode: string) {
+async function runWithDriver(driverCode: string, studentFiles: SourceFile[]) {
   const d = hoistImportsAndStripPackage(driverCode);
-  const s = hoistImportsAndStripPackage(studentCode);
-  const imports = [...new Set([...d.imports, ...s.imports])];
+  const parts = studentFiles.map((f) => ({ name: f.filename, ...hoistImportsAndStripPackage(f.content) }));
+  const imports = [...new Set([...d.imports, ...parts.flatMap((p) => p.imports)])];
   const importBlock = imports.length > 0 ? `${imports.join('\n')}\n\n` : '';
   // The driver goes FIRST: source-launch runs the first class in the file.
-  const driverBlock = `${importBlock}${stripPublicFromTypes(d.body).trim()}\n\n`;
-  const driverLines = driverBlock.split('\n').length - 1;
-  const combined = `${driverBlock}${stripPublicFromTypes(s.body)}`;
+  let combined = `${importBlock}${stripPublicFromTypes(d.body).trim()}\n\n`;
+  const driverLines = combined.split('\n').length - 1;
+  // Where each student file starts, in combined-file lines, for translating errors back.
+  const ranges: { name: string; start: number; end: number }[] = [];
+  let at = driverLines;
+  for (const p of parts) {
+    const body = `${stripPublicFromTypes(p.body).replace(/\s+$/, '')}\n\n`;
+    const n = body.split('\n').length - 1;
+    ranges.push({ name: p.name, start: at, end: at + n });
+    combined += body;
+    at += n;
+  }
+  const remap = (text: string) =>
+    text.replace(/(?:\w+\.java|Main)[:](\d+)/g, (_m, n) => {
+      const line = Number(n);
+      if (line <= driverLines) return `teacher's driver, line ${line}`;
+      const r = ranges.find((x) => line > x.start && line <= x.end);
+      if (!r) return `line ${line}`;
+      return ranges.length > 1 ? `${r.name}, line ${line - r.start}` : `line ${line - r.start}`;
+    });
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const key = Deno.env.get('PISTON_API_KEY');
@@ -502,9 +516,36 @@ async function runWithDriver(driverCode: string, studentCode: string) {
   return {
     status: 200 as const,
     stdout: cap(String(r?.run?.stdout || '')),
-    stderr: cap(remapJavaLines(String(r?.compile?.stderr || r?.run?.stderr || ''), driverLines)),
+    stderr: cap(remap(String(r?.compile?.stderr || r?.run?.stderr || ''))),
     exit_code: typeof r?.run?.code === 'number' ? r.run.code : null,
   };
+}
+
+// A Project's driver run: the student's gist (fetched here, so what they test
+// is what they have pushed) against the project's driver. Any signed-in
+// student can do this - it reads a public gist and a project they could open
+// anyway, writes nothing, and never returns the driver.
+async function runProjectDriver(req: Request, admin: any, payload: Record<string, any>) {
+  const student = await getStudentFromRequest(req, admin);
+  if (!student) return json({ error: 'Please sign in first.' }, 401);
+  const gistId = extractGistId(String(payload.gist_url || ''));
+  if (!payload.project_id || !gistId) {
+    return json({ error: "That doesn't look like a gist URL." }, 400);
+  }
+  const { data: project } = await admin
+    .from('projects')
+    .select('is_active, driver_code')
+    .eq('id', payload.project_id)
+    .maybeSingle();
+  if (!project || !project.is_active) return json({ error: 'Project not found.' }, 404);
+  const driverCode = String(project.driver_code || '').trim();
+  if (!driverCode) return json({ error: 'This project has no driver to run.' }, 400);
+  const fetched = await fetchGistJavaFiles(gistId);
+  if ('error' in fetched) return json({ error: fetched.error }, 400);
+  const out = await runWithDriver(driverCode, fetched.files);
+  if (out.status !== 200) return json({ error: out.error }, out.status);
+  const { status: _s, ...rest } = out;
+  return json(rest);
 }
 
 Deno.serve(async (req) => {
@@ -514,6 +555,10 @@ Deno.serve(async (req) => {
   try {
     const admin = createAdminClient();
     const payload = await req.json();
+    // Projects have no submission to own yet (the work is still a gist), so
+    // this one is handled on its own before the submission checks below.
+    if (payload.mode === 'project_driver') return await runProjectDriver(req, admin, payload);
+
     const { submission_id, session_token, coding_problem_id, code, final } = payload;
 
     if (!submission_id || !session_token || !coding_problem_id || typeof code !== 'string') {
@@ -571,7 +616,7 @@ Deno.serve(async (req) => {
     if (payload.mode === 'driver') {
       const driverCode = String((problems as Record<string, any>).driver_code || '').trim();
       if (!driverCode) return json({ error: 'This problem has no driver to run.' }, 400);
-      const out = await runWithDriver(driverCode, code);
+      const out = await runWithDriver(driverCode, [{ filename: 'your code', content: code }]);
       if (out.status !== 200) return json({ error: out.error }, out.status);
       const { status: _s, ...rest } = out;
       return json(rest);

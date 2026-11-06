@@ -9,6 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import ReactQuill from "react-quill";
 import { QUILL_MODULES, QUILL_FORMATS } from "@/lib/quillConfig";
 import "react-quill/dist/quill.snow.css";
+import CodeMirror from "@uiw/react-codemirror";
+import { java } from "@codemirror/lang-java";
+import { a11yLightEditorTheme } from "@/lib/codeEditorThemes";
 import { Upload, FileCode2, X, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import SampleOutputsEditor from "./SampleOutputsEditor";
 import MarkdownToolbar, { useMarkdownShortcuts } from "./MarkdownToolbar";
@@ -36,12 +39,16 @@ Rules:
 
 At the end, add a "Class-wide" section listing any misconception common enough to be worth addressing with the whole class, most common first.`;
 
+// Module scope on purpose: a new array each render rebuilds the editor and drops the cursor.
+const DRIVER_EXTENSIONS = [java(), ...a11yLightEditorTheme];
+
 function defaultForm() {
   return {
     title: "",
     description_html: "",
     rubric_md: "",
     starter_files: [],
+    driver_code: "",
     google_doc_url: "",
     sample_outputs: [],
     parts: [],
@@ -322,6 +329,31 @@ export default function ProjectForm({ initial, courses = [], onSave, onCancel })
       {/* What the finished program should look like when it runs. Sits next to
           the directions on the student page, which is where "what is this
           supposed to do?" actually comes up. */}
+      {/* Teacher driver: the main() that exercises whatever the student
+          writes. Never sent to students - they see what it prints. */}
+      {!isSketch && (
+        <div className="space-y-2 border-t pt-6">
+          <Label>Driver (optional)</Label>
+          <p className="text-xs text-muted-foreground">
+            For when students write the classes and you write the program that uses them. Put your
+            <code> main </code>method here. On the project page, students get a &ldquo;Test with
+            teacher&rsquo;s driver&rdquo; button that runs the code in their gist with your driver and
+            shows what it prints. They never see this code, only its output.
+          </p>
+          <div className="border rounded-md overflow-hidden">
+            <CodeMirror
+              value={form.driver_code || ""}
+              onChange={(value) => updateField("driver_code", value)}
+              placeholder={"public class Driver {\n    public static void main(String[] args) {\n        // create the student's objects and call their methods\n    }\n}"}
+              extensions={DRIVER_EXTENSIONS}
+              theme="none"
+              minHeight="180px"
+              basicSetup={{ tabSize: 4 }}
+            />
+          </div>
+        </div>
+      )}
+
       <SampleOutputsEditor value={form.sample_outputs} onChange={(v) => updateField("sample_outputs", v)} />
 
       {isSketch && <QuestionsEditor value={form.questions} onChange={(v) => setForm((f) => ({ ...f, questions: v }))} />}
