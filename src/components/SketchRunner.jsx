@@ -63,7 +63,7 @@ function cleanReport(d) {
 }
 
 const SketchRunner = forwardRef(function SketchRunner(
-  { files, assets, resetKey, autoRun = false, onReport, className = "" },
+  { files, assets, resetKey, autoRun = false, onReport, className = "", startCollapsed = false },
   ref
 ) {
   const [run, setRun] = useState(null); // { id, html, code, filesPayload, frame }
@@ -75,6 +75,7 @@ const SketchRunner = forwardRef(function SketchRunner(
 
   const iframeRef = useRef(null);
   const stageRef = useRef(null);
+  const [consoleOpen, setConsoleOpen] = useState(!startCollapsed);
   const consoleRef = useRef(null);
   const htmlRef = useRef(null);
   const runCounter = useRef(0);
@@ -356,17 +357,19 @@ const SketchRunner = forwardRef(function SketchRunner(
       </div>
 
       <div className="border-t bg-white px-3 py-1 flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="font-semibold text-slate-700">Console</span>
+        <button className="font-semibold text-slate-700 hover:text-slate-900" onClick={() => setConsoleOpen((o) => !o)} title={consoleOpen ? "Hide the console" : "Show the console"}>
+          {consoleOpen ? "\u25BE" : "\u25B8"} Console
+        </button>
         {counts.error > 0 && <span className="text-red-600">{counts.error} error{counts.error > 1 ? "s" : ""}</span>}
         {counts.warn > 0 && <span className="text-amber-600">{counts.warn} warning{counts.warn > 1 ? "s" : ""}</span>}
-        {logs.length > 0 && (
+        {consoleOpen && logs.length > 0 && (
           <button className="ml-auto hover:text-foreground" onClick={() => setLogs([])}>Clear</button>
         )}
       </div>
       <div
         ref={consoleRef}
         role="log"
-        className="h-32 overflow-auto bg-slate-900 text-slate-200 px-3 py-1.5 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words"
+        className={`${consoleOpen ? "" : "hidden "}h-32 overflow-auto bg-slate-900 text-slate-200 px-3 py-1.5 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words`}
       >
         {logs.map((l) => (
           <div

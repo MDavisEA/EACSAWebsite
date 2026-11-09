@@ -349,7 +349,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[95vw] max-h-[93vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] w-[95vw] h-screen max-h-screen top-0 translate-y-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:slide-out-to-top-0 rounded-none sm:rounded-none overflow-y-auto content-start">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 flex-wrap">
             <span>Grading queue</span>
@@ -504,9 +504,13 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
                       submission={submission}
                       projectTitle={work?.title}
                       parts={parts}
-                      height={540}
+                      height="calc(100vh - 230px)"
                       selectedKey={partKey}
                       onSelect={selectPart}
+                      lineComments={lineComments}
+                      commentScope={commentScope}
+                      onAddComment={(file, line, body) => setLineComments((prev) => [...prev.filter((c) => !((c.file ?? null) === file && c.line === line)), { file, line, body }])}
+                      onRemoveComment={(file, line) => setLineComments((prev) => prev.filter((c) => !((c.file ?? null) === file && c.line === line)))}
                     />
                   ) : kind === "project" ? (
                     (submission.files || []).length > 0 ? (

@@ -576,7 +576,7 @@ export default function ProjectSubmissionViewer({ project }) {
       </AlertDialog>
 
       <Dialog open={!!reviewTarget} onOpenChange={(open) => !open && setReviewTarget(null)}>
-        <DialogContent className="max-w-[95vw] w-[95vw] max-h-[93vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] w-[95vw] h-screen max-h-screen top-0 translate-y-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:slide-out-to-top-0 rounded-none sm:rounded-none overflow-y-auto content-start">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               <span>Feedback — {reviewTarget?.student_name}</span>
@@ -607,7 +607,11 @@ export default function ProjectSubmissionViewer({ project }) {
                 submission={reviewTarget}
                 projectTitle={project.title}
                 parts={parts}
-                height={520}
+                height="calc(100vh - 260px)"
+                lineComments={lineComments}
+                commentScope={{ project_id: project.id }}
+                onAddComment={(file, line, body) => setLineComments((prev) => [...prev.filter((c) => !((c.file ?? null) === file && c.line === line)), { file, line, body }])}
+                onRemoveComment={(file, line) => setLineComments((prev) => prev.filter((c) => !((c.file ?? null) === file && c.line === line)))}
                 selectedKey={partKey}
                 onSelect={(key) => {
                   setPartKey(key);

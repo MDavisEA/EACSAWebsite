@@ -8,10 +8,11 @@ import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import { useCodeFontSize } from "@/lib/useCodeFontSize";
 import SketchRunner from "@/components/SketchRunner";
 import { Button } from "@/components/ui/button";
+import AnnotatedCodeView from "./AnnotatedCodeView";
 import { useSketchAssets } from "@/lib/processing/useSketchAssets";
 import { downloadSketchZip } from "@/lib/processing/exportSketch";
 import { baseName, groupFilesByPart } from "@/lib/processing/programs";
-import { AlertTriangle, Download, FileCode, Info, Loader2, Pencil, Play, RotateCcw, Terminal } from "lucide-react";
+import { AlertTriangle, Download, FileCode, Info, Loader2, MessageSquare, Pencil, Play, RotateCcw, Terminal } from "lucide-react";
 
 // The "Testing" half of a sketch's grading window: the student's code, running,
 // with the files they uploaded. Same Feedback / Testing toggle as a Coding
@@ -60,7 +61,7 @@ export function FeedbackTestingToggle({ tab, onTab, className = "", sketch = fal
   );
 }
 
-export default function SketchTestingPanel({ submission, projectTitle, parts = [], height = 560, selectedKey, onSelect }) {
+export default function SketchTestingPanel({ submission, projectTitle, parts = [], height = 560, selectedKey, onSelect, lineComments, onAddComment, onRemoveComment, commentScope }) {
   const { status, assets, error } = useSketchAssets(submission?.id);
   const [report, setReport] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -92,6 +93,10 @@ export default function SketchTestingPanel({ submission, projectTitle, parts = [
   const edited = scratch.get(scratchKey) || null;
   const runFiles = edited || files;
   const [editing, setEditing] = useState(false);
+  // Comment mode: their saved code beside the running sketch; click a line to comment.
+  const [commenting, setCommenting] = useState(false);
+  const canComment = !!onAddComment;
+  const [commentIdx, setCommentIdx] = useState(0);
   const [tabIdx, setTabIdx] = useState(0);
   const [resetCount, setResetCount] = useState(0);
   const [, rerender] = useState(0);
@@ -163,11 +168,24 @@ export default function SketchTestingPanel({ submission, projectTitle, parts = [
           <span className="text-xs text-muted-foreground hidden md:flex items-center gap-1.5">
             <Info className="w-3.5 h-3.5" /> Runs in your browser. If it looks wrong, open it in real Processing.
           </span>
+          {canComment && (
+            <Button
+              size="sm"
+              variant={commenting ? "default" : "outline"}
+              className="h-7"
+              onClick={() => { setCommenting((c) => !c); setEditing(false); }}
+              disabled={!hasCode}
+              title="Show their code beside the sketch and click a line to comment on it."
+            >
+              <MessageSquare className="w-3.5 h-3.5 mr-1.5" /> {commenting ? "Hide code" : "Comment on lines"}
+              {(lineComments || []).length > 0 && <span className="ml-1.5">({lineComments.length})</span>}
+            </Button>
+          )}
           <Button
             size="sm"
             variant={editing ? "default" : "outline"}
             className="h-7"
-            onClick={() => setEditing((e) => !e)}
+            onClick={() => { setEditing((e) => !e); setCommenting(false); }}
             disabled={!hasCode}
             title="Change their code to see what happens. Nothing is saved."
           >
@@ -223,6 +241,41 @@ export default function SketchTestingPanel({ submission, projectTitle, parts = [
         </div>
       ) : (
         <div style={{ height }} className="flex">
+          {commenting && canComment && (() => {
+            const cur = group?.files || [];
+            const ci = Math.min(commentIdx, Math.max(0, cur.length - 1));
+            const cf = cur[ci];
+            return (
+              <div className="w-1/2 min-w-0 flex flex-col border-r">
+                <div className="bg-slate-100 border-b px-3 py-1 text-xs text-muted-foreground">Click any line to comment on it. Saved with the grade.</div>
+                {cur.length > 1 && (
+                  <div className="flex gap-1 px-2 pt-1 bg-slate-50 border-b">
+                    {cur.map((f, i) => (
+                      <button key={f.filename} onClick={() => setCommentIdx(i)}
+                        className={`text-xs font-mono px-2.5 py-1 rounded-t-md border border-b-0 ${i === ci ? "bg-white font-semibold" : "bg-slate-100 text-slate-600 hover:text-slate-900"}`}>
+                        {baseName(f.filename)}
+                        {(lineComments || []).filter((c) => (c.file ?? null) === f.filename).length > 0 && <span className="ml-1.5 text-amber-600">{(lineComments || []).filter((c) => (c.file ?? null) === f.filename).length}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                  {cf && (
+                    <AnnotatedCodeView
+                      key={`${submission.id}::${cf.filename}`}
+                      code={cf.content || ""}
+                      file={cf.filename}
+                      comments={lineComments || []}
+                      onAdd={(line, body) => onAddComment(cf.filename, line, body)}
+                      onRemove={(line) => onRemoveComment(cf.filename, line)}
+                      commentScope={commentScope}
+                      maxHeight="100%"
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })()}
           {editing && (
             <div className="w-1/2 min-w-0 flex flex-col border-r">
               <div className="bg-amber-50 border-b px-3 py-1 text-xs text-amber-900 flex items-center gap-2 flex-wrap">
@@ -270,6 +323,7 @@ export default function SketchTestingPanel({ submission, projectTitle, parts = [
               files={runFiles}
               assets={assets}
               autoRun
+              startCollapsed
               onReport={setReport}
               className="h-full bg-white"
             />
