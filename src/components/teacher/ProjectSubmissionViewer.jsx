@@ -523,14 +523,18 @@ export default function ProjectSubmissionViewer({ project }) {
                   {/* A sketch is pasted into the site, so there is no Gist to link to. */}
                   {!isSketch && (
                     <TableCell>
-                      <a
-                        href={s.gist_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline inline-flex items-center gap-1 text-sm"
-                      >
-                        View <ExternalLink className="w-3 h-3" />
-                      </a>
+                      {s.gist_url ? (
+                        <a
+                          href={s.gist_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline inline-flex items-center gap-1 text-sm"
+                        >
+                          View <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Pasted code</span>
+                      )}
                     </TableCell>
                   )}
                   <TableCell>

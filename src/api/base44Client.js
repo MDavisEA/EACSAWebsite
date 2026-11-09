@@ -381,6 +381,19 @@ const Submission = {
     return data.result;
   },
 
+  // The other way to turn in a Java project: pasted code ([{ filename, content }])
+  // instead of a gist link. Stored in the same `files` snapshot a gist produces.
+  async submitPastedCode(project_id, files, ai_help_used, ai_help_link) {
+    const data = await callFunction('submissions', {
+      action: 'submitProject',
+      project_id,
+      files,
+      ai_help_used,
+      ai_help_link,
+    });
+    return data.result;
+  },
+
   // The Processing-course counterpart of submitGist: the student's tabs of code
   // ([{ filename, content }, ...], main sketch first) are snapshotted into the
   // same `files` column a gist's files go in, so grading looks identical. Their

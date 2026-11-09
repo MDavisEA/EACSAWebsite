@@ -3,6 +3,7 @@ import { createAdminClient } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { validateAiHelp } from '../_shared/aiHelp.ts';
 import { extractGistId, fetchGistJavaFiles } from '../_shared/gist.ts';
+import { validatePastedJavaFiles } from '../_shared/pastedJava.ts';
 
 const PISTON_URL = 'https://emkc.org/api/v2/piston/execute';
 
@@ -528,10 +529,13 @@ async function runWithDriver(driverCode: string, studentFiles: SourceFile[]) {
 async function runProjectDriver(req: Request, admin: any, payload: Record<string, any>) {
   const student = await getStudentFromRequest(req, admin);
   if (!student) return json({ error: 'Please sign in first.' }, 401);
-  const gistId = extractGistId(String(payload.gist_url || ''));
-  if (!payload.project_id || !gistId) {
+  const pasted = payload.files !== undefined && payload.files !== null;
+  const gistId = pasted ? null : extractGistId(String(payload.gist_url || ''));
+  if (!payload.project_id || (!pasted && !gistId)) {
     return json({ error: "That doesn't look like a gist URL." }, 400);
   }
+  const checked = pasted ? validatePastedJavaFiles(payload.files) : null;
+  if (checked && 'error' in checked) return json({ error: checked.error }, 400);
   const { data: project } = await admin
     .from('projects')
     .select('is_active, driver_code')
@@ -540,9 +544,15 @@ async function runProjectDriver(req: Request, admin: any, payload: Record<string
   if (!project || !project.is_active) return json({ error: 'Project not found.' }, 404);
   const driverCode = String(project.driver_code || '').trim();
   if (!driverCode) return json({ error: 'This project has no driver to run.' }, 400);
-  const fetched = await fetchGistJavaFiles(gistId);
-  if ('error' in fetched) return json({ error: fetched.error }, 400);
-  const out = await runWithDriver(driverCode, fetched.files);
+  let files: SourceFile[];
+  if (checked && 'files' in checked) {
+    files = checked.files;
+  } else {
+    const fetched = await fetchGistJavaFiles(gistId!);
+    if ('error' in fetched) return json({ error: fetched.error }, 400);
+    files = fetched.files;
+  }
+  const out = await runWithDriver(driverCode, files);
   if (out.status !== 200) return json({ error: out.error }, out.status);
   const { status: _s, ...rest } = out;
   return json(rest);

@@ -3,6 +3,7 @@ import { corsHeaders, handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest, teacherCourseIds, teacherOwnsRow } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import { extractGistId, fetchGistJavaFiles, fetchGistUpdatedAt } from '../_shared/gist.ts';
+import { validatePastedJavaFiles } from '../_shared/pastedJava.ts';
 import { fetchOverridesByWorkId } from '../_shared/sectionDueDates.ts';
 import { validateAiHelp } from '../_shared/aiHelp.ts';
 import { sendGradeNotification, sendReplyNotification } from '../_shared/email.ts';
@@ -776,9 +777,12 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'submitProject') {
+      // Either a gist link (fetched and snapshotted here) or pasted code
+      // (`files`, validated here) - both end up as the same `files` snapshot.
       const { project_id, gist_url } = body;
+      const pasted = body.files !== undefined && body.files !== null;
       if (!student) return json({ error: 'Please sign in with your school Google account to continue.' }, 401);
-      if (!project_id || !gist_url) return json({ error: 'project_id and gist_url are required' }, 400);
+      if (!project_id || (!pasted && !gist_url)) return json({ error: 'project_id and either gist_url or files are required' }, 400);
       const aiHelp = validateAiHelp(body);
       if ('error' in aiHelp) return json({ error: aiHelp.error }, 400);
 
@@ -795,11 +799,18 @@ Deno.serve(async (req) => {
       if (!proj.is_active) return json({ error: 'This project is no longer accepting submissions.' }, 409);
       if (proj.kind === 'sketch') return json({ error: 'This is a Processing sketch - turn it in from the sketch page, not with a Gist.' }, 400);
 
-      const gistId = extractGistId(gist_url);
-      if (!gistId) return json({ error: "That doesn't look like a gist URL. It should look like https://gist.github.com/yourname/abc123..." }, 400);
-
-      const fetched = await fetchGistJavaFiles(gistId);
-      if ('error' in fetched) return json({ error: fetched.error }, 400);
+      let fetched: { files: { filename: string; content: string }[]; gistUpdatedAt: string | null };
+      if (pasted) {
+        const checked = validatePastedJavaFiles(body.files);
+        if ('error' in checked) return json({ error: checked.error }, 400);
+        fetched = { files: checked.files, gistUpdatedAt: null };
+      } else {
+        const gistId = extractGistId(gist_url);
+        if (!gistId) return json({ error: "That doesn't look like a gist URL. It should look like https://gist.github.com/yourname/abc123..." }, 400);
+        const got = await fetchGistJavaFiles(gistId);
+        if ('error' in got) return json({ error: got.error }, 400);
+        fetched = got;
+      }
 
       // Re-submitting (e.g. fixed a typo in the URL) overwrites the same row
       // rather than creating a second one - one submission per student per
@@ -820,7 +831,9 @@ Deno.serve(async (req) => {
         student_name: student.name,
         student_user_id: student.id,
         student_email: student.email,
-        gist_url,
+        // Pasted work has no gist; clearing it also stops a switch from an old
+        // gist leaving a stale link (and a pointless re-check) on the row.
+        gist_url: pasted ? null : gist_url,
         files: fetched.files,
         ai_help_used: aiHelp.ai_help_used,
         ai_help_link: aiHelp.ai_help_link,
@@ -1914,7 +1927,9 @@ Deno.serve(async (req) => {
       }[] = [];
 
       for (const s of subs || []) {
-        const gistId = extractGistId(s.gist_url || '');
+        // Pasted code has no gist to go stale.
+        if (!s.gist_url) continue;
+        const gistId = extractGistId(s.gist_url);
         if (!gistId) {
           results.push({ submission_id: s.id, student_name: s.student_name, status: 'error', error: 'Unrecognized gist URL' });
           continue;

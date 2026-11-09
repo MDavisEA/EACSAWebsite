@@ -7,10 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
+import CodeMirror from "@uiw/react-codemirror";
+import { java } from "@codemirror/lang-java";
+import { indentUnit } from "@codemirror/language";
+import { a11yDarkEditorTheme } from "@/lib/codeEditorThemes";
 import { googleDocEmbedUrl } from "@/lib/googleDoc";
 import SampleOutputs from "@/components/SampleOutputs";
 import SketchWorkspace from "@/components/SketchWorkspace";
-import { Play, Loader2, FolderGit2, AlertCircle, ChevronRight, LogIn, CheckCircle2, FileCode2, ExternalLink, ArrowLeft } from "lucide-react";
+import { Play, Loader2, FolderGit2, AlertCircle, ChevronRight, LogIn, CheckCircle2, FileCode2, ExternalLink, ArrowLeft, Plus, X } from "lucide-react";
+
+// Module scope on purpose: a new array on every render makes the editor rebuild
+// and drop the cursor mid-edit.
+const CODE_EXTENSIONS = [java(), indentUnit.of("    "), ...a11yDarkEditorTheme];
+
+// A student's file has to be named for its class; guess it from what they paste
+// so they rarely have to type it.
+function guessFilename(code) {
+  const m = code.match(/(?:public\s+)?(?:final\s+|abstract\s+)*(?:class|interface|enum|record)\s+([A-Za-z_]\w*)/);
+  return m ? `${m[1]}.java` : null;
+}
+const blankFile = () => ({ filename: "Main.java", content: "", touched: false });
 
 export default function ProjectPage() {
   const navigate = useNavigate();
@@ -26,6 +42,10 @@ export default function ProjectPage() {
   // lookup has finished - and whether it failed.
   const [submissionState, setSubmissionState] = useState("idle"); // idle | loading | done | error
   const [gistUrl, setGistUrl] = useState("");
+  // How they turn it in: a gist link, or code pasted right here.
+  const [mode, setMode] = useState("gist"); // gist | paste
+  const [pasteFiles, setPasteFiles] = useState([blankFile()]);
+  const [activeFile, setActiveFile] = useState(0);
   // "I got AI help" disclosure - null means unanswered, which blocks submit.
   const [aiHelpUsed, setAiHelpUsed] = useState(null);
   const [aiHelpLink, setAiHelpLink] = useState("");
@@ -92,6 +112,20 @@ export default function ProjectPage() {
       const sub = await base44.entities.Submission.startProject(projectId);
       setMySubmission(sub);
       if (sub?.gist_url) setGistUrl(sub.gist_url);
+      if (sub?.submitted && !sub.gist_url && (sub.files || []).length > 0) {
+        // They turned it in by pasting: reopen it the same way.
+        setMode("paste");
+        setPasteFiles(sub.files.map((f) => ({ filename: f.filename, content: f.content, touched: true })));
+        setActiveFile(0);
+      } else {
+        try {
+          const draft = JSON.parse(localStorage.getItem(draftKey) || "null");
+          if (draft?.files?.length) {
+            setMode(draft.mode === "paste" ? "paste" : "gist");
+            setPasteFiles(draft.files);
+          }
+        } catch { /* no draft */ }
+      }
       if (sub?.ai_help_used != null) {
         setAiHelpUsed(sub.ai_help_used);
         setAiHelpLink(sub.ai_help_link || "");
@@ -106,8 +140,36 @@ export default function ProjectPage() {
 
   // Runs the code in the student's gist against the teacher's driver. Nothing
   // is submitted or recorded - it is just a way to check before turning in.
+  const draftKey = `project-paste-draft::${user?.id || "me"}::${projectId}`;
+  useEffect(() => {
+    if (!projectId || mode !== "paste" || mySubmission?.submitted) return;
+    try { localStorage.setItem(draftKey, JSON.stringify({ mode, files: pasteFiles })); } catch { /* private mode */ }
+  }, [pasteFiles, mode]);
+
+  const pastePayload = () => pasteFiles.map((f) => ({ filename: f.filename.trim(), content: f.content }));
+  const hasWork = mode === "gist" ? !!gistUrl.trim() : pasteFiles.some((f) => f.content.trim());
+
+  const updateFile = (i, patch) =>
+    setPasteFiles((fs) => fs.map((f, j) => (j === i ? { ...f, ...patch } : f)));
+  const changeCode = (i, content) =>
+    setPasteFiles((fs) =>
+      fs.map((f, j) => {
+        if (j !== i) return f;
+        const guess = !f.touched && guessFilename(content);
+        return { ...f, content, ...(guess ? { filename: guess } : {}) };
+      })
+    );
+  const addFile = () => {
+    setPasteFiles((fs) => [...fs, { filename: "", content: "", touched: false }]);
+    setActiveFile(pasteFiles.length);
+  };
+  const removeFile = (i) => {
+    setPasteFiles((fs) => fs.filter((_, j) => j !== i));
+    setActiveFile(0);
+  };
+
   const handleTestDriver = async () => {
-    if (!gistUrl.trim()) return;
+    if (!hasWork) return;
     setTesting(true);
     setTestError("");
     setDriverOut(null);
@@ -115,7 +177,7 @@ export default function ProjectPage() {
       const res = await base44.functions.invoke("runJavaTests", {
         mode: "project_driver",
         project_id: projectId,
-        gist_url: gistUrl.trim(),
+        ...(mode === "paste" ? { files: pastePayload() } : { gist_url: gistUrl.trim() }),
       });
       setDriverOut(res.data);
     } catch (e) {
@@ -128,19 +190,18 @@ export default function ProjectPage() {
   const aiHelpAnswered = aiHelpUsed !== null && (aiHelpUsed === false || aiHelpLink.trim() !== "");
 
   const handleSubmit = async () => {
-    if (!gistUrl.trim() || !aiHelpAnswered) return;
+    if (!hasWork || !aiHelpAnswered) return;
     setSubmitting(true);
     setError("");
     try {
-      const sub = await base44.entities.Submission.submitGist(
-        projectId,
-        gistUrl.trim(),
-        aiHelpUsed,
-        aiHelpLink.trim() || null
-      );
+      const sub =
+        mode === "paste"
+          ? await base44.entities.Submission.submitPastedCode(projectId, pastePayload(), aiHelpUsed, aiHelpLink.trim() || null)
+          : await base44.entities.Submission.submitGist(projectId, gistUrl.trim(), aiHelpUsed, aiHelpLink.trim() || null);
       setMySubmission(sub);
+      try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
     } catch (e) {
-      setError(e.message || "Something went wrong submitting your gist. Please try again.");
+      setError(e.message || "Something went wrong submitting. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -409,30 +470,100 @@ export default function ProjectPage() {
                 </div>
               )}
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium block">
-                  {mySubmission?.submitted ? "Resubmit with a different gist URL" : "Your Gist URL"}
-                </label>
-                <Input
-                  placeholder="https://gist.github.com/yourname/abc123..."
-                  value={gistUrl}
-                  onChange={(e) => setGistUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                />
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant={mode === "gist" ? "default" : "outline"} onClick={() => setMode("gist")}>
+                    GitHub Gist link
+                  </Button>
+                  <Button type="button" size="sm" variant={mode === "paste" ? "default" : "outline"} onClick={() => setMode("paste")}>
+                    Paste my code
+                  </Button>
+                </div>
+
+                {mode === "gist" ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium block">
+                      {mySubmission?.submitted ? "Resubmit with a different gist URL" : "Your Gist URL"}
+                    </label>
+                    <Input
+                      placeholder="https://gist.github.com/yourname/abc123..."
+                      value={gistUrl}
+                      onChange={(e) => setGistUrl(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium block">
+                      {mySubmission?.submitted ? "Your code (edit and resubmit)" : "Your code"}
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {pasteFiles.map((f, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setActiveFile(i)}
+                          className={`px-3 py-1 rounded-md text-xs font-mono border ${
+                            i === activeFile ? "bg-violet-600 text-white border-violet-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          {f.filename || "(name it)"}
+                        </button>
+                      ))}
+                      {pasteFiles.length < 12 && (
+                        <Button type="button" variant="ghost" size="sm" onClick={addFile}>
+                          <Plus className="w-3.5 h-3.5 mr-1" /> Add file
+                        </Button>
+                      )}
+                    </div>
+                    {pasteFiles[activeFile] && (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            className="font-mono text-sm max-w-xs"
+                            placeholder="ClassName.java"
+                            value={pasteFiles[activeFile].filename}
+                            onChange={(e) => updateFile(activeFile, { filename: e.target.value, touched: true })}
+                          />
+                          {pasteFiles.length > 1 && (
+                            <Button type="button" variant="ghost" size="sm" onClick={() => removeFile(activeFile)}>
+                              <X className="w-3.5 h-3.5 mr-1" /> Remove file
+                            </Button>
+                          )}
+                        </div>
+                        <div className="rounded-lg overflow-hidden border" style={{ "--code-editor-font-size": "14px" }}>
+                          <CodeMirror
+                            key={activeFile}
+                            value={pasteFiles[activeFile].content}
+                            onChange={(v) => changeCode(activeFile, v)}
+                            theme="none"
+                            extensions={CODE_EXTENSIONS}
+                            height="360px"
+                            basicSetup={{ tabSize: 4 }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Name each file after its class (like <code>Main.java</code>). If your program has more
+                          than one class in separate files, use Add file.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {project.has_driver && (
                 <div className="space-y-2 rounded-lg border border-violet-200 bg-violet-50/50 p-4">
                   <p className="text-sm font-medium">Test your code</p>
                   <p className="text-xs text-muted-foreground">
-                    Runs the code in your gist with your teacher&rsquo;s test program and shows what
-                    it prints. Push your changes to the gist first. Nothing is submitted.
+                    Runs your code with your teacher&rsquo;s test program and shows what it prints.
+                    {mode === "gist" ? " Push your changes to the gist first." : ""} Nothing is submitted.
                   </p>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handleTestDriver}
-                    disabled={testing || !gistUrl.trim()}
+                    disabled={testing || !hasWork}
                   >
                     {testing ? (
                       <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Running...</>
@@ -495,14 +626,14 @@ export default function ProjectPage() {
 
               <Button
                 onClick={handleSubmit}
-                disabled={submitting || !gistUrl.trim() || !aiHelpAnswered}
+                disabled={submitting || !hasWork || !aiHelpAnswered}
                 className="w-full"
                 size="lg"
               >
                 {submitting ? "Submitting..." : mySubmission?.submitted ? "Resubmit" : "Submit"}
               </Button>
               <p className="text-xs text-center text-muted-foreground">
-                Use a secret (not public) gist. Resubmitting overwrites your previous submission.
+                {mode === "gist" ? "Use a secret (not public) gist. " : ""}Resubmitting overwrites your previous submission.
               </p>
             </>
           )}
