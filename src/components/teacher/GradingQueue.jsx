@@ -349,7 +349,7 @@ export default function GradingQueue({ open, onOpenChange, onChanged, initialSub
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] w-[95vw] h-screen max-h-screen top-0 translate-y-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:slide-out-to-top-0 rounded-none sm:rounded-none overflow-y-auto content-start">
+      <DialogContent className="max-w-[95vw] w-[95vw] h-screen max-h-screen top-0 translate-y-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:slide-out-to-top-0 rounded-none sm:rounded-none overflow-y-auto block space-y-4">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 flex-wrap">
             <span>Grading queue</span>

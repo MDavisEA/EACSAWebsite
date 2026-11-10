@@ -576,7 +576,7 @@ export default function ProjectSubmissionViewer({ project }) {
       </AlertDialog>
 
       <Dialog open={!!reviewTarget} onOpenChange={(open) => !open && setReviewTarget(null)}>
-        <DialogContent className="max-w-[95vw] w-[95vw] h-screen max-h-screen top-0 translate-y-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:slide-out-to-top-0 rounded-none sm:rounded-none overflow-y-auto content-start">
+        <DialogContent className="max-w-[95vw] w-[95vw] h-screen max-h-screen top-0 translate-y-0 data-[state=open]:slide-in-from-top-0 data-[state=closed]:slide-out-to-top-0 rounded-none sm:rounded-none overflow-y-auto block space-y-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               <span>Feedback — {reviewTarget?.student_name}</span>
