@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
       const contentType = name ? contentTypeForAsset(name) : null;
       if (!name || !contentType) {
         return json(
-          { error: `"${file.name}" can't be used here. Upload images (.png .jpg .gif), a .vlw font, or a .txt/.csv/.json file, with a simple file name.` },
+          { error: `"${file.name}" can't be used here. Upload images (.png .jpg .gif), a font (.ttf .otf .vlw), or a .txt/.csv/.json file, with a simple file name.` },
           400
         );
       }

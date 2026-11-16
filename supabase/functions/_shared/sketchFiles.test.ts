@@ -10,6 +10,8 @@ eq(cleanAssetName('.hidden.png'), null, 'dotfile rejected');
 eq(cleanAssetName('a<b>.png'), null, 'angle brackets rejected');
 eq(cleanAssetName('x'.repeat(120) + '.png'), null, 'too long');
 eq(cleanAssetName('font1.vlw'), 'font1.vlw', 'vlw ok');
+eq(cleanAssetName('GeistPixel.ttf'), 'GeistPixel.ttf', 'ttf ok');
+eq(cleanAssetName('Pixel Font.OTF'), 'Pixel Font.OTF', 'otf ok');
 eq(cleanAssetName('ship (2).png'), 'ship (2).png', 'parens ok');
 eq(cleanAssetName('mario.mp3'), null, 'audio unsupported');
 eq(contentTypeForAsset('a.JPEG'), 'image/jpeg', 'case-insensitive ext');

@@ -30,6 +30,9 @@ const CONTENT_TYPES: Record<string, string> = {
   bmp: 'image/bmp',
   webp: 'image/webp',
   vlw: 'application/octet-stream',
+  // createFont("Pixel.ttf", 32): the runner loads these as real web fonts.
+  ttf: 'font/ttf',
+  otf: 'font/otf',
   txt: 'text/plain',
   csv: 'text/csv',
   tsv: 'text/tab-separated-values',

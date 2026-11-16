@@ -12,7 +12,7 @@
 //                    { pj: 1, type: 'error', name, message, stack, generated }   (a runtime error)
 //                    { pj: 1, type: 'size', w, h }
 //                    { pj: 1, type: 'files', used: [name], missing: [{ name, fn }] }
-//   files: { [name]: { kind: 'image'|'text'|'other', dataUrl?, text? } }
+//   files: { [name]: { kind: 'image'|'text'|'font'|'other', dataUrl?, text? } }
 (function () {
   var P = 'pj';
   function send(msg) { msg[P] = 1; parent.postMessage(msg, '*'); }
@@ -74,6 +74,10 @@
 
   var LOADERS = /\b(loadImage|requestImage|loadFont|loadStrings|loadTable|loadJSONObject|loadJSONArray|loadXML|loadShape|loadBytes|createReader|SoundFile|Movie|Capture|Gif|getPImages)\s*\(\s*(?:this\s*,\s*)?"([^"\n]+)"\s*[,)]/g;
   var LOADER_LABEL = { Gif: 'new Gif', getPImages: 'Gif.getPImages' };
+  // createFont("Arial", 32) names a font installed on the computer, which is fine; only a
+  // font FILE name is something the student has to upload.
+  var FONT_FILE = /\bcreateFont\s*\(\s*"([^"\n]+\.(?:ttf|otf))"/gi;
+  var FONT_EXT = /\.(ttf|otf)$/i;
 
   // A data: URL's bytes (uploaded files reach the frame as data: URLs - see assets.js).
   function dataUrlBytes(url) {
@@ -118,6 +122,11 @@
       if (found) markUsed(found); else markMissing(m[2], LOADER_LABEL[m[1]] || m[1]);
       if (/^(SoundFile|Movie|Capture)$/.test(m[1])) log('warn', m[1] + ' is not supported in this preview.');
     }
+    FONT_FILE.lastIndex = 0;
+    while ((m = FONT_FILE.exec(clean))) {
+      var foundFont = lookup(m[1]);
+      if (foundFont) markUsed(foundFont); else markMissing(m[1], 'createFont');
+    }
 
     // decode every uploaded image up front, so loadImage() in setup() is synchronous
     var pending = names.filter(function (n) { return files[n].kind === 'image'; }).map(function (n) {
@@ -129,7 +138,30 @@
       });
     });
 
-    Promise.all(pending).then(function (loaded) {
+    // Install every uploaded .ttf/.otf as a web font whose family name is the file's own
+    // name. Processing.js turns createFont("Pixel.ttf", 32) into the CSS font
+    // `"Pixel.ttf", sans-serif`, so once the font is installed under that name the
+    // student's code works unchanged. It has to be loaded before setup() runs: a PFont
+    // measures its ascent/descent the moment it is created.
+    // An @font-face rule, not `new FontFace(...)`: browsers disagree about whether the
+    // script API's family name is CSS (Firefox) or literal text (Chrome keeps quote marks as
+    // part of the name), but a quoted name in CSS means the same thing everywhere.
+    var fontNames = names.filter(function (n) { return files[n].kind === 'font'; });
+    function cssName(n) { return '"' + n.replace(/["\\]/g, '\\$&') + '"'; }
+    var fontLoads = [];
+    if (fontNames.length) {
+      var fontCss = document.createElement('style');
+      fontCss.textContent = fontNames.map(function (n) {
+        return '@font-face { font-family: ' + cssName(n) + '; src: url("' + files[n].dataUrl + '"); }';
+      }).join('\n');
+      document.head.appendChild(fontCss);
+      fontLoads = fontNames.map(function (n) {
+        function bad() { log('warn', 'Could not read the font "' + n + '" - is it really a .ttf/.otf font file? Using the default font instead.'); }
+        return document.fonts.load('16px ' + cssName(n)).then(function (faces) { if (!faces.length) bad(); }, bad);
+      });
+    }
+
+    Promise.all(pending.concat(fontLoads)).then(function (loaded) {
       var sk;
       try { sk = Processing.compile(msg.code); generatedCode = sk.sourceCode; }
       catch (e) {
@@ -293,7 +325,25 @@
         p.smooth = p.smooth || function () {};
         p.noSmooth = p.noSmooth || function () {};
         p.textMode = function () {};       // real Processing ignores non-MODEL/SHAPE values too
+        // A font file the student uploaded is installed under its exact uploaded name (see
+        // fontLoads above), so "data/pixel.TTF" still has to be pointed at "Pixel.ttf".
+        // Processing.js's own createFont just calls p.loadFont, which is replaced below, so
+        // both of ours go straight to its ORIGINAL loadFont (it makes a PFont for any CSS
+        // font name). Going through p.createFont/p.loadFont instead loops forever.
+        var pjsFont = p.loadFont;
+        function fontFile(name, size, fn) {
+          var n = lookup(name);
+          if (n && files[n].kind === 'font') { markUsed(n); return pjsFont.call(p, n, size); }
+          if (n) log('warn', fn + '("' + name + '"): that is not a .ttf or .otf font file.');
+          else markMissing(name, fn);
+          return pjsFont.call(p, 'sans-serif', size);
+        }
+        p.createFont = function (name, size) {
+          if (FONT_EXT.test(String(name))) return fontFile(name, size, 'createFont');
+          return pjsFont.call(p, name, size); // a font installed on the computer, e.g. "Arial"
+        };
         p.loadFont = function (name) {      // .vlw bitmap fonts can't be rendered here
+          if (FONT_EXT.test(String(name))) return fontFile(name, undefined, 'loadFont');
           var n = lookup(name);
           if (n) markUsed(n); else markMissing(name, 'loadFont');
           log('info', 'Font "' + name + '" is a Processing .vlw font - using the browser default instead.');

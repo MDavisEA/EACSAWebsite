@@ -4,6 +4,8 @@
 //  - kind 'image' carries a data: URL, so the sandboxed iframe can decode it
 //    without the canvas ever being tainted by a cross-origin load;
 //  - kind 'text' carries its text (for loadStrings);
+//  - kind 'font' (.ttf/.otf) carries a data: URL - the runner installs it as a web
+//    font named after the file, which is exactly the name createFont("x.ttf") asks for;
 //  - kind 'other' (a .vlw font) is only a name to the runner - it substitutes a
 //    default font, but still needs to know the file exists.
 
@@ -18,11 +20,12 @@ export function maxBytesForAsset(name) {
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|bmp|webp)$/i;
 const TEXT_EXT = /\.(txt|csv|tsv|json|xml)$/i;
+const FONT_EXT = /\.(ttf|otf)$/i;
 
-export const ACCEPT_ATTR = ".png,.jpg,.jpeg,.gif,.bmp,.webp,.vlw,.txt,.csv,.tsv,.json,.xml";
+export const ACCEPT_ATTR = ".png,.jpg,.jpeg,.gif,.bmp,.webp,.ttf,.otf,.vlw,.txt,.csv,.tsv,.json,.xml";
 
 export function kindOfName(name) {
-  return IMAGE_EXT.test(name) ? "image" : TEXT_EXT.test(name) ? "text" : "other";
+  return IMAGE_EXT.test(name) ? "image" : TEXT_EXT.test(name) ? "text" : FONT_EXT.test(name) ? "font" : "other";
 }
 
 export function formatBytes(n) {
@@ -45,7 +48,7 @@ export async function assetFromBlob(name, blob, extra = {}) {
   // "Download for Processing" has to write the original bytes back out
   // (including a .vlw font the runner itself can't use).
   const asset = { name, size: blob.size, kind, blob, ...extra };
-  if (kind === "image") asset.dataUrl = await readAsDataUrl(blob);
+  if (kind === "image" || kind === "font") asset.dataUrl = await readAsDataUrl(blob);
   else if (kind === "text") asset.text = await blob.text();
   return asset;
 }

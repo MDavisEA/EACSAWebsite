@@ -230,7 +230,7 @@ pattern under `src/components/teacher/`.
     the cursor). Tabs of code are snapshotted into
     `submissions.files` (same shape as a gist snapshot) by the `submitSketch`
     action (`submissions/index.ts`; validation in `_shared/sketchFiles.ts`).
-    Their data files (images, a `.vlw` font, text/csv) are uploaded one at a
+    Their data files (images, a `.ttf`/`.otf`/`.vlw` font, text/csv) are uploaded one at a
     time to the **`sketch-assets`** Edge Function, which stores them in the
     private `sketch-assets` Storage bucket and indexes them in `sketch_assets`
     (5 MB/file - 20 MB for a GIF, migration 0046 - 60 MB/sketch, no SVG/audio). Only the owning student can
@@ -381,6 +381,14 @@ pattern under `src/components/teacher/`.
     a canvas only ever gets an animated GIF's first frame); checked frame-for-frame against
     ffmpeg on real student GIFs. Run `node src/lib/processing/gifDecoder.test.js` after
     touching it. The javaFixes "libraries are not available" note skips this import.
+  - **Font files** (`createFont("Pixel.ttf", 32)`). Processing.js turns that into the CSS font
+    `"Pixel.ttf", sans-serif`, so `frameRunner.js` installs each uploaded `.ttf`/`.otf` as an
+    `@font-face` whose family IS the file's name, and waits for it before setup() (a PFont
+    measures itself when created). Use CSS, not `new FontFace()`: Chrome keeps quote marks as
+    part of a script-given family name, so the font silently never matches. Its `createFont`/
+    `loadFont` wrappers call Processing.js's ORIGINAL loadFont - its createFont just calls
+    `p.loadFont`, so going through the wrappers loops forever. `createFont("Arial")` (a font
+    on the computer) passes straight through.
   - Known limits (by design, not bugs): Processing.js is a 2018 translator, so
     libraries (Sound, Video), `loadTable`/JSON/XML and P3D are unsupported or
     untested; `.vlw` fonts become the default font; `println(3.0)` prints `3`.
