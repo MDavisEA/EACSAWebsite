@@ -233,7 +233,7 @@ pattern under `src/components/teacher/`.
     Their data files (images, a `.vlw` font, text/csv) are uploaded one at a
     time to the **`sketch-assets`** Edge Function, which stores them in the
     private `sketch-assets` Storage bucket and indexes them in `sketch_assets`
-    (5 MB/file, 25 MB/sketch, no SVG/audio). Only the owning student can
+    (5 MB/file - 20 MB for a GIF, migration 0046 - 60 MB/sketch, no SVG/audio). Only the owning student can
     upload/remove; the student or the teacher who owns the course can `list`
     (short-lived signed URLs). Deleting a submission/project/course removes
     the stored files first (`_shared/sketchAssetStorage.ts`) - the rows
