@@ -72,7 +72,16 @@
     if (e.keyCode === 32 || e.which === 32) e.preventDefault();
   }, true);
 
-  var LOADERS = /\b(loadImage|requestImage|loadFont|loadStrings|loadTable|loadJSONObject|loadJSONArray|loadXML|loadShape|loadBytes|createReader|SoundFile|Movie|Capture)\s*\(\s*(?:this\s*,\s*)?"([^"\n]+)"\s*[,)]/g;
+  var LOADERS = /\b(loadImage|requestImage|loadFont|loadStrings|loadTable|loadJSONObject|loadJSONArray|loadXML|loadShape|loadBytes|createReader|SoundFile|Movie|Capture|Gif|getPImages)\s*\(\s*(?:this\s*,\s*)?"([^"\n]+)"\s*[,)]/g;
+  var LOADER_LABEL = { Gif: 'new Gif', getPImages: 'Gif.getPImages' };
+
+  // A data: URL's bytes (uploaded files reach the frame as data: URLs - see assets.js).
+  function dataUrlBytes(url) {
+    var bin = atob(String(url).slice(String(url).indexOf(',') + 1));
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
 
   function stripComments(code) {
     return code.replace(/\/\*[\s\S]*?\*\//g, function (m) { return m.replace(/[^\n]/g, ' '); })
@@ -106,7 +115,7 @@
     var m; LOADERS.lastIndex = 0;
     while ((m = LOADERS.exec(clean))) {
       var found = lookup(m[2]);
-      if (found) markUsed(found); else markMissing(m[2], m[1]);
+      if (found) markUsed(found); else markMissing(m[2], LOADER_LABEL[m[1]] || m[1]);
       if (/^(SoundFile|Movie|Capture)$/.test(m[1])) log('warn', m[1] + ' is not supported in this preview.');
     }
 
@@ -139,7 +148,126 @@
         pixelDensity: function () {},
         displayDensity: function () { return 1; },
         fullScreen: function () { ctx.p.size(frame.w, frame.h); },
+        Gif: makeGifClass(),
       };
+
+      // --- the gifAnimation library (`import gifAnimation.*;`) ---
+      // Students who want a moving character use it: `Gif walk = new Gif(this, "walk.gif");`,
+      // `walk.loop();`, then `image(walk, x, y)` like any picture. Processing.js can't load
+      // libraries, so `Gif` was an unknown name and the sketch died in setup(). This stands in
+      // for it: a Gif is a real PImage (so image(), background(), tint() etc. take it) whose
+      // pixels are whichever frame is due right now, worked out from the clock whenever
+      // Processing.js reads them - the same thing the library's own timer thread does.
+      function makeGifClass() {
+        var decoded = {};
+        function decode(n) {
+          if (!(n in decoded)) {
+            decoded[n] = null;
+            try {
+              var g = window.__decodeGif(dataUrlBytes(files[n].dataUrl));
+              g.frames.forEach(function (f) {
+                var c = document.createElement('canvas');
+                c.width = g.width; c.height = g.height;
+                c.getContext('2d').putImageData(new ImageData(f.rgba, g.width, g.height), 0, 0);
+                f.canvas = c;
+              });
+              decoded[n] = g;
+            } catch (e) { log('warn', 'Could not read the frames of "' + n + '" (' + e.message + ') - showing it as a still picture.'); }
+          }
+          return decoded[n];
+        }
+        // An image for `file` that isn't an animation (missing, not a GIF, unreadable): what
+        // loadImage gives, plus the Gif methods as no-ops so the rest of the sketch still runs.
+        function still(file) {
+          var img = ctx.p.loadImage(file);
+          ['play', 'pause', 'stop', 'loop', 'noLoop', 'jump', 'ignoreRepeat', 'dispose'].forEach(function (k) { img[k] = function () {}; });
+          img.isPlaying = img.isLooping = img.isIgnoringRepeat = function () { return false; };
+          img.currentFrame = function () { return 0; };
+          img.getPImages = function () { return [img]; };
+          return img;
+        }
+        function find(file, fn) {
+          var n = lookup(file);
+          if (!n) { markMissing(file, fn); return null; }
+          return /\.gif$/i.test(n) && files[n].kind === 'image' ? n : null;
+        }
+
+        function Gif(parent, file) {
+          var p = ctx.p;
+          if (typeof parent === 'string') file = parent;
+          var n = find(file, 'new Gif');
+          var g = n && decode(n);
+          if (!g) return still(file);
+          markUsed(n);
+          var frames = g.frames; var last = frames.length - 1;
+          var img = new p.PImage(g.width, g.height, p.ARGB);
+          var cur = 0; var playing = false; var looping = false; var ignoreRepeat = false;
+          var playsLeft = 0; var since = 0; // when `cur` went up
+
+          function now() { return (window.performance && performance.now()) || Date.now(); }
+          // Moves `cur` on by however many frames' delays have passed since it last changed.
+          function advance() {
+            if (!playing) return cur;
+            var t = now();
+            // After a long stall (a hidden tab) just carry on from here, don't fast-forward.
+            if (t - since > 10000) since = t - (t - since) % 10000;
+            while (playing && t - since >= frames[cur].delay) {
+              since += frames[cur].delay;
+              if (cur < last) { cur++; continue; }
+              if (looping) cur = 0;
+              else if (!ignoreRepeat && (g.loops === 0 || --playsLeft > 0)) cur = 0;
+              else playing = false;
+            }
+            return cur;
+          }
+          function start(loopForever) {
+            if (!playing) { since = now(); playsLeft = g.loops; }
+            playing = true; looping = loopForever;
+          }
+
+          Object.defineProperty(img, 'sourceImg', { configurable: true, get: function () { return frames[advance()].canvas; }, set: function () {} });
+          // A fresh copy each time: Processing.js tints an image by changing the pixels it hands
+          // back, which would otherwise tint the stored frame for good.
+          Object.defineProperty(img, 'imageData', {
+            configurable: true,
+            get: function () { return new ImageData(new Uint8ClampedArray(frames[advance()].rgba), g.width, g.height); },
+            set: function () {},
+          });
+          Object.defineProperty(img, '__isDirty', { configurable: true, get: function () { return false; }, set: function () {} });
+
+          img.play = function () { start(looping); };
+          img.loop = function () { start(true); };
+          img.noLoop = function () { looping = false; };
+          img.pause = function () { advance(); playing = false; };
+          img.stop = function () { playing = false; cur = 0; };
+          img.jump = function (i) { cur = Math.max(0, Math.min(last, i | 0)); since = now(); };
+          img.ignoreRepeat = function () { ignoreRepeat = true; };
+          img.isPlaying = function () { advance(); return playing; };
+          img.isLooping = function () { return looping; };
+          img.isIgnoringRepeat = function () { return ignoreRepeat; };
+          img.currentFrame = function () { return advance(); };
+          img.getPImages = function () { return framesAsImages(g); };
+          img.dispose = function () {};
+          return img;
+        }
+        // Every frame as its own PImage, for sketches that animate by hand.
+        function framesAsImages(g) {
+          return g.frames.map(function (f) {
+            var im = ctx.p.createImage(g.width, g.height, ctx.p.ARGB);
+            im.imageData.data.set(f.rgba); im.__isDirty = true; im.updatePixels();
+            return im;
+          });
+        }
+        Gif.getPImages = function (parent, file) {
+          if (typeof parent === 'string') file = parent;
+          var n = find(file, 'Gif.getPImages');
+          var g = n && decode(n);
+          if (!g) return [ctx.p.loadImage(file)];
+          markUsed(n);
+          return framesAsImages(g);
+        };
+        return Gif;
+      }
       // Strict mode, so assigning to a name that was never declared (`scor = 5;`, a typo or a
       // forgotten `int`) is an error, as it is in Java. Without it JavaScript quietly creates a
       // new global and the mistake never shows. The directive shares line 1 with the generated

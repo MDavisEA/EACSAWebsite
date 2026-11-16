@@ -372,6 +372,15 @@ pattern under `src/components/teacher/`.
     wrapper is re-applied after every `size()` call, because `size()` makes Processing.js
     re-install its drawing functions and would otherwise wipe it. Any future override of a
     drawing function there has the same catch.
+  - **Animated GIFs (the gifAnimation library).** Students import `gifAnimation.*` and write
+    `Gif walk = new Gif(this, "walk.gif"); walk.loop(); image(walk, x, y);`. Processing.js
+    can't load libraries, so `frameRunner.js` supplies its own `Gif`: a real PImage whose
+    `sourceImg`/`imageData` are getters returning whichever frame is due by the clock (so
+    `image()`, `background()`, `tint()` take it unchanged), plus play/loop/pause/stop/jump/
+    currentFrame and `Gif.getPImages`. Frames come from `gifDecoder.js` (hand-written, because
+    a canvas only ever gets an animated GIF's first frame); checked frame-for-frame against
+    ffmpeg on real student GIFs. Run `node src/lib/processing/gifDecoder.test.js` after
+    touching it. The javaFixes "libraries are not available" note skips this import.
   - Known limits (by design, not bugs): Processing.js is a 2018 translator, so
     libraries (Sound, Video), `loadTable`/JSON/XML and P3D are unsupported or
     untested; `.vlw` fonts become the default font; `println(3.0)` prints `3`.

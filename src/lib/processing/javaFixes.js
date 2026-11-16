@@ -525,7 +525,9 @@ function stripImports(src, notes) {
   const out = src.replace(/^[ \t]*import\s+([\w.*]+)\s*;[ \t]*$/gm, (m, lib) => {
     libs.push(lib); return '';
   });
-  if (libs.length) notes.push('Ignored import ' + libs.join(', ') + ' - Processing libraries are not available here.');
+  // gifAnimation is the one library with a stand-in here (the `Gif` class in frameRunner.js).
+  const unsupported = libs.filter((lib) => !/^gifAnimation\b/.test(lib));
+  if (unsupported.length) notes.push('Ignored import ' + unsupported.join(', ') + ' - Processing libraries are not available here.');
   return { out, libs };
 }
 

@@ -1,5 +1,6 @@
-// The srcdoc of the sandboxed iframe a sketch runs in: Processing.js, then the
-// small runner script that talks to the page over postMessage (frameRunner.js).
+// The srcdoc of the sandboxed iframe a sketch runs in: Processing.js, the GIF
+// decoder behind the gifAnimation stand-in (gifDecoder.js), then the small runner
+// script that talks to the page over postMessage (frameRunner.js).
 //
 // Both are imported as raw text on purpose, so the bundler never rewrites them
 // and the iframe gets exactly the bytes in the repo. This module is large (it
@@ -7,6 +8,7 @@
 // time somebody actually opens a sketch - see SketchRunner.
 import processingSource from "@/vendor/processing.min.js?raw";
 import frameRunnerSource from "./frameRunner.js?raw";
+import gifDecoderSource from "./gifDecoder.js?raw";
 
 const CSP = [
   "default-src 'none'",
@@ -32,6 +34,7 @@ export function buildFrameHtml() {
     "<style>html,body{margin:0;padding:0;overflow:hidden;background:#fff}canvas{display:block;outline:none}</style>" +
     '</head><body><canvas id="__pj_canvas" tabindex="0"></canvas>' +
     `<script>${safe(processingSource)}</script>` +
+    `<script>${safe(gifDecoderSource)}</script>` +
     `<script>${safe(frameRunnerSource)}</script></body></html>`
   );
 }
