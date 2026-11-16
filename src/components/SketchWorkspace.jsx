@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { openLinksInNewTab } from "@/lib/quillConfig";
 import { googleDocEmbedUrl } from "@/lib/googleDoc";
 import {
-  ACCEPT_ATTR, MAX_ASSET_BYTES, MAX_ASSETS_TOTAL_BYTES, assetFromBlob, formatBytes, loadAssets,
+  ACCEPT_ATTR, MAX_ASSET_BYTES, MAX_ASSETS_TOTAL_BYTES, MAX_GIF_BYTES, maxBytesForAsset, assetFromBlob, formatBytes, loadAssets,
 } from "@/lib/processing/assets";
 import { baseName, partIdOf } from "@/lib/processing/programs";
 import { findBracketProblems, findMissingSemicolons } from "@/lib/processing/syntaxCheck";
@@ -366,8 +366,11 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
     for (const file of Array.from(fileList)) {
       const lower = file.name.toLowerCase();
       const replacing = assets.find((a) => a.name.toLowerCase() === lower);
-      if (file.size > MAX_ASSET_BYTES) {
-        setAssetError(`${file.name} is ${formatBytes(file.size)} - the limit is ${formatBytes(MAX_ASSET_BYTES)} per file.`);
+      const maxBytes = maxBytesForAsset(file.name);
+      if (file.size > maxBytes) {
+        setAssetError(maxBytes === MAX_GIF_BYTES
+          ? `${file.name} is ${formatBytes(file.size)} - the limit for a GIF is ${formatBytes(maxBytes)}. Try making it smaller (fewer frames, or a smaller size) at ezgif.com.`
+          : `${file.name} is ${formatBytes(file.size)} - the limit is ${formatBytes(maxBytes)} per file (${formatBytes(MAX_GIF_BYTES)} for a GIF).`);
         continue;
       }
       if (totalAssetBytes - (replacing?.size || 0) + file.size > MAX_ASSETS_TOTAL_BYTES) {
@@ -856,7 +859,7 @@ export default function SketchWorkspace({ project, submission, draftKey, onSubmi
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading your files...</p>
                 ) : assets.length === 0 && uploading.length === 0 ? (
                   <p className="text-xs text-muted-foreground border-2 border-dashed rounded-lg py-3 text-center">
-                    Drop files here, or press Add files. Up to {formatBytes(MAX_ASSET_BYTES)} each.
+                    Drop files here, or press Add files. Up to {formatBytes(MAX_ASSET_BYTES)} each ({formatBytes(MAX_GIF_BYTES)} for a GIF).
                   </p>
                 ) : (
                   <ul className="grid gap-1">

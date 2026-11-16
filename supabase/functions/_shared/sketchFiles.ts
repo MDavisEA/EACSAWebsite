@@ -9,7 +9,14 @@ export const MAX_TAB_CHARS = 300_000;
 export const MAX_CODE_CHARS = 1_000_000;
 
 export const MAX_ASSET_BYTES = 5 * 1024 * 1024; // per file
-export const MAX_ASSETS_TOTAL_BYTES = 25 * 1024 * 1024; // per sketch
+// An animated GIF (a walking character, see the Gif stand-in in frameRunner.js) is
+// many pictures in one file, and students' real ones ran past 5 MB.
+export const MAX_GIF_BYTES = 20 * 1024 * 1024;
+export const MAX_ASSETS_TOTAL_BYTES = 60 * 1024 * 1024; // per sketch
+// Keep in step with src/lib/processing/assets.js (the student's page checks first).
+export function maxBytesForAsset(name: string): number {
+  return /\.gif$/i.test(name) ? MAX_GIF_BYTES : MAX_ASSET_BYTES;
+}
 export const MAX_ASSET_COUNT = 60;
 
 // Only things a Processing.js sketch can actually use. No SVG: it can carry

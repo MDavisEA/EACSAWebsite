@@ -8,13 +8,19 @@
 // must stay a plain classic script with no imports. It defines one global,
 // __decodeGif(bytes: Uint8Array) ->
 //   { width, height, loops, frames: [{ delay, rgba }] }
+// (optional second argument: maxBytes, see below)
 // where every frame's `rgba` is the WHOLE picture as it should look at that point
 // (width*height*4 bytes, disposal methods already applied), `delay` is in ms, and
 // `loops` is the file's own repeat count (0 = forever, 1 = play once). It throws on
 // a file that isn't a GIF. A file that is cut short keeps the frames it had.
+// Every frame is stored whole, so a big, long GIF can need far more memory than its
+// file size (800x600 x 300 frames is over half a gigabyte). Frames past `maxBytes`
+// (default 300 MB) are dropped and the result says `cut: true`, rather than freeze
+// the browser tab.
 // Unit tests: node src/lib/processing/gifDecoder.test.js
 (function (root) {
-  function decodeGif(bytes) {
+  function decodeGif(bytes, maxBytes) {
+    if (!maxBytes) maxBytes = 300 * 1024 * 1024;
     var pos = 0;
     function u8() { if (pos >= bytes.length) throw new Error('truncated'); return bytes[pos++]; }
     function u16() { var v = bytes[pos] | (bytes[pos + 1] << 8); pos += 2; return v; }
@@ -47,6 +53,7 @@
     var frames = [];
     var loops = 1;
     var gce = null; // the Graphic Control Extension that applies to the next image
+    var cut = false;
 
     try {
       for (;;) {
@@ -73,6 +80,7 @@
           continue;
         }
         if (block !== 0x2c) break; // junk after the last frame: keep what we have
+        if (frames.length && (frames.length + 1) * width * height * 4 > maxBytes) { cut = true; break; }
 
         var fx = u16(); var fy = u16(); var fw = u16(); var fh = u16();
         var fflags = u8();
@@ -97,7 +105,7 @@
       if (!frames.length) throw e;
     }
     if (!frames.length) throw new Error('GIF has no frames');
-    return { width: width, height: height, loops: loops, frames: frames };
+    return { width: width, height: height, loops: loops, frames: frames, cut: cut };
   }
 
   // Draws one frame's colour indices onto the picture, leaving transparent pixels alone.

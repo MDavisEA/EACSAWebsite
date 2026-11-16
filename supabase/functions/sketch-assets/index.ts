@@ -2,11 +2,12 @@ import { handleOptions, json } from '../_shared/cors.ts';
 import { createAdminClient, getTeacherFromRequest, teacherOwnsRow } from '../_shared/teacherAuth.ts';
 import { getStudentFromRequest } from '../_shared/studentAuth.ts';
 import {
-  MAX_ASSET_BYTES,
+  MAX_GIF_BYTES,
   MAX_ASSET_COUNT,
   MAX_ASSETS_TOTAL_BYTES,
   cleanAssetName,
   contentTypeForAsset,
+  maxBytesForAsset,
 } from '../_shared/sketchFiles.ts';
 import { SKETCH_BUCKET } from '../_shared/sketchAssetStorage.ts';
 
@@ -36,10 +37,11 @@ Deno.serve(async (req) => {
     if (isMultipart) {
       // Refuse before buffering: req.formData() reads the whole body into
       // memory, and the per-file limit is only checked once it already has. A
-      // little headroom over the limit covers the multipart framing.
+      // little headroom over the limit covers the multipart framing. The name isn't
+      // known yet, so this is the largest limit (a GIF's); the exact one is below.
       const declared = Number(req.headers.get('content-length') || '0');
-      if (declared > MAX_ASSET_BYTES + 64 * 1024) {
-        return json({ error: `That file is too large - the limit is ${MAX_ASSET_BYTES / 1048576} MB per file.` }, 413);
+      if (declared > MAX_GIF_BYTES + 64 * 1024) {
+        return json({ error: `That file is too large - the limit is ${MAX_GIF_BYTES / 1048576} MB per file.` }, 413);
       }
       form = await req.formData();
       body = { action: 'upload', submission_id: form.get('submission_id') };
@@ -125,8 +127,9 @@ Deno.serve(async (req) => {
           400
         );
       }
-      if (file.size > MAX_ASSET_BYTES) {
-        return json({ error: `"${name}" is ${(file.size / 1048576).toFixed(1)} MB - the limit is ${MAX_ASSET_BYTES / 1048576} MB per file.` }, 400);
+      const maxBytes = maxBytesForAsset(name);
+      if (file.size > maxBytes) {
+        return json({ error: `"${name}" is ${(file.size / 1048576).toFixed(1)} MB - the limit is ${maxBytes / 1048576} MB for a ${/\.gif$/i.test(name) ? 'GIF' : 'file like this'}.` }, 400);
       }
 
       const { data: existing } = await admin

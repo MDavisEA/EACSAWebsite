@@ -99,6 +99,9 @@ const show = (frame, w) => {
   eq(msg, 'not a GIF file', 'a PNG is refused');
   const whole = makeGif({ w: 1, h: 1, palette, frames: [{ w: 1, h: 1, pixels: [0] }, { w: 1, h: 1, pixels: [1] }] });
   eq(decode(whole.slice(0, whole.length - 12)).frames.length, 1, 'a file cut short keeps the frames it had');
+  const three = makeGif({ w: 10, h: 10, palette, frames: [0, 1, 2].map((c) => ({ w: 10, h: 10, pixels: Array(100).fill(c) })) });
+  const capped = decode(three, 2 * 10 * 10 * 4);
+  eq([capped.frames.length, capped.cut, decode(three).cut], [2, true, false], 'frames past the memory budget are dropped, and it says so');
 }
 
 // ---- a real GIF from ffmpeg (proper LZW compression, a palette with transparency,

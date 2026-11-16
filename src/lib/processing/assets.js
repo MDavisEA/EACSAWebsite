@@ -7,8 +7,14 @@
 //  - kind 'other' (a .vlw font) is only a name to the runner - it substitutes a
 //    default font, but still needs to know the file exists.
 
+// Mirrors supabase/functions/_shared/sketchFiles.ts, which is what actually enforces them.
 export const MAX_ASSET_BYTES = 5 * 1024 * 1024;
-export const MAX_ASSETS_TOTAL_BYTES = 25 * 1024 * 1024;
+export const MAX_GIF_BYTES = 20 * 1024 * 1024; // an animated GIF is many pictures in one file
+export const MAX_ASSETS_TOTAL_BYTES = 60 * 1024 * 1024;
+
+export function maxBytesForAsset(name) {
+  return /\.gif$/i.test(name) ? MAX_GIF_BYTES : MAX_ASSET_BYTES;
+}
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|bmp|webp)$/i;
 const TEXT_EXT = /\.(txt|csv|tsv|json|xml)$/i;

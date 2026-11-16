@@ -165,12 +165,14 @@
             decoded[n] = null;
             try {
               var g = window.__decodeGif(dataUrlBytes(files[n].dataUrl));
+              // Each frame is kept once, as a canvas (the decoder's copy is let go).
               g.frames.forEach(function (f) {
                 var c = document.createElement('canvas');
                 c.width = g.width; c.height = g.height;
                 c.getContext('2d').putImageData(new ImageData(f.rgba, g.width, g.height), 0, 0);
-                f.canvas = c;
+                f.canvas = c; f.rgba = null;
               });
+              if (g.cut) log('warn', '"' + n + '" has too many frames at this size to hold in memory - only the first ' + g.frames.length + ' will play. A smaller or shorter GIF fixes this.');
               decoded[n] = g;
             } catch (e) { log('warn', 'Could not read the frames of "' + n + '" (' + e.message + ') - showing it as a still picture.'); }
           }
@@ -230,7 +232,7 @@
           // back, which would otherwise tint the stored frame for good.
           Object.defineProperty(img, 'imageData', {
             configurable: true,
-            get: function () { return new ImageData(new Uint8ClampedArray(frames[advance()].rgba), g.width, g.height); },
+            get: function () { return frames[advance()].canvas.getContext('2d').getImageData(0, 0, g.width, g.height); },
             set: function () {},
           });
           Object.defineProperty(img, '__isDirty', { configurable: true, get: function () { return false; }, set: function () {} });
@@ -254,7 +256,8 @@
         function framesAsImages(g) {
           return g.frames.map(function (f) {
             var im = ctx.p.createImage(g.width, g.height, ctx.p.ARGB);
-            im.imageData.data.set(f.rgba); im.__isDirty = true; im.updatePixels();
+            im.imageData.data.set(f.canvas.getContext('2d').getImageData(0, 0, g.width, g.height).data);
+            im.__isDirty = true; im.updatePixels();
             return im;
           });
         }
